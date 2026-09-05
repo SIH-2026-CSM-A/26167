@@ -37,11 +37,15 @@ def load_fp16(config: VerifyConfig) -> tuple[AutoModel, AutoTokenizer]:
     tokenizer = AutoTokenizer.from_pretrained(
         config.model_id, trust_remote_code=True, use_fast=False
     )
-    model = AutoModel.from_pretrained(
-        config.model_id,
-        torch_dtype=torch.float16,
-        trust_remote_code=True,
-    ).to(config.device).eval()
+    model = (
+        AutoModel.from_pretrained(
+            config.model_id,
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+        )
+        .to(config.device)
+        .eval()
+    )
     return model, tokenizer
 
 
