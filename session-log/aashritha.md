@@ -18,3 +18,15 @@
 - verify_internvl2.py deprecated, verify_internvl3.py renamed to
   verify_internvl.py.
 - SEN12MS small sample: still open, not touched this session.
+
+## AASH-001 — 4-bit verification, 2026-09-06
+
+- InternVL3-2B confirmed working in 4-bit (bitsandbytes, nf4, double quant).
+  Memory footprint: 2.22GB. Fits 6GB VRAM budget with room to spare.
+- Required fix: device_map={"": 0} instead of "auto" — accelerate's
+  dispatch_model calls .to() post-load, which bitsandbytes forbids on
+  quantized models. Also required pinning accelerate==0.34.2 (default
+  1.14.0 changed dispatch behavior, broke this even with correct device_map
+  initially — pin, not just code fix, was the real cause).
+- Remaining gap: no SEN12MS sample yet, so acceptance criterion 1 (real
+  forward pass on real image) still open.
