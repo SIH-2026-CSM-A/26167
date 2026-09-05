@@ -6,6 +6,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.12",
     "pydantic>=2.9",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
@@ -61,8 +62,8 @@ modules = [
 name = "Only pipeline composes modules"
 type = "layers"
 layers = [
-    "app.pipeline",
     "app.api",
+    "app.pipeline",
     "app.router | app.verification | app.evidence | app.ingestion | app.models | app.training | app.tools.vqa_grounding | app.tools.change_detection | app.tools.fusion",
     "app.core",
     "app.contracts",
