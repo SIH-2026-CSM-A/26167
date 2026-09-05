@@ -2,7 +2,6 @@
 # Module ownership is absolute. Every directory below has exactly one owner.
 # Crossing a line here is a ticket bug, not a PR to wave through.
 #
-# in the ruleset will silently fail to request anyone.
 
 # Lead-owned: contracts, wiring, integration — same pattern as 26034's Abhiram
 /bck/app/contracts/        @ybaddam8-png
