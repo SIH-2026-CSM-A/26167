@@ -20,6 +20,8 @@ dependencies = [
     "rasterio>=1.4",
     "numpy>=2.1",
     "pillow>=11.0",
+    "torchvision>=0.29.0",
+    "einops>=0.8.2",
 ]
 
 [dependency-groups]
