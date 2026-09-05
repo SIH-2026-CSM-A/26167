@@ -1,8 +1,8 @@
 import torch
 import torchvision.transforms as T
-from torchvision.transforms.functional import InterpolationMode
-from transformers import AutoTokenizer, AutoModel
 from PIL import Image
+from torchvision.transforms.functional import InterpolationMode
+from transformers import AutoModel, AutoTokenizer
 
 MODEL_ID = "OpenGVLab/InternVL3-2B"
 IMAGE_PATH = "/content/repo/data/sen12ms_sample_s2.png"

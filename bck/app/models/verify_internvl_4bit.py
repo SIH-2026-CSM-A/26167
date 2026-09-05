@@ -1,5 +1,5 @@
 import torch
-from transformers import AutoTokenizer, AutoModel, BitsAndBytesConfig
+from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig
 
 MODEL_ID = "OpenGVLab/InternVL3-2B"
 
