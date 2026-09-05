@@ -1,0 +1,77 @@
+[project]
+name = "satquery-ai-backend"
+version = "0.1.0"
+description = "SatQuery AI (SIH26167) — agentic vision-language backend"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.14",
+    "transformers>=4.46",
+    "torch>=2.4",
+    "accelerate>=1.1",
+    "bitsandbytes>=0.44",
+    "peft>=0.13",
+    "rasterio>=1.4",
+    "numpy>=2.1",
+    "pillow>=11.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.7",
+    "import-linter>=2.1",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Leaf modules never import each other"
+type = "independence"
+modules = [
+    "app.models",
+    "app.training",
+    "app.tools.vqa_grounding",
+    "app.tools.change_detection",
+    "app.tools.fusion",
+    "app.router",
+    "app.verification",
+    "app.evidence",
+    "app.ingestion",
+    "app.api",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only pipeline composes modules"
+type = "layers"
+layers = [
+    "app.pipeline",
+    "app.api",
+    "app.router | app.verification | app.evidence | app.ingestion | app.models | app.training | app.tools.vqa_grounding | app.tools.change_detection | app.tools.fusion",
+    "app.core",
+    "app.contracts",
+]
+
+[[tool.importlinter.contracts]]
+name = "Contracts import nothing of ours"
+type = "forbidden"
+source_modules = ["app.contracts"]
+forbidden_modules = [
+    "app.core", "app.pipeline", "app.api", "app.models", "app.training",
+    "app.tools", "app.router", "app.verification", "app.evidence", "app.ingestion",
+]

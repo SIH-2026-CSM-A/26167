@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.uv-cache/
+
+# Node
+node_modules/
+dist/
+fnt/.vite/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Data (real datasets never committed — only manifests in data/)
+data/*
+!data/.gitkeep
+!data/*.md
+
+# Model weights
+*.safetensors
+*.bin
+*.ckpt
+checkpoints/
+
+# OS
+.DS_Store
