@@ -349,13 +349,13 @@ The router workflow strictly separates five lifecycle phases:
 
 ---
 
-## 9. Mapping Against the Six PS Orchestration Requirements
+## 9. Mapping Against the Six PSD §2 Orchestration Requirements
 
-| # | Problem Statement Requirement | Fulfillment in SHIVA-001 Router Design |
+| # | PSD §2 Orchestration Requirement (Verbatim) | Responsibility Boundary & Fulfillment in SHIVA-001 Router Design |
 | :--- | :--- | :--- |
-| **1** | **Predefined Tool Registry** | Restricted to closed `TaskType` enum (`vqa`, `grounding`, `change_vqa`, `fusion`, `archive_search_bonus`) and predefined tools (`vqa_grounding`, `change_detection`, `fusion`, `archive_search`). No runtime dynamic tool creation. |
-| **2** | **Schema-Constrained Classification** | `IntentClassification` contains solely `task_type: TaskType`, rejecting unstructured natural language routing. |
-| **3** | **No Chain-of-Thought Evaluation** | Internal reasoning text is neither generated nor evaluated. Classification and veto logic are fast, direct, and deterministic without probabilistic token scoring. |
-| **4** | **Input Inventory & Modality Compatibility** | `evaluate_veto()` validates image count, optical vs. SAR structural inventory requirements (e.g. for `FUSION`), and registry capability availability before dispatch. Domain-specific physical limitations are handled downstream in `verification/` (F15/F16). |
-| **5** | **Deterministic Parameter Binding** | `DispatchPlan.image_bindings` explicitly maps verified `ImageInput.id` values to tool slots (`image`, `pre_image`, `post_image`, `optical_image`, `sar_image`), ensuring zero tool ambiguity. |
-| **6** | **Explicit Abstention Alignment** | Veto outputs map directly to `app.contracts.Answer` abstention fields (`abstained=True`, `abstention_reason=veto.message`), allowing the system to fail fast and explain why evidence cannot be produced. |
+| **1** | **interpret the query and classify the requested task** | **Owned by `app.router`.** The router uses a fixed `TaskType` taxonomy (`vqa`, `grounding`, `change_vqa`, `fusion`, `archive_search_bonus`) and schema-constrained `IntentClassification`. Free-form routing, ReAct loops, LangGraph orchestration, and unconstrained routing text are excluded. |
+| **2** | **check number, modality, format, metadata, compatibility of input images** | **Owned by `app.router` (structural feasibility) & `app.ingestion` (format/metadata).** The router performs deterministic structural feasibility checks using `TaskType` and `InputInventory`, validating image count and required modality combinations. Unsupported structural combinations produce typed `VetoDecision`s. Domain-level sensor interpretation and downstream evidence compatibility remain outside the router boundary. |
+| **3** | **select model(s)/tool(s) from a predefined registry** | **Owned by `app.router`.** The router maps the selected task to a predefined dispatch target (`vqa_grounding`, `change_detection`, `fusion`, `archive_search`). It does not import, instantiate, or execute tools; tool execution remains outside the isolated router leaf module. |
+| **4** | **configure only permitted task parameters and execute the workflow** | **Configuration owned by `app.router`; Execution owned by `app.pipeline`.** The router emits a constrained `DispatchPlan` with permitted parameter bindings (`image_bindings`, `task_parameters`). Workflow execution is owned solely by `app.pipeline`; the router does not execute the workflow directly. |
+| **5** | **combine textual and spatial outputs, estimate confidence, return visual evidence** | **Not owned by `app.router` (Downstream).** Output combination, confidence estimation, abstention handling, and visual evidence assembly are handled downstream by `app.verification` and the evidence-assembly layer. The router only supplies the dispatch plan and typed veto information that feed into those stages. |
+| **6** | **provide an auditable execution summary (task, model/tool names, key parameters)** | **Not owned by `app.router` (Downstream).** The final execution summary is assembled and recorded by `app.pipeline`. The router supplies the auditable routing facts: task type, selected tool names, parameter bindings, and veto/dispatch information needed for the execution summary. |

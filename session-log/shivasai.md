@@ -13,7 +13,7 @@ Built via Antigravity CLI (Gemini 3.8 Flash, Windows / PowerShell).
 - Specified deterministic veto layer logic (`evaluate_veto`) with typed `VetoReasonCode` (`EMPTY_QUERY`, `INSUFFICIENT_IMAGES`, `EXCESS_IMAGES`, `CROSS_MODAL_PAIR_MISSING`, `CAPABILITY_UNAVAILABLE`).
 - Formulated comprehensive supported vs. rejected input combinations matrix.
 - Established strict responsibility boundaries separating intent classification, inventory validation, veto evaluation, dispatch planning, and pipeline execution.
-- Mapped all design components directly against the six PS orchestration requirements from SIH26167 (ISRO/SAC).
+- Mapped all design components directly against the verbatim six PSD §2 orchestration requirements from SIH26167 (ISRO/SAC), explicitly defining router ownership for bullets 1–3, split parameter configuration/execution for bullet 4, and documenting downstream ownership by verification/evidence layers for bullets 5–6 per lead review feedback.
 
 **Key Architectural Decisions:**
 - **TaskType as Single Source of Truth:** Downstream requirements (temporal pairs for change detection, cross-modal optical+SAR for fusion, localization for grounding) are deterministically derived from `TaskType` rather than maintaining auxiliary boolean flags, preventing contradictory states.
