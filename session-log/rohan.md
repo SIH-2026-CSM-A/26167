@@ -37,3 +37,40 @@
 ## Agent
 
 Claude Code (Sonnet 5), session https://claude.ai/code/session_01Mcufc5gSdGYGxKZp4R1H94
+
+---
+
+### 2026-09-05 — ROHAN-003: environment note — missing libgomp1 for lightgbm/s2cloudless — Claude Code
+
+`app/tools/fusion/cloud_detector.py` wraps `s2cloudless`, which depends on `lightgbm`.
+`lightgbm`'s native binary is linked against `libgomp.so.1` (the GNU OpenMP runtime), a
+system library — not something `uv`/pip can install. This machine doesn't have it
+(`dpkg -s libgomp1` → not installed, no `gcc`/`g++` either, and no already-installed
+Python package in `bck/.venv` bundles a copy), so `import s2cloudless` fails with
+`OSError: libgomp.so.1: cannot open shared object file`.
+
+No root access available, so instead of `sudo apt-get install libgomp1`:
+
+```
+apt download libgomp1
+dpkg-deb -x libgomp1_*.deb bck/.system-libs
+```
+
+Both commands work without root — `apt download` only fetches the `.deb` (needs apt's
+package lists already populated, which they are here), and `dpkg-deb -x` extracts
+without installing. This pulls the real, correctly-versioned Ubuntu package
+(`14.2.0-4ubuntu2~24.04.1`) into a project-local directory instead of system-wide.
+`bck/.system-libs/` is gitignored — it's a local runtime workaround, not something to
+commit.
+
+**Anyone running this branch's tests locally who hits the same `libgomp.so.1` error**
+needs to either `sudo apt-get install libgomp1` (if they have root) or run the two
+commands above, then prefix every `uv run` that touches `cloud_detector.py` /
+`s2cloudless` / `lightgbm` with:
+
+```
+LD_LIBRARY_PATH=bck/.system-libs/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+```
+
+This belongs in `SETUP.md` as a real, reproducible environment gap — flagging for
+Yashwanth (its owner) rather than adding it myself.
