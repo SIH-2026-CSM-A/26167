@@ -23,3 +23,34 @@ Built via Antigravity (single-agent, Windows).
 **Incomplete:**
 - MapLibre GL map layer rendering and bounding box overlay will be implemented in ticket LIKI-002 once tile and evidence endpoints are ready.
 - Backend API client bindings (`fnt/src/services/`) will be wired in the vertical slice ticket.
+
+## 2026-09-05 — LIKI-003: Map overlay + chat interface with evidence citations
+
+Built via Antigravity (single-agent, Windows).
+
+**Did:**
+- Grounded frontend TypeScript contracts (`fnt/src/types/contracts.ts`, `fnt/src/types/geojson.ts`) 1:1 against backend models in `bck/app/contracts/schemas.py` (`Evidence`, `EvidenceType`, `TraceStep`, `ExecutionTrace`, `Answer`, `QueryRequest`, `Modality`, `ImageInput`). Zero fake or placeholder data.
+- Created GeoJSON transformation and bounding calculation utilities (`fnt/src/utils/evidenceGeoJson.ts`) to turn raw evidence payloads (bounding boxes and vector masks) into MapLibre-compatible GeoJSON FeatureCollections with bounding box calculation.
+- Built reusable MapLibre GL component (`fnt/src/components/Map/EvidenceMap.tsx`) importing `maplibre-gl/dist/maplibre-gl.css`, supporting ESRI Satellite raster basemap tiles, dark matter, and street tiles, with GeoJSON mask/bbox fill and stroke layers, animated selection halo (`evidence-selected-halo`), smooth viewport fitting (`map.fitBounds`), map controls (`MapControls.tsx`), and floating evidence details card (`EvidenceDetailCard.tsx`).
+- Built chat interface subcomponents (`fnt/src/components/Chat/`):
+  - `CitationChip.tsx`: Interactive clickable chips backing factual claims with tool names, confidence percentages, and map-zoom triggers.
+  - `CitationText.tsx`: Inline citation tag parser and highlighter.
+  - `ConfidenceBadge.tsx`: Visual confidence indicator with verification and abstention status.
+  - `ChatMessageItem.tsx`: Conversational message layout with inline citations, confidence badges, evidence ribbon, and execution trace.
+  - `ChatInput.tsx`: Natural language query input with image attachment and per-image modality selector (Optical / SAR).
+- Built `ExecutionTracePanel` (`fnt/src/components/Trace/`): Expandable audit panel rendering real trace fields (trace ID, timing duration, module pipeline stages, action parameters, confidence, and linked evidence).
+- Created `SatQueryContext` and `useSatQuery` hook to unify chat conversation state, active answers, evidence lists, and selected feature IDs across pages.
+- Integrated the live map view into `ChatPage.tsx` (responsive side-by-side / toggle view with citation click-to-zoom) and updated `MapPage.tsx` with dedicated full-screen geospatial workstation and evidence feature sidebar filter.
+- Strictly complied with T3-Coding-Standards: all files under 300 lines, all functions under 48 lines, max <= 4 parameters, 1 primary export per file, zero fake/placeholder data, zero TODO comments.
+- Verified `npm run build` and `npm run lint` clean (exit code 0, zero warnings).
+
+**Important Decisions & Rationale:**
+- Used named ESM imports from `maplibre-gl` to match Vite/Rollup module resolution.
+- Integrated ESRI World Imagery raster tiles for the satellite basemap — no token dependency, high-resolution global coverage, with toggleable Dark and Street modes.
+- Decomposed React functional components into atomic sub-components (all <= 48 lines) to strictly comply with T3-Coding-Standards.
+- Separated `SatQueryContext` from `SatQueryProvider` into distinct files to strictly comply with the ESLint `react-refresh/only-export-components` rule.
+
+**Rejected along the way:**
+- Rejected mock or placeholder data in production components — strict grounding against backend Answer/Evidence schema.
+- Rejected Mapbox GL due to token dependency; MapLibre GL is token-free and offline/self-hosting compatible per `ARCHITECTURE.md`.
+
