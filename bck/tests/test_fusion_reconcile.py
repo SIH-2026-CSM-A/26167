@@ -57,7 +57,8 @@ def cloudy_region():
 
 def test_reconcile_real_clean_region_has_no_disagreement(clean_region):
     # Measured directly: water_fraction=0.2878, cloud_fraction=0.0,
-    # confidence=1.0, optical_inconclusive=False.
+    # confidence=1.0, optical_inconclusive=False, ONE evidence object
+    # (zero cloud cover anywhere -> no region split needed).
     vv, s2 = clean_region
     despeckled, water, cloud_result = _run_pipeline(vv, s2)
 
@@ -65,6 +66,7 @@ def test_reconcile_real_clean_region_has_no_disagreement(clean_region):
     assert len(evidence_list) == 1
     ev = evidence_list[0]
 
+    assert ev.payload["region"] == "full_scene"
     assert ev.payload["optical_inconclusive"] is False
     assert np.isclose(ev.payload["cloud_fraction"], 0.0)
     assert np.isclose(ev.confidence, 1.0)
@@ -72,33 +74,62 @@ def test_reconcile_real_clean_region_has_no_disagreement(clean_region):
     assert "no disagreement" in ev.payload["note"]
 
 
-def test_reconcile_real_region_with_real_cloud_cover_is_flagged(cloudy_region):
+def test_reconcile_real_region_with_real_cloud_cover_splits_into_two_regions(cloudy_region):
     # This scene is NOT fully cloud-free: the same row-288/col-320 crop used
     # for the despeckle and water-mask tests has a real, nonzero cloud
     # fraction from the actual classifier output (matches the whole scene's
-    # measured 1.87% overall). Measured directly here: water_fraction=0.4711,
-    # cloud_fraction=0.0156, confidence=0.9844, optical_inconclusive=True.
+    # measured ~1.56% overall). Measured directly by running the real
+    # pipeline against these fixtures (see this test file's own review
+    # session): clear region confidence=1.0, water_fraction=0.4629,
+    # region_area_fraction=0.9844; cloud-affected region confidence=0.75
+    # (fixed baseline, not area-scaled), water_fraction=0.9878,
+    # region_area_fraction=0.0156.
+    #
+    # This is the case the fix targets: the OLD implementation would have
+    # applied one scene-wide confidence of ~0.9844 to the entire mask, even
+    # though 98.44% of the scene has zero actual disagreement. The clear
+    # region here correctly stays at confidence 1.0 instead of being dragged
+    # down by a small, spatially separate cloud patch.
     vv, s2 = cloudy_region
     despeckled, water, cloud_result = _run_pipeline(vv, s2)
 
     evidence_list = reconcile_sar_optical(despeckled, water, cloud_result)
-    ev = evidence_list[0]
+    assert len(evidence_list) == 2
 
-    assert ev.payload["optical_inconclusive"] is True
-    assert np.isclose(ev.payload["cloud_fraction"], 0.0156, atol=0.001)
-    assert np.isclose(ev.confidence, 0.9844, atol=0.001)
-    assert np.isclose(ev.payload["water_fraction"], 0.4711, atol=0.001)
-    assert "could not confirm" in ev.payload["note"]
+    by_region = {ev.payload["region"]: ev for ev in evidence_list}
+    assert set(by_region) == {"clear", "cloud_affected"}
+
+    clear_ev = by_region["clear"]
+    assert clear_ev.payload["optical_inconclusive"] is False
+    assert np.isclose(clear_ev.confidence, 1.0)
+    assert np.isclose(clear_ev.payload["water_fraction"], 0.4629, atol=0.001)
+    assert np.isclose(clear_ev.payload["region_area_fraction"], 0.9844, atol=0.001)
+    assert "no disagreement" in clear_ev.payload["note"]
+
+    cloud_ev = by_region["cloud_affected"]
+    assert cloud_ev.payload["optical_inconclusive"] is True
+    assert np.isclose(cloud_ev.confidence, 0.75, atol=0.001)
+    assert np.isclose(cloud_ev.payload["water_fraction"], 0.9878, atol=0.001)
+    assert np.isclose(cloud_ev.payload["region_area_fraction"], 0.0156, atol=0.001)
+    assert "could not confirm" in cloud_ev.payload["note"]
+
+    # Sanity: the clear region's confidence must NOT be affected by the
+    # cloud region's size — this is exactly the bug the region-split fixes.
+    # A tiny cloud patch elsewhere in the frame must not dilute confidence
+    # in pixels that have no actual disagreement.
+    assert clear_ev.confidence == 1.0
 
 
-def test_reconcile_synthetic_forced_cloud_block_flags_only_that_region(clean_region):
+def test_reconcile_synthetic_forced_cloud_block_isolates_the_cloud_region(clean_region):
     """SYNTHETIC test — exercises the code path, not a real measurement.
 
     Takes the real, genuinely-clean SAR data from `clean_region` but replaces
     the cloud mask with a synthetic one where the top-left quarter is forced
     to "cloudy". This is constructed to test the branch logic, not observed
-    from any real scene — the forced cloud fraction (0.25) and the resulting
-    confidence (0.75) are exact by construction, not measurements.
+    from any real scene — the forced cloud fraction (0.25) is exact by
+    construction, not a measurement. Confidence values (1.0 clear / 0.75
+    cloud-affected) come from the module's fixed constants, not this
+    scene's specific cloud fraction — that is the property under test.
     """
     vv, s2 = clean_region
     despeckled = lee_filter(vv, SarScale.DB, noise_variance=_NOISE_VARIANCE)
@@ -113,15 +144,28 @@ def test_reconcile_synthetic_forced_cloud_block_flags_only_that_region(clean_reg
     )
 
     evidence_list = reconcile_sar_optical(despeckled, water, synthetic_cloud_result)
-    ev = evidence_list[0]
+    assert len(evidence_list) == 2
 
-    assert ev.payload["optical_inconclusive"] is True
-    assert np.isclose(ev.payload["cloud_fraction"], 0.25)
-    assert np.isclose(ev.confidence, 0.75)
+    by_region = {ev.payload["region"]: ev for ev in evidence_list}
+    assert set(by_region) == {"clear", "cloud_affected"}
+
+    clear_ev = by_region["clear"]
+    assert clear_ev.payload["optical_inconclusive"] is False
+    assert np.isclose(clear_ev.confidence, 1.0)
+    assert np.isclose(clear_ev.payload["region_area_fraction"], 0.75, atol=0.001)
+
+    cloud_ev = by_region["cloud_affected"]
+    assert cloud_ev.payload["optical_inconclusive"] is True
+    # Fixed baseline, independent of this region's 0.25 area fraction — the
+    # whole point of the fix. A DIFFERENT forced fraction (e.g. 0.05 or 0.90)
+    # would still give confidence 0.75 here, unlike the old formula.
+    assert np.isclose(cloud_ev.confidence, 0.75)
+    assert np.isclose(cloud_ev.payload["region_area_fraction"], 0.25)
+
     # The SAR-derived water answer is still reported (not withheld) despite
-    # the forced cloud cover.
-    assert "water_mask" in ev.payload
-    assert ev.payload["water_mask"].shape == water.shape
+    # the forced cloud cover, and only within that region's own mask.
+    assert "water_mask" in cloud_ev.payload
+    assert cloud_ev.payload["water_mask"].shape == water.shape
 
 
 def test_reconcile_rejects_mismatched_shapes():
