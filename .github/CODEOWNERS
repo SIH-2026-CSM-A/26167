@@ -2,9 +2,6 @@
 # Module ownership is absolute. Every directory below has exactly one owner.
 # Crossing a line here is a ticket bug, not a PR to wave through.
 #
-# PLACEHOLDERS: @aashrithareddybodanampally-byte @A-Rohan99 @adepushivasai901-ops @Likhitha-rachelly @badugujashwanth-create
-# are not real GitHub handles. Replace all five with the team's actual usernames
-# before this file does anything — until then "require review from Code Owners"
 # in the ruleset will silently fail to request anyone.
 
 # Lead-owned: contracts, wiring, integration — same pattern as 26034's Abhiram
