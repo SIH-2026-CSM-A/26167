@@ -5,7 +5,7 @@
 | Layer | Choice | Rejected | Why |
 |---|---|---|---|
 | Backend | Python 3.11, FastAPI, uv (never pip/venv) | Node/Express | Team's ML code is Python; one language end to end avoids a serialization boundary for tensors/arrays |
-| Core VLM | InternVL2-2B (MIT/Apache-2.0), `transformers`, `trust_remote_code=True` | Qwen2-VL-2B, GeoChat | BigEarthNet.txt's own authors adapted InternVL on this exact dataset — direct precedent, not a popularity argument. GeoChat is Vicuna-7B, ~3.5× this project's compute budget, and optical-only (no SAR competence) |
+| Core VLM | InternVL3-2B (MIT/Apache-2.0), `transformers`, `trust_remote_code=True` | Qwen2-VL-2B, GeoChat | BigEarthNet.txt's own authors adapted InternVL on this exact dataset — direct precedent, not a popularity argument. GeoChat is Vicuna-7B, ~3.5× this project's compute budget, and optical-only (no SAR competence) |
 | Model serving (day one) | Plain `transformers` + `bitsandbytes` 4-bit | `lmdeploy`/vLLM | Fewer install surprises under time pressure; revisit only if latency becomes a demo problem with the simple path already working |
 | Adaptation | LoRA/QLoRA via `peft` on BigEarthNet.txt native annotations | Synthetic caption generation from classification labels | BigEarthNet.txt already ships 9.6M real captions/VQA/referring-expression pairs — no synthesis pipeline needed |
 | Cross-modal fusion | Late fusion — independent optical/SAR analysis + deterministic rule-table reconciliation | Trained pixel-fusion network (FusAtNet-class) | Every reconciliation decision stays a readable rule, not a learned weight — matches the PS's own "combine textual and spatial outputs" language, lower-risk to build correctly in the time available |
@@ -35,7 +35,7 @@ Runs fully offline after model weights and demo data are staged locally. No live
 │   │   ├── pipeline/             # composes modules per request — the ONLY layer allowed to
 │   │   │                         #   import more than one leaf module — Yashwanth only
 │   │   ├── api/                  # FastAPI routes, thin, calls pipeline only — Yashwanth only
-│   │   ├── models/                # InternVL2-2B load/inference wrapper — Aashritha
+│   │   ├── models/                # InternVL3-2B load/inference wrapper — Aashritha
 │   │   ├── training/               # LoRA fine-tuning on BigEarthNet.txt — Aashritha
 │   │   ├── tools/
 │   │   │   ├── vqa_grounding/         # F4/F5 — thin wrapper around models/ — Aashritha
@@ -77,7 +77,7 @@ pipeline/  — orchestrates the call, in this order:
         │                    selects tool(s) from the fixed registry (F9-F11)
         │
         ├─▶ tools/*  or  models/   — the selected tool(s) run:
-        │       vqa_grounding  → models/ (InternVL2-2B forward pass)
+        │       vqa_grounding  → models/ (InternVL3-2B forward pass)
         │       change_detection → BIT/ChangeFormer on the bi-temporal pair
         │       fusion            → independent optical + SAR analysis,
         │                           reconciled via a rule table
@@ -103,7 +103,7 @@ held-out slices of VRSBench/RSVQA/CDVQA/BigEarthNet.txt's own benchmark split.
 
 ## Decisions expensive to reverse (and why now)
 
-1. **InternVL2-2B as the core VLM.** Every VRAM/timeline estimate in this project is sized for a
+1. **InternVL3-2B as the core VLM.** Every VRAM/timeline estimate in this project is sized for a
    2B model with this exact architecture. Switching mid-build re-derives the whole compute plan,
    not just a config value. Locking it now means the training pipeline in `training/` can be
    built against a known model shape from day one.
