@@ -30,3 +30,20 @@
   initially — pin, not just code fix, was the real cause).
 - Remaining gap: no SEN12MS sample yet, so acceptance criterion 1 (real
   forward pass on real image) still open.
+
+## AASH-001 — closed, 2026-09-06
+
+- SEN12MS sample obtained via mespinosami/sen12mscr on HF (streaming, no
+  full shard download). Saved to data/sen12ms_sample_s2.png,
+  sen12ms_sample_s1.png.
+- fp16 inference on real image produced degenerate output (repeated "!"
+  tokens) — silent failure, no crash. Root cause: fp16 overflow in
+  attention, no FlashAttention2 on this T4. Fixed by switching to bf16.
+  Real coherent caption confirmed on the SEN12MS sample.
+- 4-bit (bitsandbytes) load succeeds standalone (2.22GB footprint) but
+  produces the SAME degenerate output as broken fp16 when given real image
+  input — vision-tower quantization likely corrupting image features.
+  4-bit is load-viable, NOT confirmed inference-viable. Flag for whoever
+  builds the real VLM inference pipeline — don't assume 4-bit is safe
+  without further testing.
+- AASH-001 acceptance criteria: all four closed. Ticket marked done.
