@@ -3,6 +3,12 @@
 # Crossing a line here is a ticket bug, not a PR to wave through.
 #
 
+# Catch-all: ybaddam8-png co-owns every path. Placed above the module-specific
+# rules below on purpose — CODEOWNERS resolves per file by last matching
+# pattern, so this line only applies where no more specific rule below matches;
+# it never overrides any of the assignments that follow.
+*                           @ybaddam8-png
+
 # Lead-owned: contracts, wiring, integration — same pattern as 26034's Abhiram
 /bck/app/contracts/        @ybaddam8-png
 /bck/app/core/             @ybaddam8-png
@@ -13,23 +19,23 @@
 *.md                       @ybaddam8-png
 
 # Aashritha — perception, adaptation, data
-/bck/app/models/                   @aashrithareddybodanampally-byte
-/bck/app/training/                 @aashrithareddybodanampally-byte
-/bck/app/tools/vqa_grounding/      @aashrithareddybodanampally-byte
-/data/                             @aashrithareddybodanampally-byte
+/bck/app/models/                   @aashrithareddybodanampally-byte @ybaddam8-png
+/bck/app/training/                 @aashrithareddybodanampally-byte @ybaddam8-png
+/bck/app/tools/vqa_grounding/      @aashrithareddybodanampally-byte @ybaddam8-png
+/data/                             @aashrithareddybodanampally-byte @ybaddam8-png
 
 # Rohan — specialist tools
-/bck/app/tools/change_detection/   @A-Rohan99
-/bck/app/tools/fusion/             @A-Rohan99
+/bck/app/tools/change_detection/   @A-Rohan99 @ybaddam8-png
+/bck/app/tools/fusion/             @A-Rohan99 @ybaddam8-png
 
 # Shivasai — controller and verification
-/bck/app/router/            @adepushivasai901-ops
-/bck/app/verification/      @adepushivasai901-ops
+/bck/app/router/            @adepushivasai901-ops @ybaddam8-png
+/bck/app/verification/      @adepushivasai901-ops @ybaddam8-png
 
 # Likitha — evidence, reporting, frontend
-/bck/app/evidence/           @Likhitha-rachelly
-/fnt/                         @Likhitha-rachelly
+/bck/app/evidence/           @Likhitha-rachelly @ybaddam8-png
+/fnt/                         @Likhitha-rachelly @ybaddam8-png
 
 # Jashwanth (half-capacity, split with 26034) — ingestion and infra
-/bck/app/ingestion/           @badugujashwanth-create
-/infra/                       @badugujashwanth-create
+/bck/app/ingestion/           @badugujashwanth-create @ybaddam8-png
+/infra/                       @badugujashwanth-create @ybaddam8-png
