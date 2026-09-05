@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .venv/
 .uv-cache/
+bck/.system-libs/
 
 # Node
 node_modules/

@@ -23,6 +23,7 @@ dependencies = [
     "torchvision>=0.29.0",
     "einops>=0.8.2",
     "scikit-image>=0.26.0",
+    "s2cloudless>=1.7.3",
 ]
 
 [dependency-groups]
