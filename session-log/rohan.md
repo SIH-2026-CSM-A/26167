@@ -42,6 +42,15 @@
   `tests/test_fusion_guards.py`. All four gates green
   (`ruff check`, `ruff format --check`, `lint-imports`, `pytest`). Committed as two
   conventional commits (`feat:`, `test:`).
+- **`calibration.py`** (`calibrate_sigma0_db`): raw-DN-to-sigma-nought-dB formula from
+  `05-Research-And-References` §3.2, `10*log10(DN^2) - K_cal + 10*log10(sin(theta_inc))`.
+  DN cast to float64 before squaring (integer arrays would overflow otherwise); DN <= 0
+  returns NaN per element rather than emitting `-inf`; `incidence_angle_deg` outside the
+  open interval (0, 90) raises `ValueError`. `tests/test_fusion_calibration.py` covers a
+  normal case, DN=0, negative DN, four invalid-angle values, an int16 array that would
+  overflow if squared in place, and array-like `k_cal`/`incidence_angle_deg` each raising
+  `TypeError` — every expected dB value is hand-computed via Python's `math` module in a
+  comment so it's independently checkable. 10/10 tests pass; all four gates green.
 
 ## Blocked / deferred
 
@@ -65,11 +74,21 @@
   fewer pinned dependency (no `timm`). With only 6GB of VRAM on this machine, the smaller
   model leaves more headroom to run alongside everything else in the pipeline.
   ChangeFormer was not tested further for this reason, not because it doesn't work.
-- **DN→dB calibration deferred to a follow-up ticket** (per team lead, already reflected
-  in this ticket's amended scope): SEN12MS's own `SupportingDocument.txt` states its
-  Sentinel-1 channels ship as sigma-nought dB already — there is nothing to convert from
-  DN for this dataset. The scale guard (`require_db_scale`) exists precisely so a future
-  caller can't skip declaring which scale a given SAR source actually uses.
+- **Acceptance criterion 2 re-scoped into two parts by the team lead; only part 1
+  (`calibration.py`) is built here.** Reason: SEN12MS ships sigma-nought dB already —
+  there was never raw DN in it to calibrate against, so the calibration formula couldn't
+  be verified end-to-end against this ticket's own real dataset. `calibrate_sigma0_db`
+  implements the verified §3.2 formula standalone, correct by construction and by its own
+  hand-computed test cases, independent of which dataset eventually supplies real DN.
+- **K_cal is scalar by design, valid for single-patch/fixed-geometry inputs per this
+  ticket's scope — full-scene per-pixel LUT calibration is a separate future function,
+  not a defect in this one.**
+- **No placeholder despeckle filter was written.** AGENTS.md is explicit: no stubs, no
+  placeholders, no TODOs in shipped code. A "temporary" or simplified filter standing in
+  for the real Lee/MMSE formula would be exactly the kind of thing that quietly becomes
+  load-bearing for ROHAN-002/003 once other work depends on `app.tools.fusion` exporting
+  *something* called despeckle — worse than leaving the gap visible. `despeckle.py` stays
+  absent until `05-Research-And-References` §3.1a is actually in hand.
 
 ## Agent
 
