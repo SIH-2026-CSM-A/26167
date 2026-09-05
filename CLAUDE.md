@@ -2,7 +2,7 @@
 
 ## Stack
 Python 3.11 / FastAPI / uv (backend, `bck/`). React + TypeScript + Vite + Tailwind + MapLibre
-(frontend, `fnt/`). PostgreSQL with JSONB for evidence/trace. InternVL2-2B (LoRA-adapted) as the
+(frontend, `fnt/`). PostgreSQL with JSONB for evidence/trace. InternVL3-2B (LoRA-adapted) as the
 core VLM. Full detail and rejected alternatives: `ARCHITECTURE.md`.
 
 ## Current phase
@@ -17,7 +17,7 @@ real benchmark numbers, then rehearsed demo.
 
 ## Project-specific rules
 - **Gotchas that will cost an hour if missed:**
-  - `InternVL2-2B` requires `trust_remote_code=True` in `transformers` — verify a working
+  - `InternVL3-2B` requires `trust_remote_code=True` in `transformers` — verify a working
     forward pass on day one, not day two.
   - The mandatory adaptation dataset is **BigEarthNet.txt** (arXiv:2603.29630) — not
     BigEarthNet-MM. They are different datasets; do not conflate them in code, data loaders, or

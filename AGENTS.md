@@ -55,7 +55,7 @@ anything.
 No paid API call anywhere in the request path without a hard ceiling read from
 `bck/app/core/config.py`. The only paid-API-adjacent call in this project is the optional
 Bhashini voice input (P2) — it sits behind its own ceiling and is never on the critical demo
-path. InternVL2-2B runs locally; there is no per-request quota to protect there because there's
+path. InternVL3-2B runs locally; there is no per-request quota to protect there because there's
 no API call at all.
 
 ## Demo/offline constraint
