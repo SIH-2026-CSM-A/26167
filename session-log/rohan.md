@@ -1,96 +1,39 @@
-# ROHAN-001 — env/SAR spike
+# ROHAN-001 — change-detection env + SAR calibration spike
 
-## What was done
+### 2026-09-05 — Claude Code
 
-- **Environment check**: RTX 3050 6GB (driver present, no system CUDA toolkit needed —
-  bck's torch wheel bundles its own), 7.6GB RAM, 933GB free disk, rsync/wget/curl present.
-- **SEN12MS**: `mediatum.ub.tum.de/1474000`'s page is behind an Anubis JS anti-bot
-  challenge — couldn't read the rsync password off the rendered page directly. Verified
-  the standard TUM dataserv convention (`m1474000`/`m1474000`) against a live
-  `rsync --list-only`, which is a real authenticated listing, not a guess. No per-scene
-  files exist; smallest S1 archive is `ROIs2017_winter_s1.tar.gz` (14.4GB, whole season
-  bundle) — downloading into `data/` per team lead approval, one scene will be extracted
-  and the archive + all other scenes deleted afterward. `SupportingDocument.txt` (fetched
-  from the same rsync source) states S1 channels are already sigma-nought dB, 16-bit
-  GeoTIFFs — the numeric check (dtype/min/max/percentiles) against the real scene is
-  pending the download and will confirm or contradict this.
-- **LEVIR-CD**: downloaded the ChangeFormer-linked preprocessed 256×256 zip (2.3GB),
-  extracted exactly one real A/B/label triplet (`train_103_9.png`, 256×256), then deleted
-  the zip and all other extracted files.
-- **BIT environment** (`~/spikes/bit/`, outside the repo): venv created with `uv`, torch
-  2.14.0+cu130 / torchvision 0.29.0 / einops installed there only — never touched `bck`.
-  Cloned `justchenhao/BIT_CD`, fetched its pretrained LEVIR-CD checkpoint (57.3MB).
-- **BIT run on the real LEVIR-CD pair**: ran successfully end to end, produced a real
-  256×256 binary change mask (41.3% pixels flagged changed) for `train_103_9.png`. Getting
-  there required three real compatibility fixes against the torch/torchvision version gap
-  the team lead flagged as a risk — all in the `~/spikes/bit` clone, never in `bck`:
-  - `torchvision.models.utils.load_state_dict_from_url` was removed from modern
-    torchvision — repointed the import to `torch.hub.load_state_dict_from_url`.
-  - Two undocumented runtime deps the README never lists: `opencv-python-headless` and
-    `tifffile`. Installed into the spike venv only.
-  - `np.str` was removed from numpy (deprecated since 1.20) — the dataset-list loader
-    used it as a dtype; changed to `str`.
-  - **The flagged one**: `torch.load` defaults to `weights_only=True` since PyTorch 2.6,
-    and BIT's checkpoint pickles a `numpy.core.multiarray.scalar` global that isn't on
-    the safe list — load failed with `_pickle.UnpicklingError`. Fixed by passing
-    `weights_only=False` (checkpoint is BIT's own published, trusted release asset).
-  This is the real, reproducible failure mode against a current PyTorch — reported here
-  rather than silently worked around.
-- **Fusion module** (`bck/app/tools/fusion/`): `sar_scale.py` (`SarScale` enum: DB,
-  LINEAR) and `guards.py` (`require_db_scale` — raises unless the caller explicitly
-  declares DB; never inspects pixel values to guess the scale) plus
-  `tests/test_fusion_guards.py`. All four gates green
-  (`ruff check`, `ruff format --check`, `lint-imports`, `pytest`). Committed as two
-  conventional commits (`feat:`, `test:`).
-- **`calibration.py`** (`calibrate_sigma0_db`): raw-DN-to-sigma-nought-dB formula from
-  `05-Research-And-References` §3.2, `10*log10(DN^2) - K_cal + 10*log10(sin(theta_inc))`.
-  DN cast to float64 before squaring (integer arrays would overflow otherwise); DN <= 0
-  returns NaN per element rather than emitting `-inf`; `incidence_angle_deg` outside the
-  open interval (0, 90) raises `ValueError`. `tests/test_fusion_calibration.py` covers a
-  normal case, DN=0, negative DN, four invalid-angle values, an int16 array that would
-  overflow if squared in place, and array-like `k_cal`/`incidence_angle_deg` each raising
-  `TypeError` — every expected dB value is hand-computed via Python's `math` module in a
-  comment so it's independently checkable. 10/10 tests pass; all four gates green.
+## Done
 
-## Blocked / deferred
+- **Environment**: RTX 3050 6GB (driver present; no system CUDA toolkit needed, bck's torch wheel bundles its own), 7.6GB RAM, 933GB free disk, rsync/wget/curl present.
+- **LEVIR-CD**: downloaded the ChangeFormer-linked preprocessed 256x256 zip (2.3GB), extracted exactly one real A/B/label triplet (`train_103_9.png`, 256x256), then deleted the zip and all other extracted files.
+- **BIT environment** (`~/spikes/bit/`, outside the repo): venv created with `uv`; torch 2.14.0+cu130, torchvision 0.29.0 and einops installed there only, never in `bck`. Cloned `justchenhao/BIT_CD` and fetched its pretrained LEVIR-CD checkpoint (57.3MB).
+- **BIT run on the real LEVIR-CD pair**: ran end to end and produced a real 256x256 binary change mask, 41.3% of pixels flagged changed. Four compatibility fixes were needed against the torch version gap the team lead flagged as a risk — all in the spike clone, nothing in `bck`:
+  - `torchvision.models.utils.load_state_dict_from_url` was removed from modern torchvision — repointed to `torch.hub.load_state_dict_from_url`.
+  - `np.str` was removed from numpy — the dataset-list loader used it as a dtype; changed to `str`.
+  - Two undocumented runtime deps the README never lists, `opencv-python-headless` and `tifffile`, installed into the spike venv only.
+  - The flagged one: `torch.load` defaults to `weights_only=True` since PyTorch 2.6, and BIT's checkpoint pickles a `numpy.core.multiarray.scalar` global that isn't on the safe list — load failed with `_pickle.UnpicklingError`. Resolved with `weights_only=False`; the checkpoint is BIT's own published release asset.
+- **Fusion module** (`bck/app/tools/fusion/`): `sar_scale.py` (`SarScale` enum: DB, LINEAR) and `guards.py` (`require_db_scale`, which raises unless the caller explicitly declares DB and never inspects pixel values to guess scale), plus `bck/tests/test_fusion_guards.py`.
+- **`calibration.py`** (`calibrate_sigma0_db`): the verified §3.2 formula, `10*log10(DN^2) - K_cal + 10*log10(sin(theta_inc))`. DN cast to float64 before squaring (integer arrays would overflow otherwise); `DN <= 0` returns NaN per element rather than emitting `-inf`; `incidence_angle_deg` outside the open interval (0, 90) raises `ValueError`; array-like `k_cal` or `incidence_angle_deg` raises `TypeError`. `bck/tests/test_fusion_calibration.py` covers a normal case, DN=0, negative DN, invalid angles, an int16 array that would overflow if squared in place, and the scalar-only enforcement — every expected dB value hand-computed via Python's `math` module in a comment so it is independently checkable.
+- All four gates green throughout: `ruff check`, `ruff format --check`, `lint-imports`, `pytest`.
 
-- **`despeckle.py` (Lee filter) — not written.** `05-Research-And-References` §3.1a
-  (the Lee/MMSE formula citation) isn't in this repo or filesystem; it lives in
-  external project knowledge I can't reach from this environment. Per the ticket's own
-  instruction, stopping rather than reconstructing the formula from memory. Team lead is
-  fetching the exact text to paste in; `despeckle.py` and its test follow once that
-  lands. No stub, no placeholder, no TODO left in its place.
-- **SEN12MS numeric check (dtype/min/max/percentile/metadata) and despeckle evidence
-  (Step 4)** — pending the archive download, which stalled once (dead connection, silent
-  for 2+ hours) and is currently crawling at ~150-250 KB/s (ETA 20+ hrs) even after
-  resuming with `--partial --append-verify`. Confirmed this machine's general bandwidth
-  is fine (~5MB/s to an unrelated host) — the slowness is on TUM dataserv's end, not
-  fixable from here. Will complete and report the verbatim numbers once it lands.
+## Decided
 
-## Decisions
+- **BIT over ChangeFormer.** 57.3MB pretrained LEVIR-CD checkpoint vs ChangeFormer's 940MB, one fewer pinned dependency (no `timm`), and a ResNet18 backbone leaving far more headroom on this machine's 6GB VRAM. The bar for this ticket was "it runs", and BIT was likelier to clear it. ChangeFormer is generally reported to score better on LEVIR-CD and pins its dependencies properly — a real point against BIT — and swapping later is contained behind the same tool interface. ChangeFormer was not tested further for this reason, not because it doesn't work.
+- **Acceptance criterion 2 re-scoped into two parts by the team lead; only part 1 is built here.** SEN12MS ships sigma-nought dB already, so there was never raw DN in it to calibrate from and the formula could not be verified end to end against this ticket's own dataset. `calibrate_sigma0_db` implements the verified §3.2 formula standalone, correct by construction and by its hand-computed test cases, independent of which dataset eventually supplies real DN.
+- **K_cal is scalar by design, valid for single-patch/fixed-geometry inputs per this ticket's scope — full-scene per-pixel LUT calibration is a separate future function, not a defect in this one.**
+- **The scale guard does not infer scale from pixel values.** Any "values above X are DN" rule would have been an invented threshold. Callers declare scale explicitly or the guard raises.
 
-- **BIT over ChangeFormer**: BIT's pretrained LEVIR-CD checkpoint is 57.3MB vs
-  ChangeFormer's 940MB — meaningfully cheaper to ship and iterate on. BIT also has one
-  fewer pinned dependency (no `timm`). With only 6GB of VRAM on this machine, the smaller
-  model leaves more headroom to run alongside everything else in the pipeline.
-  ChangeFormer was not tested further for this reason, not because it doesn't work.
-- **Acceptance criterion 2 re-scoped into two parts by the team lead; only part 1
-  (`calibration.py`) is built here.** Reason: SEN12MS ships sigma-nought dB already —
-  there was never raw DN in it to calibrate against, so the calibration formula couldn't
-  be verified end-to-end against this ticket's own real dataset. `calibrate_sigma0_db`
-  implements the verified §3.2 formula standalone, correct by construction and by its own
-  hand-computed test cases, independent of which dataset eventually supplies real DN.
-- **K_cal is scalar by design, valid for single-patch/fixed-geometry inputs per this
-  ticket's scope — full-scene per-pixel LUT calibration is a separate future function,
-  not a defect in this one.**
-- **No placeholder despeckle filter was written.** AGENTS.md is explicit: no stubs, no
-  placeholders, no TODOs in shipped code. A "temporary" or simplified filter standing in
-  for the real Lee/MMSE formula would be exactly the kind of thing that quietly becomes
-  load-bearing for ROHAN-002/003 once other work depends on `app.tools.fusion` exporting
-  *something* called despeckle — worse than leaving the gap visible. `despeckle.py` stays
-  absent until `05-Research-And-References` §3.1a is actually in hand.
+## Rejected
+
+- **A placeholder or simplified despeckle filter**, suggested to unblock the ticket. AGENTS.md is explicit: no stubs, no placeholders, no TODOs in shipped code. A stand-in for the real Lee/MMSE formula quietly becomes load-bearing for ROHAN-002/003 the moment anything imports `app.tools.fusion` expecting *something* called despeckle — worse than leaving the gap visible. Waiting cost nothing, since despeckle was already agreed non-blocking.
+- **QXS-SAROPT as a substitute SAR source.** Its DN-vs-calibrated pixel format is not documented in any verified source, so switching would have traded a slow download for an unverified assumption.
+- **Reconstructing the Lee/MMSE formula from memory** when §3.1a proved unreachable. Stopped and escalated instead.
+
+## Incomplete / blocked
+
+- **`despeckle.py` — not written.** `05-Research-And-References` §3.1a lives in external project knowledge that this environment cannot read. The team lead is supplying the exact text; the filter and its test follow once it lands. No stub, no placeholder, no TODO left in its place.
+- **SEN12MS Sentinel-1 numeric check and despeckle evidence.** `mediatum.ub.tum.de/1474000` sits behind an Anubis JS anti-bot challenge, so the rsync password could not be read off the rendered page; the standard TUM dataserv convention was confirmed against a live authenticated `rsync --list-only`, not guessed. No per-scene files exist — the smallest S1 archive is `ROIs2017_winter_s1.tar.gz` at 14.4GB. `SupportingDocument.txt`, fetched from the same rsync source, states the S1 channels are already sigma-nought dB as 16-bit GeoTIFFs; the numeric confirmation against real pixels is still pending. The transfer stalled once and is crawling at 70-290 KB/s despite `--partial --append-verify`. This machine's general bandwidth is fine (~5MB/s to an unrelated host), so the constraint is on TUM's end.
 
 ## Agent
 
-Claude Code (Sonnet 5), session
-https://claude.ai/code/session_01Mcufc5gSdGYGxKZp4R1H94.
+Claude Code (Sonnet 5), session https://claude.ai/code/session_01Mcufc5gSdGYGxKZp4R1H94
