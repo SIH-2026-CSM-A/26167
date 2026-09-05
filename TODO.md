@@ -15,7 +15,7 @@
       (single-image VQA), before any other feature work starts
 
 ## Next
-- [ ] InternVL2-2B running locally, forward pass verified (`trust_remote_code=True`)
+- [ ] InternVL3-2B running locally, forward pass verified (`trust_remote_code=True`)
 - [ ] BigEarthNet.txt / VRSBench / RSVQA / CDVQA download and access verified
 - [ ] Domain-gap test: Sentinel-trained baseline against real/representative Cartosat-2S/RISAT
       imagery (Bhoonidhi/Bhuvan) — owned by Aashritha, do not leave unowned

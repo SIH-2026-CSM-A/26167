@@ -3,7 +3,7 @@
 | Situation | Skill |
 |---|---|
 | Any repo structure, naming, branching, PR-standards question | `engineering-standards` |
-| Touching InternVL2-2B, LoRA training, embeddings, or anything with a cost ceiling | `genai-project` |
+| Touching InternVL3-2B, LoRA training, embeddings, or anything with a cost ceiling | `genai-project` |
 | Anything user-facing in `fnt/` | `frontend-work` |
 | Verifying a UI change in a real browser | `playwright-cli` |
 | Understanding code you didn't write, before changing it | `explore-codebase` |
