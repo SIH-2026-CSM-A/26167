@@ -2,9 +2,6 @@
 # Module ownership is absolute. Every directory below has exactly one owner.
 # Crossing a line here is a ticket bug, not a PR to wave through.
 #
-# PLACEHOLDERS: @AASHRITHA_GH @ROHAN_GH @SHIVASAI_GH @LIKITHA_GH @JASHWANTH_GH
-# are not real GitHub handles. Replace all five with the team's actual usernames
-# before this file does anything — until then "require review from Code Owners"
 # in the ruleset will silently fail to request anyone.
 
 # Lead-owned: contracts, wiring, integration — same pattern as 26034's Abhiram
@@ -17,23 +14,23 @@
 *.md                       @ybaddam8-png
 
 # Aashritha — perception, adaptation, data
-/bck/app/models/                   @AASHRITHA_GH
-/bck/app/training/                 @AASHRITHA_GH
-/bck/app/tools/vqa_grounding/      @AASHRITHA_GH
-/data/                             @AASHRITHA_GH
+/bck/app/models/                   @aashrithareddybodanampally-byte
+/bck/app/training/                 @aashrithareddybodanampally-byte
+/bck/app/tools/vqa_grounding/      @aashrithareddybodanampally-byte
+/data/                             @aashrithareddybodanampally-byte
 
 # Rohan — specialist tools
-/bck/app/tools/change_detection/   @ROHAN_GH
-/bck/app/tools/fusion/             @ROHAN_GH
+/bck/app/tools/change_detection/   @A-Rohan99
+/bck/app/tools/fusion/             @A-Rohan99
 
 # Shivasai — controller and verification
-/bck/app/router/            @SHIVASAI_GH
-/bck/app/verification/      @SHIVASAI_GH
+/bck/app/router/            @adepushivasai901-ops
+/bck/app/verification/      @adepushivasai901-ops
 
 # Likitha — evidence, reporting, frontend
-/bck/app/evidence/           @LIKITHA_GH
-/fnt/                         @LIKITHA_GH
+/bck/app/evidence/           @Likhitha-rachelly
+/fnt/                         @Likhitha-rachelly
 
 # Jashwanth (half-capacity, split with 26034) — ingestion and infra
-/bck/app/ingestion/           @JASHWANTH_GH
-/infra/                       @JASHWANTH_GH
+/bck/app/ingestion/           @badugujashwanth-create
+/infra/                       @badugujashwanth-create
