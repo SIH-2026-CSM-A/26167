@@ -1,73 +1,148 @@
-import React from 'react';
-import { UploadCloud, Layers, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { ConfigSelector, PipelineConfigMode } from '../components/Upload/ConfigSelector';
+import { SlotUploader } from '../components/Upload/SlotUploader';
+import { QueryResultCard } from '../components/Upload/QueryResultCard';
+import { submitQuery } from '../services/api';
+import type { Answer, Modality } from '../types/contracts';
+
+interface SlotData {
+  label: string;
+  file: File | null;
+  modality: Modality;
+  isLocked: boolean;
+}
 
 export const UploadPage: React.FC = () => {
+  const [mode, setMode] = useState<PipelineConfigMode>('single');
+  const [query, setQuery] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<Answer | null>(null);
+
+  const [slots, setSlots] = useState<SlotData[]>([
+    { label: 'Primary Imagery', file: null, modality: 'optical', isLocked: false },
+  ]);
+
+  const handleModeChange = (newMode: PipelineConfigMode) => {
+    setMode(newMode);
+    setResult(null);
+    setError(null);
+    if (newMode === 'single') {
+      setSlots([{ label: 'Primary Imagery', file: null, modality: 'optical', isLocked: false }]);
+    } else if (newMode === 'cross-modal') {
+      setSlots([
+        { label: 'Slot 1 (Optical)', file: null, modality: 'optical', isLocked: true },
+        { label: 'Slot 2 (SAR)', file: null, modality: 'sar', isLocked: true },
+      ]);
+    } else {
+      setSlots([
+        { label: 'Slot 1 (T1 Pass)', file: null, modality: 'optical', isLocked: false },
+        { label: 'Slot 2 (T2 Pass)', file: null, modality: 'optical', isLocked: false },
+      ]);
+    }
+  };
+
+  const updateSlotFile = (index: number, file: File | null) => {
+    setSlots((prev) => prev.map((s, i) => (i === index ? { ...s, file } : s)));
+  };
+
+  const updateSlotModality = (index: number, modality: Modality) => {
+    setSlots((prev) => prev.map((s, i) => (i === index ? { ...s, modality } : s)));
+  };
+
+  const canSubmit = !loading && query.trim().length > 0 && slots.every((s) => s.file !== null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const images: File[] = [];
+      const modalities: Modality[] = [];
+
+      slots.forEach((slot) => {
+        if (slot.file) {
+          images.push(slot.file);
+          modalities.push(slot.modality);
+        }
+      });
+
+      const response = await submitQuery({
+        query: query.trim(),
+        images,
+        modalities,
+      });
+
+      setResult(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error or backend failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-          Remote Sensing Data Ingestion
-        </h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Upload single, bi-temporal, or cross-modal (optical + SAR) satellite imagery.
-        </p>
+    <div className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
+      <div>
+        <h1 className="text-xl font-bold text-slate-100">Satellite Imagery Query</h1>
+        <p className="text-xs text-slate-400 mt-1">Multi-modal earth observation query and analysis pipeline</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <section className="lg:col-span-2 rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center hover:border-cyan-500/50 transition-colors">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-cyan-950/60 text-cyan-400 border border-cyan-500/20">
-            <UploadCloud className="h-7 w-7" />
-          </div>
-          <h2 className="mt-4 text-base font-semibold text-white">
-            Drag & drop GeoTIFF / TIFF files
-          </h2>
-          <p className="mt-1 text-xs text-slate-400">
-            Supports Optical (Sentinel-2, Cartosat) and SAR (Sentinel-1, RISAT-1) modalities
-          </p>
-          <div className="mt-6 flex justify-center">
-            <button
-              type="button"
-              className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-600 transition-colors"
-            >
-              Select Imagery Files
-            </button>
-          </div>
-        </section>
+      <ConfigSelector selectedMode={mode} onSelectMode={handleModeChange} disabled={loading} />
 
-        <aside className="space-y-4">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Layers className="h-4 w-4 text-cyan-400" />
-              <span>Modalities Supported</span>
-            </div>
-            <ul className="mt-3 space-y-2 text-xs text-slate-300">
-              <li className="flex items-center justify-between py-1 border-b border-slate-800">
-                <span>Optical Imagery</span>
-                <span className="font-mono text-cyan-400">RGB / NIR</span>
-              </li>
-              <li className="flex items-center justify-between py-1 border-b border-slate-800">
-                <span>SAR Imagery</span>
-                <span className="font-mono text-cyan-400">VV / VH (dB)</span>
-              </li>
-              <li className="flex items-center justify-between py-1">
-                <span>Bi-temporal Pair</span>
-                <span className="font-mono text-cyan-400">T1 / T2</span>
-              </li>
-            </ul>
-          </div>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div className={`grid gap-4 ${slots.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+          {slots.map((slot, index) => (
+            <SlotUploader
+              key={index}
+              label={slot.label}
+              slotIndex={index}
+              modality={slot.modality}
+              isModalityLocked={slot.isLocked}
+              file={slot.file}
+              onFileSelect={(f) => updateSlotFile(index, f)}
+              onModalityChange={(m) => updateSlotModality(index, m)}
+              disabled={loading}
+            />
+          ))}
+        </div>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
-            <div className="flex items-center gap-2 text-sm font-semibold text-amber-300">
-              <AlertCircle className="h-4 w-4 text-amber-400" />
-              <span>Ingestion Notice</span>
-            </div>
-            <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-              Files are checked for spatial alignment, projection CRS, and band order prior to
-              forwarding to the inference pipeline.
-            </p>
-          </div>
-        </aside>
-      </div>
-    </main>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">Analysis Query</label>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            disabled={loading}
+            placeholder="e.g. Identify land cover classification or detect changes"
+            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className={`py-2.5 px-5 rounded-lg text-xs font-semibold tracking-wider uppercase transition-all ${
+            canSubmit
+              ? 'bg-cyan-600 hover:bg-cyan-500 text-white cursor-pointer shadow-md'
+              : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+          }`}
+        >
+          {loading ? 'Processing via Backend...' : 'Run Pipeline'}
+        </button>
+      </form>
+
+      {error && (
+        <div className="p-4 bg-rose-950/30 border border-rose-800 rounded-lg text-xs text-rose-300">
+          <strong>Submission Error:</strong> {error}
+        </div>
+      )}
+
+      {result && <QueryResultCard answer={result} />}
+    </div>
   );
 };
