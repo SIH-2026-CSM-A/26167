@@ -23,3 +23,12 @@ Built via Antigravity (single-agent, Windows).
 **Incomplete:**
 - MapLibre GL map layer rendering and bounding box overlay will be implemented in ticket LIKI-002 once tile and evidence endpoints are ready.
 - Backend API client bindings (`fnt/src/services/`) will be wired in the vertical slice ticket.
+
+## LIKI-002: Modular Upload & Query Form Implementation
+- Architected modular subcomponents in `fnt/src/components/Upload/`:
+  - `ConfigSelector.tsx` (58 lines): Single Image, Cross-Modal (optical/sar locked), and Bi-Temporal modes.
+  - `SlotUploader.tsx` (116 lines): Drag-and-drop file uploader with client-side benchmark and GeoTIFF validation.
+  - `QueryResultCard.tsx` (92 lines): Displays answer text, confidence metric, evidence payloads, and expandable trace step viewer.
+  - `UploadPage.tsx` (128 lines): Orchestrates components and coordinates 1:1 positional `submitQuery` calls.
+- Enforced zero mock data; connected directly to live backend endpoint via `submitQuery`.
+- Verified 0 errors on `npm run lint` and `npm run build`.
