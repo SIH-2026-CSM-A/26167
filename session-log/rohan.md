@@ -74,3 +74,61 @@ LD_LIBRARY_PATH=bck/.system-libs/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
 
 This belongs in `SETUP.md` as a real, reproducible environment gap — flagging for
 Yashwanth (its owner) rather than adding it myself.
+
+---
+
+### 2026-09-06 — ROHAN-002: BIT change detection tool (detector.py) — Claude Code
+
+## Done
+- Confirmed `a04b865` (#28) landed on `main` before starting: `ImageInput.path`
+  is real (`path: str`, populated by `ingest_raster()`'s
+  `tempfile.NamedTemporaryFile(delete=False, ...)`). `stub_tool` is NOT
+  real — checked the actual diff of a04b865 and grepped the whole tree for
+  `stub_tool`/`StubTool`/`ToolStub`: zero matches anywhere. The commit
+  message's second bullet doesn't correspond to any real code.
+- Vendored BIT (5 files: `__init__.py`, `resnet.py`, `networks.py`,
+  `help_funcs.py`, `losses.py`) from `justchenhao/BIT_CD` @
+  `adcd7aea6f234586ffffdd4e9959404f96271711` (verified against the local
+  clone's actual git log, not GitHub's web UI) into `bit_vendor/`,
+  inference-only — no training/CLI/dataset-loader plumbing, so no new
+  `opencv-python`/`tifffile`/`matplotlib` dependencies. Documented the two
+  deliberate upstream edits in `bit_vendor/VENDORED.md`.
+- Built `detector.py`: loads two `ImageInput`s via `.path`, runs vendored
+  BIT, constructs `list[Evidence]` directly — following `fusion/reconcile.py`'s
+  real, already-merged pattern, since no `stub_tool` exists to build into.
+- Verified against two real LEVIR-CD pairs: `levir_test_1_*` (already
+  committed for the frontend; ground truth genuinely all-zero, predicted
+  0.0% — exact match) and `levir_train_103_9_*` (the same pair ROHAN-001
+  verified via BIT's CLI demo; IoU=0.8945, pixel accuracy=95.48%,
+  changed-pixel fraction 0.4132843017578125 — cross-checked byte-for-byte
+  against the original CLI run's actual saved output PNG, not just
+  re-asserted from a prior note).
+- All four gates green: `ruff check`, `ruff format --check`, `lint-imports`
+  (91 files, 176 deps, 3/3 contracts kept), `pytest` (93 passed).
+
+## Decided
+- Vendored only pure model-definition files, not `basic_model.py` — its
+  `CDEvaluator` wrapper pulls in `opencv-python`/`tifffile` as new deps
+  `detector.py` doesn't need. Reimplemented the same load-checkpoint/
+  forward/argmax logic directly, verified against `basic_model.py`'s real
+  source (same `model_G_state_dict` key, same `torch.argmax(..., dim=1)`).
+- `checkpoint_path` is a required parameter, not a hardcoded default,
+  matching this codebase's established convention.
+- Used the already-committed `levir_test_1_*` pair as the primary fixture
+  (not `~/spikes/bit/`, outside the repo) paired with `levir_train_103_9_*`
+  for a real-change case.
+
+## Rejected
+- Rebuilding BIT's preprocessing from memory or blog conventions. Read
+  `datasets/data_utils.py` directly to confirm real normalization
+  (`mean=[0.5]*3, std=[0.5]*3`, not ImageNet stats).
+- Inventing a `stub_tool` wrapper to match a04b865's commit message at
+  face value. Verified it doesn't exist before building around it.
+
+## Incomplete
+- Temp files at `ImageInput.path` are never cleaned up — known, explicitly
+  flagged by the lead as a separate follow-up, not this ticket's scope.
+
+## Agent
+Claude Code (Sonnet 5), session
+https://claude.ai/code/session_01Mcufc5gSdGYGxKZp4R1H94.
