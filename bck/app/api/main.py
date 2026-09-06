@@ -6,11 +6,20 @@ import uuid
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.contracts import Answer, ImageInput, Modality, QueryRequest
 from app.pipeline.pipeline import run
 
 app = FastAPI(title="SatQuery AI")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.post("/query", response_model=Answer)
