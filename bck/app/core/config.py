@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     database_url: PostgresDsn
     cost_ceiling: float = Field(gt=0)
     log_level: str = "INFO"
+    titiler_base_url: str = "http://localhost:8001"
 
 
 @lru_cache
