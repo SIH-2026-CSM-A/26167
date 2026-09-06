@@ -48,4 +48,6 @@ def test_pipeline_verifies_model_output_and_builds_evidence_and_trace() -> None:
     verification_step = next(
         step for step in answer.trace.steps if step.action == "verification_completed"
     )
+    route_step = next(step for step in answer.trace.steps if step.action == "route_selected")
+    assert route_step.params["tool"] == "vqa_grounding"
     assert verification_step.params["rejected_claim_count"] == 1

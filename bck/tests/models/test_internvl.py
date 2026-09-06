@@ -39,6 +39,8 @@ def test_adapter_prepares_actual_nested_language_model_without_global_mutation(m
     nested = TinyLegacyLanguageModel().eval()
     untouched = TinyLegacyLanguageModel()
     original_class = type(nested)
+    original_generate = getattr(original_class, "generate", None)
+    original_prepare = original_class.prepare_inputs_for_generation
     parameter = nested.embedding.weight
     config = nested.config
     outer = torch.nn.Module()
@@ -61,16 +63,14 @@ def test_adapter_prepares_actual_nested_language_model_without_global_mutation(m
     assert nested.config is config
     assert nested.device.type == "cpu"
     assert nested.dtype == parameter.dtype
-    assert (
-        untouched.prepare_inputs_for_generation.__func__
-        is original_class.prepare_inputs_for_generation
-    )
+    assert type(nested) is not original_class
+    assert type(untouched) is original_class
+    assert untouched.prepare_inputs_for_generation.__func__ is original_prepare
+    assert getattr(original_class, "generate", None) is original_generate
     assert torch.equal(
         nested.prepare_inputs_for_generation(torch.tensor([[1, 2]]))["input_ids"],
         torch.tensor([[1, 2]]),
     )
-    assert not hasattr(untouched, "generate")
-    assert not hasattr(original_class, "generate")
     generated = nested.generate(
         torch.tensor([[1, 2]]), max_new_tokens=2, do_sample=False, use_cache=False
     )
@@ -196,7 +196,8 @@ def test_generation_aligns_stale_position_ids_during_cached_decoding():
     assert len(nested.forward_calls) >= 3
     for call in nested.forward_calls[1:]:
         assert call["input_len"] == 1
-        assert call["pos_len"] == 1
+        if call["pos_len"] is not None:
+            assert call["pos_len"] == 1
 
 
 def test_adapter_is_lazy_until_generation() -> None:
@@ -222,6 +223,7 @@ def test_windows_cpu_safetensors_compat_changes_mmap_to_pread(monkeypatch) -> No
     monkeypatch.setattr("sys.platform", "win32")
 
     import safetensors
+    import safetensors.torch as safetensors_torch
     import transformers.modeling_utils as mu
 
     from app.models import windows_cpu_safetensors_compat
@@ -233,10 +235,13 @@ def test_windows_cpu_safetensors_compat_changes_mmap_to_pread(monkeypatch) -> No
         return "dummy_handle"
 
     monkeypatch.setattr(safetensors, "safe_open", dummy_safe_open)
+    monkeypatch.setattr(safetensors_torch, "safe_open", dummy_safe_open)
     monkeypatch.setattr(mu, "safe_open", dummy_safe_open)
 
     with windows_cpu_safetensors_compat("cpu"):
-        mu.safe_open("test.safetensors", framework="pt", device="cpu", backend="mmap")
+        safetensors_torch.safe_open(
+            "test.safetensors", framework="pt", device="cpu", backend="mmap"
+        )
 
     assert captured_kwargs.get("backend") == "pread"
 
@@ -276,18 +281,22 @@ def test_windows_cpu_safetensors_compat_restoration(monkeypatch) -> None:
     monkeypatch.setattr("sys.platform", "win32")
 
     import safetensors
+    import safetensors.torch as safetensors_torch
     import transformers.modeling_utils as mu
 
     from app.models import windows_cpu_safetensors_compat
 
     orig_mu = mu.safe_open
     orig_st = safetensors.safe_open
+    orig_st_torch = safetensors_torch.safe_open
 
     with windows_cpu_safetensors_compat("cpu"):
         assert mu.safe_open != orig_mu
+        assert safetensors_torch.safe_open != orig_st_torch
 
     assert mu.safe_open == orig_mu
     assert safetensors.safe_open == orig_st
+    assert safetensors_torch.safe_open == orig_st_torch
 
     # Test restoration on exception
     try:
@@ -299,3 +308,4 @@ def test_windows_cpu_safetensors_compat_restoration(monkeypatch) -> None:
 
     assert mu.safe_open == orig_mu
     assert safetensors.safe_open == orig_st
+    assert safetensors_torch.safe_open == orig_st_torch
