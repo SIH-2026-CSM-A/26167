@@ -1,23 +1,51 @@
-from app.contracts import ImageInput, Modality, QueryRequest
-from app.pipeline.pipeline import run
+"""Full pipeline behavior tests using only the expensive-model boundary as a double."""
+
+from app.contracts import Modality
+from app.pipeline import PipelineUpload, run
+from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
 
 
-def test_run_reflects_actual_request_not_a_fixture():
-    image = ImageInput(id="img-1", modality=Modality.OPTICAL, format="image/tiff")
-    request = QueryRequest(query="how many buildings are visible?", images=[image])
+def test_pipeline_verifies_model_output_and_builds_evidence_and_trace() -> None:
+    """Raw tool output must be sanitized before becoming the canonical answer."""
+    model = DeterministicVqaModel(
+        answer="A river is visible and industrial pollution is contaminating the water.",
+        grounding="A river is visible in the scene.",
+    )
+    upload = PipelineUpload(
+        id="asset-1",
+        filename="scene.tif",
+        content_type="image/tiff",
+        content=make_geotiff_bytes(),
+        modality=Modality.OPTICAL,
+    )
 
-    answer = run(request)
+    answer = run(
+        query="What geographic feature is visible?",
+        uploads=[upload],
+        model=model,
+    )
 
-    assert "how many buildings are visible?" in answer.text
-    assert len(answer.evidence) == 1
-    assert answer.evidence[0].payload["image_ids"] == ["img-1"]
-    assert answer.abstained is False
-    assert len(answer.trace.steps) == 4
-
-
-def test_run_with_no_images_still_produces_an_answer():
-    request = QueryRequest(query="hello")
-
-    answer = run(request)
-
-    assert answer.evidence[0].payload["image_ids"] == []
+    assert answer.text == "A river is visible."
+    assert answer.text != answer.evidence[0].payload["raw_model_answer"]
+    assert "pollution" not in answer.text.lower()
+    assert answer.evidence[0].payload["source_asset_id"] == "asset-1"
+    actions = [step.action for step in answer.trace.steps]
+    assert actions == [
+        "request_received",
+        "asset_received",
+        "asset_ingestion_started",
+        "asset_ingested",
+        "routing_started",
+        "route_selected",
+        "vqa_started",
+        "internvl_inference_started",
+        "internvl_inference_completed",
+        "verification_started",
+        "verification_completed",
+        "evidence_created",
+        "response_completed",
+    ]
+    verification_step = next(
+        step for step in answer.trace.steps if step.action == "verification_completed"
+    )
+    assert verification_step.params["rejected_claim_count"] == 1
