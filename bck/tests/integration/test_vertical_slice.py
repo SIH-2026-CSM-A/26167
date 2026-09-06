@@ -6,7 +6,7 @@ from app.api.main import app
 from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
 
 
-def test_live_api_path_removes_an_unsupported_model_claim() -> None:
+def test_live_api_path_abstains_on_uncalibrated_vqa_output() -> None:
     """The full API path evaluates uncalibrated VQA output and enforces typed abstention."""
     app.state.vqa_model = DeterministicVqaModel(
         answer="A river is visible and industrial pollution is contaminating the water.",
