@@ -10,19 +10,19 @@ from app.ingestion import (
     UnsupportedRasterError,
     ingest_raster,
 )
-from app.models import InternVL2Adapter, InternVLModelError
+from app.models import InternVLAdapter, InternVLModelError
 from app.pipeline.stages import PipelineError, PipelineUpload, TraceRecorder
 from app.router import route
 from app.tools.vqa_grounding import VqaModel, VqaToolError, execute_vqa
 from app.verification import verification_trace_params, verify
 
-_default_model: InternVL2Adapter | None = None
+_default_model: InternVLAdapter | None = None
 
 
-def _get_default_model() -> InternVL2Adapter:
+def _get_default_model() -> InternVLAdapter:
     global _default_model
     if _default_model is None:
-        _default_model = InternVL2Adapter()
+        _default_model = InternVLAdapter()
     return _default_model
 
 

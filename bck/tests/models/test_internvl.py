@@ -8,7 +8,7 @@ from PIL import Image
 from transformers import PretrainedConfig, PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-from app.models import InternVL2Adapter, prepare_pixel_values
+from app.models import InternVLAdapter, prepare_pixel_values
 
 
 class TinyLegacyLanguageModel(PreTrainedModel):
@@ -54,7 +54,7 @@ def test_adapter_prepares_actual_nested_language_model_without_global_mutation(m
         transformers.AutoTokenizer, "from_pretrained", lambda *args, **kwargs: SimpleNamespace()
     )
 
-    adapter = InternVL2Adapter(device="cpu")
+    adapter = InternVLAdapter(device="cpu")
     adapter._ensure_loaded()
 
     assert callable(getattr(adapter._model.language_model, "generate", None))
@@ -202,10 +202,10 @@ def test_generation_aligns_stale_position_ids_during_cached_decoding():
 
 def test_adapter_is_lazy_until_generation() -> None:
     """Constructing the adapter must not initialize or download the model."""
-    adapter = InternVL2Adapter()
+    adapter = InternVLAdapter()
 
     assert adapter.is_loaded is False
-    assert adapter.model_id == "OpenGVLab/InternVL2-2B"
+    assert adapter.model_id == "OpenGVLab/InternVL3-2B"
 
 
 def test_prepare_pixel_values_returns_model_tensor() -> None:
