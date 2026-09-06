@@ -6,7 +6,7 @@ from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
 
 
 def test_pipeline_verifies_model_output_and_builds_evidence_and_trace() -> None:
-    """Raw tool output must be sanitized before becoming the canonical answer."""
+    """Canonical verification evaluates tool output and builds auditable trace."""
     model = DeterministicVqaModel(
         answer="A river is visible and industrial pollution is contaminating the water.",
         grounding="A river is visible in the scene.",
@@ -25,10 +25,12 @@ def test_pipeline_verifies_model_output_and_builds_evidence_and_trace() -> None:
         model=model,
     )
 
-    assert answer.text == "A river is visible."
-    assert answer.text != answer.evidence[0].payload["raw_model_answer"]
-    assert "pollution" not in answer.text.lower()
-    assert answer.evidence[0].payload["source_asset_id"] == "asset-1"
+    assert answer.abstained is True
+    assert answer.abstention_reason == (
+        "INSUFFICIENT_CONFIDENCE: Evidence confidence falls below the reliability threshold (0.30)."
+    )
+    assert answer.text == ""
+    assert answer.evidence == []
     actions = [step.action for step in answer.trace.steps]
     assert actions == [
         "request_received",
@@ -50,4 +52,5 @@ def test_pipeline_verifies_model_output_and_builds_evidence_and_trace() -> None:
     )
     route_step = next(step for step in answer.trace.steps if step.action == "route_selected")
     assert route_step.params["tool"] == "vqa_grounding"
-    assert verification_step.params["rejected_claim_count"] == 1
+    assert verification_step.params["status"] == "abstained"
+    assert verification_step.params["retained_evidence_count"] == 0

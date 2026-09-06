@@ -22,7 +22,7 @@ def deterministic_model() -> Iterator[None]:
 
 
 def test_query_accepts_real_multipart_geotiff() -> None:
-    """A valid multipart GeoTIFF request must return the canonical verified answer."""
+    """A valid multipart GeoTIFF request reflects canonical verification abstention."""
     response = client.post(
         "/query",
         data={"query": "What feature is visible?", "modality": ["optical"]},
@@ -31,9 +31,15 @@ def test_query_accepts_real_multipart_geotiff() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["text"] == "A river is visible."
-    assert body["evidence"][0]["payload"]["source_filename"] == "scene.tif"
+    assert body["abstained"] is True
+    assert body["abstention_reason"] == (
+        "INSUFFICIENT_CONFIDENCE: Evidence confidence falls below the reliability threshold (0.30)."
+    )
+    assert body["text"] == ""
+    assert body["evidence"] == []
     assert body["trace"]["steps"][-1]["action"] == "response_completed"
+    assert body["trace"]["steps"][-1]["params"]["abstained"] is True
+    assert any(step["action"] == "verification_completed" for step in body["trace"]["steps"])
 
 
 def test_query_requires_non_whitespace_question() -> None:
