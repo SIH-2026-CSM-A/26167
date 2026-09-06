@@ -63,3 +63,17 @@ async def submit_query(
                 "trace": error.trace.model_dump(mode="json"),
             },
         ) from error
+
+from app.evidence.report import generate_evidence_pdf
+from fastapi.responses import StreamingResponse
+
+
+@app.post("/api/evidence/export-pdf")
+async def export_evidence_pdf(payload: dict):
+    pdf_buffer = generate_evidence_pdf(payload)
+    query_id = payload.get("query_id", "report")
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=evidence-{query_id}.pdf"},
+    )

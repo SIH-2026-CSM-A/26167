@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import type { Answer } from '../../types/contracts';
+import { downloadEvidencePdf } from '../../services/api';
 
 interface QueryResultCardProps {
   answer: Answer;
@@ -7,6 +8,33 @@ interface QueryResultCardProps {
 
 export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
   const [showTrace, setShowTrace] = useState<boolean>(false);
+  const [downloading, setDownloading] = useState<boolean>(false);
+
+  const handleDownload = async () => {
+    try {
+      setDownloading(true);
+      const payload = {
+        query_id: 'satquery-report',
+        verdict: answer.abstained ? 'Abstained' : 'Completed',
+        confidence: `${(answer.confidence * 100).toFixed(0)}%`,
+        summary: answer.text,
+        citations: (answer.evidence || []).map((ev, i) => ({
+          id: ev.id || `C-${i + 1}`,
+          source: ev.tool || 'Sensor',
+          confidence: 'N/A',
+          detail:
+            ev.payload && typeof ev.payload === 'object' && 'description' in ev.payload
+              ? String((ev.payload as Record<string, unknown>).description)
+              : JSON.stringify(ev.payload || {}),
+        })),
+      };
+      await downloadEvidencePdf(payload);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900/90 p-5 flex flex-col gap-4 shadow-lg">
@@ -23,6 +51,14 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
           >
             {(answer.confidence * 100).toFixed(0)}%
           </span>
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading}
+            className="ml-2 rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition disabled:opacity-50"
+          >
+            {downloading ? 'Exporting...' : 'PDF Report'}
+          </button>
         </div>
       </div>
 
@@ -67,7 +103,7 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
             onClick={() => setShowTrace(!showTrace)}
             className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
           >
-            <span>{showTrace ? '? Hide' : '? Show'} Execution Trace</span>
+            <span>{showTrace ? 'Hide' : 'Show'} Execution Trace</span>
             <span className="text-slate-500">({answer.trace.steps.length} steps)</span>
           </button>
           {showTrace && (
@@ -77,7 +113,7 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
                   <div className="flex items-center gap-2">
                     <span className="text-slate-600">{idx + 1}.</span>
                     <span className="text-cyan-400 font-semibold">{step.module}</span>
-                    <span className="text-slate-500">?</span>
+                    <span className="text-slate-500">→</span>
                     <span className="text-amber-300">{step.action}</span>
                     {step.confidence !== null && (
                       <span className="text-emerald-400 text-[10px]">({Math.round(step.confidence * 100)}%)</span>

@@ -46,3 +46,23 @@ export async function submitQuery(options: SubmitQueryOptions): Promise<Answer> 
   const data = (await response.json()) as Answer;
   return data;
 }
+
+export async function downloadEvidencePdf(evidenceData: Record<string, unknown>): Promise<void> {
+  const response = await fetch('/api/evidence/export-pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(evidenceData),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to generate PDF report');
+  }
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `evidence-${String(evidenceData.query_id || 'report')}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
