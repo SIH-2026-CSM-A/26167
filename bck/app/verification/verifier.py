@@ -36,7 +36,7 @@ def verify(
     Executes sequential verification stages:
     1. Empty Evidence Gate (RULE-VERIFY-01)
     2. Physical Sensor Compatibility Gate (RULE-VERIFY-03)
-    3. Narrative Claim Grounding (RULE-VERIFY-05)
+    3. Narrative Claim Grounding (RULE-VERIFY-09)
     4. Confidence Floor Gate (RULE-VERIFY-02)
     5. Irreconcilable Cross-Modal Conflict Check (RULE-VERIFY-CONFLICT)
     6. Structured Numeric Grounding (RULE-VERIFY-06)
@@ -158,7 +158,7 @@ def verification_trace_params(decision: VerificationDecision) -> dict[str, Any]:
         "filtered_evidence_ids": list(decision.filtered_evidence_ids),
         "disagreement_count": len(decision.disagreements),
         "rejected_claim_count": sum(
-            1 for d in decision.disagreements if d.rule_id == "RULE-VERIFY-05"
+            1 for d in decision.disagreements if d.rule_id == "RULE-VERIFY-09"
         ),
         "disagreements": [
             {

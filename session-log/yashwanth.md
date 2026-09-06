@@ -265,3 +265,25 @@ healthy, read metadata from the public Sentinel-2 COG at
 and served `/cog/tiles/WebMercatorQuad/12/685/1616.png` as HTTP 200 `image/png` with 121,196 bytes.
 The temporary tile SHA-256 was
 `D1AF18F8CA0F2B3B93E85744526CA39875685B9603AE472822B88B11587C1DA9`; it was not added to Git.
+
+## 2026-09-06 — SHIVA-004: RULE-VERIFY-05 → RULE-VERIFY-09 rename
+
+Pure rename, no logic change. The narrative claim-grounding rule added earlier this session had
+collided with `DESIGN.md`'s own rule table, which already reserves `RULE-VERIFY-05` for the
+still-unimplemented "Scattering Mechanism Divergence" rule (`RULE-VERIFY-07` and `08` are also
+reserved, for spatial geometry). `09` is the next free ID.
+
+Renamed every active-code occurrence of `RULE-VERIFY-05` to `RULE-VERIFY-09`:
+`bck/app/verification/rules.py` (the `evaluate_narrative_claim_grounding` docstring header and the
+`rule_id` string on its `DisagreementRecord`), and `bck/app/verification/verifier.py` (the stage
+docstring and the `rejected_claim_count` trace-param filter). No test file asserted on the literal
+`rule_id` string, so none needed changes. `DESIGN.md`'s own `RULE-VERIFY-05` table row was left
+untouched, since 05 is still legitimately reserved for scattering divergence.
+
+`grep -rn "RULE-VERIFY-05" bck/app/ bck/tests/` returns nothing after the rename.
+
+**Verification Results:**
+- `uv run ruff check .` → PASS
+- `uv run ruff format --check .` → PASS
+- `uv run lint-imports` → PASS (Contracts: 3 kept, 0 broken)
+- `uv run pytest` → PASS (114 passed)

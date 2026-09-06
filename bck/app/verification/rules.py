@@ -345,7 +345,7 @@ def evaluate_narrative_claim_grounding(
     evidence: list[Evidence],
     supporting_observations: list[str],
 ) -> tuple[list[Evidence], list[DisagreementRecord]]:
-    """RULE-VERIFY-05: Narrative Claim Grounding.
+    """RULE-VERIFY-09: Narrative Claim Grounding.
 
     Splits narrative TEXT evidence into atomic claims (sentence and conjunction
     boundaries), keeps only claims backed by a supporting observation, downgrades
@@ -374,7 +374,7 @@ def evaluate_narrative_claim_grounding(
         for claim in rejected:
             records.append(
                 DisagreementRecord(
-                    rule_id="RULE-VERIFY-05",
+                    rule_id="RULE-VERIFY-09",
                     category=DisagreementCategory.UNSUPPORTED_NARRATIVE_CLAIM,
                     description=(
                         f"Narrative claim '{claim}' is not supported by any grounded observation."
