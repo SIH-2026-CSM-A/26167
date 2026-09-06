@@ -132,3 +132,33 @@ Yashwanth (its owner) rather than adding it myself.
 ## Agent
 Claude Code (Sonnet 5), session
 https://claude.ai/code/session_01Mcufc5gSdGYGxKZp4R1H94.
+
+---
+
+### 2026-09-06 — ROHAN-002 follow-up: change_summary.py/confidence.py missing from branch, fixed via cherry-pick — Claude Code
+
+**Root cause**: `change_summary.py` and `confidence.py` (originally added on
+this branch, commits `d49480e`, `95829a9`, `fcad9b5`) were deliberately moved
+onto a separate branch (`feature/26167-ROHAN-004-mask-hardening`) during an
+earlier git-scoping cleanup, based on an incorrect assessment that they were
+ROHAN-004-only work unrelated to ROHAN-002 — without first checking whether
+detector.py (built afterward) actually depends on them. It does.
+
+**How it was caught**: Yashwanth ran CI himself against the pushed branch
+rather than trusting a "no failing checks" claim at face value — CI surfaced
+the missing imports as a collection failure.
+
+**The fix**: three commits cherry-picked back onto the branch —
+`d924ba9` (`feat(change-detection): add summarize_change for binary masks`),
+`6ec513a` (`feat(change-detection): add compute_confidence for predicted
+masks`), and `edaceb7` (`test(change-detection): cover summarize_change and
+compute_confidence`) — restoring both modules and their tests.
+
+**Verified after the fix**: `detector.py`'s imports
+(`from app.tools.change_detection.change_summary import summarize_change`,
+`from app.tools.change_detection.confidence import compute_confidence`)
+resolve against real files again. All four gates green, and `pytest -v`
+confirms real collection — 93 items collected and passed, including both
+restored test files (`tests/change_detection/test_change_summary.py`,
+`tests/change_detection/test_confidence.py`) and `tests/test_detector.py` —
+not just a summary line claiming so.
