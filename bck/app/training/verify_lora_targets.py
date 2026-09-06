@@ -1,6 +1,7 @@
 """AASH-002 step 1: load InternVL3-2B and print real named modules to pick LoRA target_modules.
 
-Standalone verification script, not the training loop. Run: `python -m app.training.verify_lora_targets`.
+Standalone verification script, not the training loop.
+Run: `python -m app.training.verify_lora_targets`.
 """
 
 import torch
