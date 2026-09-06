@@ -1,6 +1,6 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import type { Answer } from '../../types/contracts';
-import { downloadEvidencePdf } from '../../services/api';
+import { downloadEvidenceGeoJson, downloadEvidencePdf } from '../../services/api';
 
 interface QueryResultCardProps {
   answer: Answer;
@@ -8,31 +8,28 @@ interface QueryResultCardProps {
 
 export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
   const [showTrace, setShowTrace] = useState<boolean>(false);
-  const [downloading, setDownloading] = useState<boolean>(false);
+  const [downloadingPdf, setDownloadingPdf] = useState<boolean>(false);
+  const [downloadingGeoJson, setDownloadingGeoJson] = useState<boolean>(false);
 
-  const handleDownload = async () => {
+  const handleDownloadPdf = async () => {
     try {
-      setDownloading(true);
-      const payload = {
-        query_id: 'satquery-report',
-        verdict: answer.abstained ? 'Abstained' : 'Completed',
-        confidence: `${(answer.confidence * 100).toFixed(0)}%`,
-        summary: answer.text,
-        citations: (answer.evidence || []).map((ev, i) => ({
-          id: ev.id || `C-${i + 1}`,
-          source: ev.tool || 'Sensor',
-          confidence: 'N/A',
-          detail:
-            ev.payload && typeof ev.payload === 'object' && 'description' in ev.payload
-              ? String((ev.payload as Record<string, unknown>).description)
-              : JSON.stringify(ev.payload || {}),
-        })),
-      };
-      await downloadEvidencePdf(payload);
+      setDownloadingPdf(true);
+      await downloadEvidencePdf(answer);
     } catch (err) {
       console.error('PDF export failed:', err);
     } finally {
-      setDownloading(false);
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handleDownloadGeoJson = async () => {
+    try {
+      setDownloadingGeoJson(true);
+      await downloadEvidenceGeoJson(answer);
+    } catch (err) {
+      console.error('GeoJSON export failed:', err);
+    } finally {
+      setDownloadingGeoJson(false);
     }
   };
 
@@ -53,11 +50,19 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
           </span>
           <button
             type="button"
-            onClick={handleDownload}
-            disabled={downloading}
+            onClick={handleDownloadPdf}
+            disabled={downloadingPdf}
             className="ml-2 rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition disabled:opacity-50"
           >
-            {downloading ? 'Exporting...' : 'PDF Report'}
+            {downloadingPdf ? 'Exporting...' : 'PDF Report'}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadGeoJson}
+            disabled={downloadingGeoJson}
+            className="rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition disabled:opacity-50"
+          >
+            {downloadingGeoJson ? 'Exporting...' : 'Export GeoJSON'}
           </button>
         </div>
       </div>

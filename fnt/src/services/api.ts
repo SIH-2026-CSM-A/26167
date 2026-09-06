@@ -47,11 +47,11 @@ export async function submitQuery(options: SubmitQueryOptions): Promise<Answer> 
   return data;
 }
 
-export async function downloadEvidencePdf(evidenceData: Record<string, unknown>): Promise<void> {
-  const response = await fetch('/api/evidence/export-pdf', {
+export async function downloadEvidencePdf(answer: Answer): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/evidence/export-pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(evidenceData),
+    body: JSON.stringify(answer),
   });
   if (!response.ok) {
     throw new Error('Failed to generate PDF report');
@@ -60,7 +60,29 @@ export async function downloadEvidencePdf(evidenceData: Record<string, unknown>)
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `evidence-${String(evidenceData.query_id || 'report')}.pdf`;
+  const traceId = answer.trace?.trace_id || 'report';
+  a.download = `evidence-${traceId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function downloadEvidenceGeoJson(answer: Answer): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/evidence/export-geojson`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(answer),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to export GeoJSON');
+  }
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const traceId = answer.trace?.trace_id || 'report';
+  a.download = `evidence-${traceId}.geojson`;
   document.body.appendChild(a);
   a.click();
   a.remove();

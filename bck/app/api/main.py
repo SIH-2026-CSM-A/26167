@@ -6,9 +6,11 @@ import uuid
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.contracts import Answer, Modality
+from app.evidence.report import generate_evidence_geojson, generate_evidence_pdf
 from app.pipeline import PipelineError, PipelineUpload, run
 
 app = FastAPI(title="SatQuery AI")
@@ -64,16 +66,23 @@ async def submit_query(
             },
         ) from error
 
-from app.evidence.report import generate_evidence_pdf
-from fastapi.responses import StreamingResponse
-
 
 @app.post("/api/evidence/export-pdf")
-async def export_evidence_pdf(payload: dict):
+async def export_evidence_pdf(payload: Answer) -> StreamingResponse:
     pdf_buffer = generate_evidence_pdf(payload)
-    query_id = payload.get("query_id", "report")
+    query_id = getattr(payload, "query_id", None) or payload.trace.trace_id
     return StreamingResponse(
         pdf_buffer,
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=evidence-{query_id}.pdf"},
+    )
+
+
+@app.post("/api/evidence/export-geojson")
+async def export_evidence_geojson(payload: Answer) -> Response:
+    geojson_str, filename = generate_evidence_geojson(payload)
+    return Response(
+        content=geojson_str,
+        media_type="application/geo+json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
