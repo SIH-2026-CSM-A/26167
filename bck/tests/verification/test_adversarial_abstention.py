@@ -84,6 +84,7 @@ def test_ac_1a_absent_object_empty_detection_abstains():
         id="s2-chip",
         modality=Modality.OPTICAL,
         format="GeoTIFF",
+        path=str(S2_PATH),
         metadata={"shape": image_shape, "path": str(S2_PATH)},
     )
 
@@ -111,6 +112,7 @@ def test_ac_1a_absent_object_subfloor_confidence_abstains():
         id="s2-chip",
         modality=Modality.OPTICAL,
         format="GeoTIFF",
+        path=str(S2_PATH),
         metadata={"path": str(S2_PATH)},
     )
 
@@ -170,6 +172,7 @@ def test_ac_1b_and_ac_4_real_cloud_obscured_optical_with_sar_preserves_evidence(
 
     s1_input = ImageInput(
         id="s1",
+        path=str(SEN12MS_CR_NPZ_PATH),
         modality=Modality.SAR,
         format="application/x-numpy",
         metadata={
@@ -183,6 +186,7 @@ def test_ac_1b_and_ac_4_real_cloud_obscured_optical_with_sar_preserves_evidence(
     )
     s2_input = ImageInput(
         id="s2",
+        path=str(SEN12MS_CR_NPZ_PATH),
         modality=Modality.OPTICAL,
         format="application/x-numpy",
         metadata={
@@ -319,19 +323,19 @@ def test_ac_2_unsupported_numeric_claim_downgrades_confidence():
             AbstentionReasonCode.NO_EVIDENCE_PRODUCED,
             lambda: [],
             "Find all vessels in the harbor.",
-            [ImageInput(id="i1", modality=Modality.OPTICAL, format="GeoTIFF")],
+            [ImageInput(id="i1", modality=Modality.OPTICAL, format="GeoTIFF", path="i1.tif")],
         ),
         (
             AbstentionReasonCode.INSUFFICIENT_CONFIDENCE,
             lambda: [_make_evidence(confidence=0.15)],
             "Identify the structure at coordinates.",
-            [ImageInput(id="i1", modality=Modality.OPTICAL, format="GeoTIFF")],
+            [ImageInput(id="i1", modality=Modality.OPTICAL, format="GeoTIFF", path="i1.tif")],
         ),
         (
             AbstentionReasonCode.SENSOR_PHYSICAL_LIMITATION,
             lambda: [_make_evidence(confidence=0.90)],
             "Calculate NDVI and check visual green color.",
-            [ImageInput(id="i1", modality=Modality.SAR, format="GeoTIFF")],
+            [ImageInput(id="i1", modality=Modality.SAR, format="GeoTIFF", path="i1.tif")],
         ),
         (
             AbstentionReasonCode.SEVERE_MODALITY_CONFLICT,

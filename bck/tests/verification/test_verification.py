@@ -192,8 +192,10 @@ def test_verify_confidence_floor_filtering():
 # 4. Rule 03: Sensor Physical Incompatibility Gate
 # ---------------------------------------------------------------------------
 def test_rule_03_sensor_compatibility():
-    sar_img = ImageInput(id="img-s1", modality=Modality.SAR, format="GeoTIFF")
-    opt_img = ImageInput(id="img-s2", modality=Modality.OPTICAL, format="GeoTIFF")
+    sar_img = ImageInput(id="img-s1", modality=Modality.SAR, format="GeoTIFF", path="img-s1.tif")
+    opt_img = ImageInput(
+        id="img-s2", modality=Modality.OPTICAL, format="GeoTIFF", path="img-s2.tif"
+    )
 
     # Incompatible query on SAR-only image
     is_incompat, reason = evaluate_sensor_compatibility(
@@ -229,7 +231,7 @@ def test_rule_03_sensor_compatibility():
 
 
 def test_verify_sensor_physical_limitation():
-    sar_img = ImageInput(id="img-s1", modality=Modality.SAR, format="GeoTIFF")
+    sar_img = ImageInput(id="img-s1", modality=Modality.SAR, format="GeoTIFF", path="img-s1.tif")
     ev = [_evidence(confidence=0.9)]
 
     decision = verify(
