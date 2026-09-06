@@ -31,6 +31,7 @@ def test_query_accepts_real_multipart_geotiff() -> None:
 
     assert response.status_code == 200
     body = response.json()
+    assert body["abstained"] is False
     assert body["text"] == "A river is visible."
     assert body["evidence"][0]["payload"]["source_filename"] == "scene.tif"
     assert body["trace"]["steps"][-1]["action"] == "response_completed"

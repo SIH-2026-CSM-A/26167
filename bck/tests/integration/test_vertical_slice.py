@@ -23,6 +23,7 @@ def test_live_api_path_removes_an_unsupported_model_claim() -> None:
 
     assert response.status_code == 200
     body = response.json()
+    assert body["abstained"] is False
     assert body["evidence"][0]["payload"]["raw_model_answer"] != body["text"]
     assert body["text"] == "A river is visible."
     assert "industrial pollution" not in body["text"].lower()

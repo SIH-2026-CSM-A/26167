@@ -14,7 +14,7 @@ from app.models import InternVL2Adapter, InternVLModelError
 from app.pipeline.stages import PipelineError, PipelineUpload, TraceRecorder
 from app.router import route
 from app.tools.vqa_grounding import VqaModel, VqaToolError, execute_vqa
-from app.verification import verify_answer
+from app.verification import verification_trace_params, verify
 
 _default_model: InternVL2Adapter | None = None
 
@@ -165,50 +165,72 @@ def run(
         },
     )
 
+    candidate_evidence = build_vqa_evidence(
+        asset=source.source,
+        model_id=tool_result.model_id,
+        raw_answer=tool_result.raw_answer,
+        verified_answer=tool_result.raw_answer,
+        supporting_observations=tool_result.supporting_observations,
+        rejected_claims=(),
+        timing_seconds=tool_result.timing_seconds,
+    )
+
     recorder.record("verification", "verification_started")
-    verification = verify_answer(
-        candidate_answer=tool_result.raw_answer,
+    decision = verify(
+        evidence=[candidate_evidence],
+        raw_query=request.query,
+        images=[item.source for item in ingested],
         supporting_observations=tool_result.supporting_observations,
     )
     recorder.record(
         "verification",
         "verification_completed",
-        params={
-            "status": verification.status.value,
-            "supported_claim_count": len(verification.supported_claims),
-            "rejected_claim_count": len(verification.rejected_claims),
-            "rejected_claims": list(verification.rejected_claims),
-            "abstained": verification.abstained,
-        },
+        params=verification_trace_params(decision),
+        confidence=decision.effective_confidence,
+        evidence_ids=[item.id for item in decision.verified_evidence],
     )
 
+    salvaged_text = (
+        decision.verified_evidence[0].payload.get("verified_answer")
+        if decision.verified_evidence
+        else None
+    )
+    verified_text = "" if decision.is_abstained else (salvaged_text or tool_result.raw_answer)
+    rejected_claims = tuple(d.description for d in decision.disagreements)
     evidence = build_vqa_evidence(
         asset=source.source,
         model_id=tool_result.model_id,
         raw_answer=tool_result.raw_answer,
-        verified_answer=verification.verified_text,
+        verified_answer=verified_text,
         supporting_observations=tool_result.supporting_observations,
-        rejected_claims=verification.rejected_claims,
+        rejected_claims=rejected_claims,
         timing_seconds=tool_result.timing_seconds,
     )
+    if not decision.is_abstained:
+        evidence = evidence.model_copy(update={"confidence": decision.effective_confidence})
+
+    evidence_list = [evidence] if not decision.is_abstained else []
     recorder.record(
         "evidence",
         "evidence_created",
         params={"evidence_type": evidence.type.value, "source_asset_id": source.source.id},
-        evidence_ids=[evidence.id],
+        evidence_ids=[evidence.id] if not decision.is_abstained else [],
     )
     recorder.record(
         "pipeline",
         "response_completed",
-        params={"abstained": verification.abstained, "evidence_count": 1},
-        evidence_ids=[evidence.id],
+        params={
+            "abstained": decision.is_abstained,
+            "evidence_count": len(evidence_list),
+        },
+        evidence_ids=[item.id for item in evidence_list],
     )
     return assemble_answer(
-        text=verification.verified_text,
-        evidence=[evidence],
+        text=verified_text,
+        evidence=evidence_list,
         trace=recorder.build(),
-        abstained=verification.abstained,
-        abstention_reason=verification.abstention_reason,
+        abstained=decision.is_abstained,
+        abstention_reason=decision.abstention_reason,
     )
 
 
