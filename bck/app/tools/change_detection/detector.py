@@ -21,6 +21,7 @@ from PIL import Image
 from app.contracts import Evidence, EvidenceType, ImageInput
 from app.tools.change_detection.change_summary import summarize_change
 from app.tools.change_detection.confidence import compute_confidence
+from app.tools.change_detection.registration_quality import require_registration_quality
 from bit_vendor.networks import define_G
 
 _TOOL_NAME = "change_detection.bit"
@@ -56,6 +57,8 @@ def detect_change(image_a: ImageInput, image_b: ImageInput, checkpoint_path: str
     """
     started = time.perf_counter()
 
+    require_registration_quality(image_a.path, image_b.path)
+
     tensor_a = _load_and_preprocess(image_a.path)
     tensor_b = _load_and_preprocess(image_b.path)
     net = _load_bit_model(checkpoint_path)
@@ -77,6 +80,9 @@ def detect_change(image_a: ImageInput, image_b: ImageInput, checkpoint_path: str
             "description": summary.description,
             "bbox": summary.bbox,
             "relative_position": summary.relative_position,
+            "status": summary.status,
+            "changed_pixel_count": summary.changed_pixel_count,
+            "changed_percentage": summary.changed_percentage,
             "source_image_a_id": image_a.id,
             "source_image_b_id": image_b.id,
         },

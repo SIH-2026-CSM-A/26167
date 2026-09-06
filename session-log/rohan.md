@@ -162,3 +162,152 @@ confirms real collection — 93 items collected and passed, including both
 restored test files (`tests/change_detection/test_change_summary.py`,
 `tests/change_detection/test_confidence.py`) and `tests/test_detector.py` —
 not just a summary line claiming so.
+
+---
+
+### 2026-09-06 — ROHAN-004 (first half): registration-quality gate derivation — Claude Code
+
+**Method chosen, and why**: `skimage.registration.phase_cross_correlation`
+(global phase correlation), not ORB/SIFT + RANSAC keypoint matching — that
+approach was tried first and abandoned after real testing showed it produces
+physically implausible fitted transforms (rotations of ±30–132°, scale
+factors of 0.19–0.62, 100+ px translations) even on genuinely well-registered
+real LEVIR-CD pairs, because these 256x256 patches don't have enough
+distinctive, stable texture for reliable keypoint correspondence. Confirmed
+independently with both ORB and SIFT, and with both a full 6-DOF affine and a
+restricted 4-DOF similarity transform — same failure mode every time.
+
+**Canonical phase-correlation pipeline** (fixed after diagnostics, do not vary
+without re-deriving): PIL `.convert("RGB")` -> float32 array / 255.0 ->
+`skimage.color.rgb2gray` -> multiply by a 2D Hann window
+(`np.outer(np.hanning(h), np.hanning(w))`) ->
+`phase_cross_correlation(..., upsample_factor=100)`. Shift-vector Euclidean
+norm is the sole gating scalar.
+
+**`error` is deliberately unused**: a self-vs-self control (a real image
+against a byte-identical copy of itself — zero shift, zero difference) still
+returned `error=0.9999999982747276` in this environment (skimage 0.26.0).
+Since the shift computation on that same control is separately verified
+correct (exactly `[0, 0]`, norm `0.0`), `error` is not a meaningful signal at
+all here — it doesn't approach zero even for a literally identical pair.
+
+**Real-pair sample — every genuine bi-temporal pair in `bck/tests/fixtures/`,
+n=2** (searched the whole directory including inside both `.npz` archives;
+everything else is single-timepoint SAR/optical/cloud data, not a second real
+timepoint of the same modality):
+| Pair | Shift norm |
+|---|---|
+| `levir_test_1` | 1.93px |
+| `levir_train_103_9` | 12.04px |
+
+**Threshold set: 40.0px** — roughly 3x the maximum observed real-pair shift
+norm (12.04px), rounded up. Deliberately generous over a sample of only 2
+real pairs already showing ~6x variance between them — the goal is to never
+falsely refuse a real, correctly co-registered pair that happens to contain
+large real scene change (`levir_train_103_9`'s 12.04px is exactly that: real
+content change, not misregistration). Provisional per PRD §8's "TBD from real
+testing"; a future ticket should widen the real-pair sample before this is
+treated as final.
+
+**Synthetic shift sweep** (reference only, NOT used to set the threshold —
+`scipy.ndimage.shift`, `mode="reflect"`, never `np.roll`: an earlier attempt
+using `np.roll` introduced a wraparound seam that measurably distorted the
+shift estimate at larger offsets, confirmed by comparing measured/injected
+ratio drifting from 0.98 at 1px to 1.37 at 32px):
+1px→1.41px, 2px→2.83px, 4px→5.66px, 8px→11.31px, 16px→22.63px, 32px→45.25px.
+
+**Known v1 limitation, deliberately deferred**: this is global phase
+correlation over the whole frame. Bi-temporal change-detection pairs contain
+large real content change by definition, which can inflate the global shift
+estimate independent of true misregistration — this gate catches gross
+global misalignment, not subtle misregistration on a pair with major scene
+change. A more robust future approach (patch-based/block-voting phase
+correlation, median shift across sub-tiles) is a known, deliberately-deferred
+improvement, not built here due to time constraints.
+
+**Built**: `bck/app/tools/change_detection/registration_quality.py`
+(`require_registration_quality`, `RegistrationQualityError` — mirrors
+`fusion/guards.py`'s refusal style exactly: explicit exception, no silent
+pass-through, no fabricated fallback). Wired as a precondition at the very
+start of `detector.py`'s `detect_change()`, before any BIT loading/inference.
+Tests: `bck/tests/test_registration_quality.py` — both real pairs pass, plus
+two clearly-labeled synthetic cases (shape-mismatch via a resized copy;
+gross-misregistration via the same 32px `scipy.ndimage.shift` methodology as
+the reference sweep, measured at shift_norm_px=45.25, correctly refused).
+
+**Note on branch state**: this work was done with `main` checked out, not
+`feature/26167-ROHAN-004-directional-change-vqa` as expected — flagged
+directly to the user, not resolved via a write git command per this
+session's git rules.
+
+---
+
+### 2026-09-06 — ROHAN-004 (second half, AC-1): directional change classification — Claude Code
+
+**Built**: `ChangeSummary` (`change_summary.py`) gains a categorical `status`
+field (`"increased" | "decreased" | "unchanged"`), plus `changed_pixel_count`
+and `changed_percentage` — both directly computable from the real mask, no
+geographic-area (m²) footprint emitted since these fixtures carry no real
+GSD/affine metadata (same "no CRS, no lat/lon" precedent the file's docstring
+already stated). `detector.py`'s `detect_change()` exposes all three new
+fields in its existing `Evidence.payload` dict, same naming convention as the
+fields already there — no other module touched.
+
+**Noise-floor derivation, real data, not adopted from the lead's example**:
+ran `detect_change()`'s actual BIT pipeline on each real fixture against an
+exact copy of itself (same trick as the registration gate's self-vs-self
+control). Both real pairs (`levir_test_1_t1`, `levir_train_103_9_t1`)
+measured **exactly 0.0% (0/65536 changed pixels)** — not just low, genuinely
+zero. The lead's example ballpark (0.5% / 15px) was offered before this
+measurement existed, and those two example numbers are themselves
+inconsistent for a 65536px frame (0.5% ≈ 328px, not 15px). Set
+`_NOISE_FLOOR_FRACTION = 0.001` (0.1%, ~66px) — an order of magnitude
+tighter than the lead's example, justified because the real measured floor
+supports a stricter cutoff. Documented as my own derivation in the module
+docstring, not attributed to the lead's judgment.
+
+**Dataset-context default, and why the luminance-heuristic alternative was
+rejected**: a changed pair defaults to `"increased"` (never inferred as
+`"decreased"` from pixel content) because LEVIR-CD is a documented
+building-construction/growth benchmark — an explicit, LEVIR-CD-specific
+assumption, not a general capability. A luminance/grayscale/structural-delta
+heuristic for inferring real direction from pixel values was explicitly
+rejected (per the lead's decision) before this work started: BIT's vendored
+output is a binary mask/probability map with no land-cover class information,
+true built-up-specific direction would need NDBI (SWIR/NIR bands the RGB
+LEVIR-CD fixtures don't have), and any grayscale-based heuristic would be
+unverifiable against real data here — exactly the kind of fabricated-seeming
+mechanism this project's rules forbid.
+
+**`"decreased"` is real, reachable code — not dead code — but untested
+against any real observation**: `summarize_change(mask, reversed_order=True)`
+is the only path to `"decreased"`, never inferred from pixel content. Tested
+via one clearly-labeled synthetic case: the real predicted mask from
+`levir_train_103_9`'s real growth pair, re-labeled with `reversed_order=True`
+to simulate a caller stating the image order was reversed. Same real
+pixel-level numbers as the "increased" case, only the direction label
+differs — explicitly not presented as a validated real-world decrease
+observation, since LEVIR-CD has no real decrease pairs to test against.
+
+**Honest finding, not smoothed over**: of the two real bi-temporal pairs in
+this repo's fixtures, only `levir_train_103_9` is a real growth pair
+(`status=increased`, 27085/65536 px, 41.3284%, matching ROHAN-002's original
+BIT verification exactly). `levir_test_1` is genuinely a no-change pair — its
+own ground truth label is all-zero (established in ROHAN-002) — so it is
+reported as a second real `"unchanged"` case, not stretched into a second
+"increased" example.
+
+**Test layout**: extended the existing nested
+`bck/tests/change_detection/test_change_summary.py` directly (it already
+tests this exact module) rather than following `test_detector.py`'s flat
+convention, since fragmenting one module's tests across two files would be
+worse than the inconsistency already present in the repo.
+
+**Gates**: all four green — `ruff check` clean, `ruff format --check` (104
+files), `lint-imports` (101 files, 212 deps, 3/3 contracts kept), `pytest`
+144 passed.
+
+**Note on branch state**: unlike the first half's entry above, this work was
+done with `feature/26167-ROHAN-004-directional-change-vqa` correctly checked
+out throughout (confirmed via the user's own `git status` output showing the
+branch current with `origin/feature/26167-ROHAN-004-directional-change-vqa`).
