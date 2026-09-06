@@ -198,3 +198,33 @@ Review feedback from `@ybaddam8-png` identified two blocking issues and requeste
 - `uv run ruff format --check .` $\rightarrow$ PASS (69 files already formatted)
 - `uv run lint-imports` $\rightarrow$ PASS (Contracts: 3 kept, 0 broken)
 - `uv run pytest` $\rightarrow$ PASS (98 passed in 6.5s)
+
+---
+
+### Review Follow-up Pass: Static Import Transparency & pyproject.toml Exception
+
+**Context & Review Findings:**
+Second review feedback from `@ybaddam8-png` rejected the dynamic import `importlib.import_module("app.verification")` in `stub_verification`, noting that hiding a real runtime dependency from static analysis bypasses `lint-imports` dishonestly. The reviewer requested a normal top-level static import and an explicit, documented `ignore_imports` entry in `bck/pyproject.toml` requesting sign-off.
+
+**Corrections Executed:**
+1. **Removed Dynamic Import Workaround:**
+   - In `bck/app/pipeline/stages.py`, replaced `importlib.import_module("app.verification")` with a direct top-level static import: `from app.verification import verify`.
+   - In `stub_verification`, called `verify(...)` directly.
+2. **Explicit, Documented `ignore_imports` in `bck/pyproject.toml`:**
+   - Added an explicit `ignore_imports` entry under the `"Leaf modules never import each other"` contract with an explanatory comment:
+     ```toml
+     # Pipeline stages compose verification as part of pipeline orchestration.
+     ignore_imports = [
+         "app.pipeline.stages -> app.verification",
+     ]
+     ```
+   - No dynamic imports, `getattr`, or obfuscation mechanisms are used to hide dependencies from static analysis.
+
+**Validation Results:**
+- `git diff --check` $\rightarrow$ PASS (0 whitespace errors)
+- `uv run --no-sync ruff check .` $\rightarrow$ PASS (All checks passed!)
+- `uv run --no-sync ruff format --check .` $\rightarrow$ PASS (69 files already formatted)
+- `uv run --no-sync lint-imports` $\rightarrow$ PASS (Contracts: 3 kept, 0 broken)
+- `uv run --no-sync pytest` $\rightarrow$ PASS (98 passed in 21.75s)
+- PR #17 reopened, reviewer response posted, and review re-requested from `@ybaddam8-png`.
+
