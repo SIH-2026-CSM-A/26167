@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,11 +84,27 @@ def ingest_raster(upload: RasterUpload) -> IngestedRaster:
 
 
 def _persist_temp(upload: RasterUpload) -> str:
-    """Write the upload's raw bytes to disk so downstream tools (e.g. BIT) can load by path."""
+    """Write the upload's raw bytes to disk so downstream tools (e.g. BIT) can load by path.
+
+    INTERIM SAFETY NET: nothing downstream currently consumes ImageInput.path, so there
+    is no lifecycle owner yet to delete this file at the right time (e.g. after a query
+    completes). atexit cleanup here only guards against unbounded accumulation across a
+    single process's lifetime -- it is NOT a substitute for real per-request cleanup once
+    a consumer is wired up. Follow-up needed when a real consumer reads this path.
+    """
     suffix = Path(upload.filename).suffix or ".tif"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(upload.content)
+        atexit.register(_cleanup_temp, tmp.name)
         return tmp.name
+
+
+def _cleanup_temp(path: str) -> None:
+    """Best-effort removal of a persisted temp raster on process exit."""
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _validate_upload(upload: RasterUpload) -> None:
