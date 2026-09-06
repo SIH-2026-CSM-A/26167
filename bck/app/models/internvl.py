@@ -1,4 +1,4 @@
-"""Lazy local InternVL2-2B adapter for one RGB image and one prompt."""
+"""Lazy local InternVL3-2B adapter for one RGB image and one prompt."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-DEFAULT_MODEL_ID = "OpenGVLab/InternVL2-2B"
+DEFAULT_MODEL_ID = "OpenGVLab/InternVL3-2B"
 MODEL_INPUT_SIZE = 448
 MAX_NEW_TOKENS = 128
 IMAGENET_MEAN = np.asarray((0.485, 0.456, 0.406), dtype=np.float32)
@@ -164,8 +164,8 @@ def _prepare_language_model_generation(model: Any) -> None:
         language_model.generation_config = GenerationConfig.from_model_config(language_model.config)
 
 
-class InternVL2Adapter:
-    """Load InternVL2-2B on first generation and expose its native chat inference."""
+class InternVLAdapter:
+    """Load InternVL3-2B on first generation and expose its native chat inference."""
 
     def __init__(self, model_id: str = DEFAULT_MODEL_ID, device: str | None = None) -> None:
         """Configure model identity and execution device without loading weights."""
@@ -173,7 +173,11 @@ class InternVL2Adapter:
             raise ValueError("model_id is required")
         self.model_id = model_id
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self._dtype = torch.bfloat16
+        self._dtype = (
+            torch.bfloat16
+            if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+            else torch.float32
+        )
         self._lock = threading.Lock()
         self._model: Any | None = None
         self._tokenizer: Any | None = None
@@ -200,10 +204,10 @@ class InternVL2Adapter:
                     generation_config,
                 )
         except Exception as error:
-            raise InternVLModelError(f"InternVL2-2B inference failed: {error}") from error
+            raise InternVLModelError(f"InternVL3-2B inference failed: {error}") from error
         text = response[0] if isinstance(response, tuple) else response
         if not isinstance(text, str) or not text.strip():
-            raise InternVLModelError("InternVL2-2B returned an empty response")
+            raise InternVLModelError("InternVL3-2B returned an empty response")
         return text.strip()
 
     def _ensure_loaded(self) -> None:
@@ -243,4 +247,4 @@ class InternVL2Adapter:
             except Exception as error:
                 self._model = None
                 self._tokenizer = None
-                raise InternVLModelError(f"InternVL2-2B initialization failed: {error}") from error
+                raise InternVLModelError(f"InternVL3-2B initialization failed: {error}") from error
