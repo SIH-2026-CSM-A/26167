@@ -66,3 +66,17 @@ Built via Antigravity (single-agent, Windows).
 **Rejected along the way:**
 - Rejected mock or placeholder data in production components — strict grounding against backend Answer/Evidence schema.
 - Rejected Mapbox GL due to token dependency; MapLibre GL is token-free and offline/self-hosting compatible per `ARCHITECTURE.md`.
+
+### 2026-09-06 — added downloadable PDF report — PowerShell & Antigravity
+
+**Done**
+- Implemented `bck/app/evidence/report.py` using ReportLab to stream structured PDF evidence reports matching on-screen pipeline data.
+- Added `/api/evidence/export-pdf` POST streaming endpoint in `bck/app/api/main.py`.
+- Added unit and endpoint tests in `bck/tests/evidence/test_report.py` (2 passed).
+- Added `downloadEvidencePdf` service in `fnt/src/services/api.ts` and wired the trigger button into `fnt/src/components/Upload/QueryResultCard.tsx`.
+
+**Decided**
+- Server-side ReportLab document streaming instead of client-side/headless HTML-to-PDF rendering to guarantee identical evidence representation between report and UI without browser overhead.
+
+**Incomplete**
+- None.

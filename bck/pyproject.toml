@@ -30,6 +30,7 @@ dependencies = [
     "torchvision>=0.29.0",
     "scikit-image>=0.26.0",
     "s2cloudless>=1.7.3",
+    "reportlab>=5.0.1",
 ]
 
 [dependency-groups]
