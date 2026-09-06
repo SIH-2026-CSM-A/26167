@@ -174,8 +174,6 @@ def run(
         rejected_claims=(),
         timing_seconds=tool_result.timing_seconds,
     )
-    if tool_result.supporting_observations:
-        candidate_evidence = candidate_evidence.model_copy(update={"confidence": 1.0})
 
     recorder.record("verification", "verification_started")
     decision = verify(
