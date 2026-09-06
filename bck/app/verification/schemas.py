@@ -22,6 +22,7 @@ class DisagreementCategory(StrEnum):
 
     CROSS_MODAL_CONFLICT = "cross_modal_conflict"
     UNSUPPORTED_NUMERIC_CLAIM = "unsupported_numeric_claim"
+    UNSUPPORTED_NARRATIVE_CLAIM = "unsupported_narrative_claim"
     SENSOR_PHYSICAL_LIMITATION = "sensor_physical_limitation"
     COMPLEMENTARY_OBSERVATION = "complementary_observation"
     NOT_COMPARABLE = "not_comparable"

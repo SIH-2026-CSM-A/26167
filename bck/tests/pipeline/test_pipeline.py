@@ -25,12 +25,11 @@ def test_pipeline_verifies_model_output_and_builds_evidence_and_trace() -> None:
         model=model,
     )
 
-    assert answer.abstained is True
-    assert answer.abstention_reason == (
-        "INSUFFICIENT_CONFIDENCE: Evidence confidence falls below the reliability threshold (0.30)."
-    )
-    assert answer.text == ""
-    assert answer.evidence == []
+    assert answer.text == "A river is visible."
+    assert answer.text != answer.evidence[0].payload["raw_model_answer"]
+    assert "pollution" not in answer.text.lower()
+    assert answer.abstained is False
+    assert answer.evidence[0].payload["source_asset_id"] == "asset-1"
     actions = [step.action for step in answer.trace.steps]
     assert actions == [
         "request_received",
@@ -52,5 +51,6 @@ def test_pipeline_verifies_model_output_and_builds_evidence_and_trace() -> None:
     )
     route_step = next(step for step in answer.trace.steps if step.action == "route_selected")
     assert route_step.params["tool"] == "vqa_grounding"
-    assert verification_step.params["status"] == "abstained"
-    assert verification_step.params["retained_evidence_count"] == 0
+    assert verification_step.params["status"] == "verified"
+    assert verification_step.params["retained_evidence_count"] == 1
+    assert verification_step.params["rejected_claim_count"] == 1

@@ -11,6 +11,7 @@ from app.verification.rules import (
     evaluate_confidence_floor,
     evaluate_cross_modal_conflict,
     evaluate_empty_evidence,
+    evaluate_narrative_claim_grounding,
     evaluate_sensor_compatibility,
     evaluate_structured_numeric_grounding,
 )
@@ -28,16 +29,18 @@ def verify(
     raw_query: str | None = None,
     images: list[ImageInput] | None = None,
     policy: VerificationPolicy | None = None,
+    supporting_observations: list[str] | tuple[str, ...] | None = None,
 ) -> VerificationDecision:
     """Master deterministic verification entrypoint.
 
     Executes sequential verification stages:
     1. Empty Evidence Gate (RULE-VERIFY-01)
     2. Physical Sensor Compatibility Gate (RULE-VERIFY-03)
-    3. Confidence Floor Gate (RULE-VERIFY-02)
-    4. Irreconcilable Cross-Modal Conflict Check (RULE-VERIFY-CONFLICT)
-    5. Structured Numeric Grounding (RULE-VERIFY-06)
-    6. Cloud vs. SAR Radar Reconciliation (RULE-VERIFY-04)
+    3. Narrative Claim Grounding (RULE-VERIFY-05)
+    4. Confidence Floor Gate (RULE-VERIFY-02)
+    5. Irreconcilable Cross-Modal Conflict Check (RULE-VERIFY-CONFLICT)
+    6. Structured Numeric Grounding (RULE-VERIFY-06)
+    7. Cloud vs. SAR Radar Reconciliation (RULE-VERIFY-04)
     """
     active_policy = policy or VerificationPolicy()
 
@@ -75,9 +78,17 @@ def verify(
             filtered_evidence_ids=[],
         )
 
-    # Stage 3: Confidence Floor Gate
-    surviving, filtered_ids, is_subfloor, floor_reason = evaluate_confidence_floor(
+    # Stage 3: Narrative Claim Grounding Gate (runs before the confidence floor so a
+    # claim with a supported remainder can survive with real, non-fabricated confidence
+    # instead of triggering full abstention alongside its unsupported siblings)
+    claim_evidence, claim_records = evaluate_narrative_claim_grounding(
         evidence,
+        list(supporting_observations or ()),
+    )
+
+    # Stage 4: Confidence Floor Gate
+    surviving, filtered_ids, is_subfloor, floor_reason = evaluate_confidence_floor(
+        claim_evidence,
         active_policy.min_confidence_floor,
     )
     if is_subfloor:
@@ -86,12 +97,12 @@ def verify(
             abstained=True,
             abstention_reason=floor_reason,
             verified_evidence=[],
-            disagreements=[],
+            disagreements=claim_records,
             confidence_penalty=0.0,
             filtered_evidence_ids=filtered_ids,
         )
 
-    # Stage 4: Irreconcilable Cross-Modal Conflict Check
+    # Stage 5: Irreconcilable Cross-Modal Conflict Check
     is_severe, severe_reason, severe_records, severe_penalty = evaluate_cross_modal_conflict(
         surviving,
         images,
@@ -108,16 +119,16 @@ def verify(
             filtered_evidence_ids=filtered_ids,
         )
 
-    # Stage 5: Structured Numeric Grounding Check
+    # Stage 6: Structured Numeric Grounding Check
     numeric_records, numeric_penalty = evaluate_structured_numeric_grounding(
         surviving,
         active_policy,
     )
 
-    # Stage 6: Cloud vs. SAR Radar Reconciliation Check
+    # Stage 7: Cloud vs. SAR Radar Reconciliation Check
     reconciliation_records = evaluate_cloud_sar_reconciliation(surviving)
 
-    all_disagreements = numeric_records + reconciliation_records
+    all_disagreements = claim_records + numeric_records + reconciliation_records
     total_penalty = min(numeric_penalty, active_policy.max_total_penalty)
 
     return VerificationDecision(
@@ -146,6 +157,9 @@ def verification_trace_params(decision: VerificationDecision) -> dict[str, Any]:
         "filtered_evidence_count": len(decision.filtered_evidence_ids),
         "filtered_evidence_ids": list(decision.filtered_evidence_ids),
         "disagreement_count": len(decision.disagreements),
+        "rejected_claim_count": sum(
+            1 for d in decision.disagreements if d.rule_id == "RULE-VERIFY-05"
+        ),
         "disagreements": [
             {
                 "rule_id": d.rule_id,

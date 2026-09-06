@@ -12,6 +12,37 @@ from app.verification.schemas import (
     VerificationPolicy,
 )
 
+CLAIM_BOUNDARY = re.compile(r"(?<=[.!?;])\s+|\s+(?:and|but|while|whereas)\s+", re.IGNORECASE)
+WORD_PATTERN = re.compile(r"[a-z0-9]+")
+NON_EVIDENTIAL_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "in",
+        "on",
+        "at",
+        "of",
+        "to",
+        "for",
+        "from",
+        "this",
+        "that",
+        "there",
+        "appears",
+        "appear",
+        "scene",
+        "image",
+    }
+)
+
 _OPTICAL_SPECTRAL_KEYWORDS: tuple[str, ...] = (
     "ndvi",
     "ndwi",
@@ -308,3 +339,92 @@ def evaluate_cross_modal_conflict(
                 )
 
     return False, None, records, 0.0
+
+
+def evaluate_narrative_claim_grounding(
+    evidence: list[Evidence],
+    supporting_observations: list[str],
+) -> tuple[list[Evidence], list[DisagreementRecord]]:
+    """RULE-VERIFY-05: Narrative Claim Grounding.
+
+    Splits narrative TEXT evidence into atomic claims (sentence and conjunction
+    boundaries), keeps only claims backed by a supporting observation, downgrades
+    evidence content to the supported subset, records a DisagreementRecord per
+    stripped claim. Confidence is set to the supported fraction of total claims,
+    so a fully-stripped claim still falls through to the confidence floor gate.
+    """
+    observations = tuple(item.strip() for item in supporting_observations if item.strip())
+    records: list[DisagreementRecord] = []
+    updated: list[Evidence] = []
+
+    for item in evidence:
+        text = item.payload.get("verified_answer") or item.payload.get("raw_model_answer")
+        if item.type != EvidenceType.TEXT or not isinstance(text, str) or not text.strip():
+            updated.append(item)
+            continue
+
+        claims = _split_claims(text)
+        if not claims:
+            updated.append(item)
+            continue
+
+        supported = tuple(claim for claim in claims if _claim_is_supported(claim, observations))
+        rejected = tuple(claim for claim in claims if claim not in supported)
+
+        for claim in rejected:
+            records.append(
+                DisagreementRecord(
+                    rule_id="RULE-VERIFY-05",
+                    category=DisagreementCategory.UNSUPPORTED_NARRATIVE_CLAIM,
+                    description=(
+                        f"Narrative claim '{claim}' is not supported by any grounded observation."
+                    ),
+                    action_taken="downgraded",
+                    conflicting_evidence_ids=[item.id],
+                )
+            )
+
+        new_payload = dict(item.payload)
+        new_payload["verified_answer"] = " ".join(_as_sentence(claim) for claim in supported)
+        new_payload["rejected_claims"] = [*item.payload.get("rejected_claims", []), *rejected]
+        updated.append(
+            item.model_copy(
+                update={"payload": new_payload, "confidence": len(supported) / len(claims)}
+            )
+        )
+
+    return updated, records
+
+
+def _split_claims(answer: str) -> tuple[str, ...]:
+    """Split prose into atomic sentence and conjunction-delimited candidate claims."""
+    return tuple(
+        cleaned
+        for part in CLAIM_BOUNDARY.split(answer.strip())
+        if (cleaned := part.strip().strip("-• \t\r\n.!?;:"))
+    )
+
+
+def _claim_is_supported(claim: str, observations: tuple[str, ...]) -> bool:
+    """Require every evidential claim term to occur in at least one observation."""
+    claim_terms = _evidential_terms(claim)
+    if not claim_terms:
+        normalized_claim = " ".join(WORD_PATTERN.findall(claim.lower()))
+        return any(
+            normalized_claim == " ".join(WORD_PATTERN.findall(item.lower()))
+            for item in observations
+        )
+    return any(claim_terms.issubset(_evidential_terms(item)) for item in observations)
+
+
+def _evidential_terms(text: str) -> frozenset[str]:
+    """Normalize a claim into content terms without deleting negation."""
+    return frozenset(
+        word for word in WORD_PATTERN.findall(text.lower()) if word not in NON_EVIDENTIAL_WORDS
+    )
+
+
+def _as_sentence(claim: str) -> str:
+    """Normalize one accepted claim for user-facing sentence assembly."""
+    sentence = claim[0].upper() + claim[1:] if claim else claim
+    return sentence if sentence.endswith((".", "!", "?")) else f"{sentence}."

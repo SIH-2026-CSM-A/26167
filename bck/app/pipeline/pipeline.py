@@ -180,6 +180,7 @@ def run(
         evidence=[candidate_evidence],
         raw_query=request.query,
         images=[item.source for item in ingested],
+        supporting_observations=tool_result.supporting_observations,
     )
     recorder.record(
         "verification",
@@ -189,10 +190,13 @@ def run(
         evidence_ids=[item.id for item in decision.verified_evidence],
     )
 
-    verified_text = "" if decision.is_abstained else tool_result.raw_answer
-    rejected_claims = (
-        tuple(d.description for d in decision.disagreements) if decision.is_abstained else ()
+    salvaged_text = (
+        decision.verified_evidence[0].payload.get("verified_answer")
+        if decision.verified_evidence
+        else None
     )
+    verified_text = "" if decision.is_abstained else (salvaged_text or tool_result.raw_answer)
+    rejected_claims = tuple(d.description for d in decision.disagreements)
     evidence = build_vqa_evidence(
         asset=source.source,
         model_id=tool_result.model_id,
