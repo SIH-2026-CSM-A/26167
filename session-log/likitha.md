@@ -32,3 +32,9 @@ Built via Antigravity (single-agent, Windows).
   - `UploadPage.tsx` (128 lines): Orchestrates components and coordinates 1:1 positional `submitQuery` calls.
 - Enforced zero mock data; connected directly to live backend endpoint via `submitQuery`.
 - Verified 0 errors on `npm run lint` and `npm run build`.
+## Review Fixes Applied (PR #16)
+- Reverted all changes to `bck/app/api/main.py` back to `origin/main` to keep the branch pure frontend scope and eliminate CI formatting failures.
+- Configured Vite dev-server proxy (`/query` -> `http://localhost:8000`) and alias resolution in `fnt/vite.config.ts`.
+- Updated `fnt/src/services/api.ts` default `API_BASE_URL` to relative pathing (`''`).
+- Deleted synthetic placeholder fixtures (`pair_*.png`, `single_*.png`, `t*.png`) from `fnt/test-fixtures/` pending real SEN12MS/LEVIR-CD samples from team members.
+- Verified clean linter (`npm run lint`) and production build (`npm run build`).
