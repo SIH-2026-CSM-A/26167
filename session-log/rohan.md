@@ -239,3 +239,75 @@ the reference sweep, measured at shift_norm_px=45.25, correctly refused).
 `feature/26167-ROHAN-004-directional-change-vqa` as expected — flagged
 directly to the user, not resolved via a write git command per this
 session's git rules.
+
+---
+
+### 2026-09-06 — ROHAN-004 (second half, AC-1): directional change classification — Claude Code
+
+**Built**: `ChangeSummary` (`change_summary.py`) gains a categorical `status`
+field (`"increased" | "decreased" | "unchanged"`), plus `changed_pixel_count`
+and `changed_percentage` — both directly computable from the real mask, no
+geographic-area (m²) footprint emitted since these fixtures carry no real
+GSD/affine metadata (same "no CRS, no lat/lon" precedent the file's docstring
+already stated). `detector.py`'s `detect_change()` exposes all three new
+fields in its existing `Evidence.payload` dict, same naming convention as the
+fields already there — no other module touched.
+
+**Noise-floor derivation, real data, not adopted from the lead's example**:
+ran `detect_change()`'s actual BIT pipeline on each real fixture against an
+exact copy of itself (same trick as the registration gate's self-vs-self
+control). Both real pairs (`levir_test_1_t1`, `levir_train_103_9_t1`)
+measured **exactly 0.0% (0/65536 changed pixels)** — not just low, genuinely
+zero. The lead's example ballpark (0.5% / 15px) was offered before this
+measurement existed, and those two example numbers are themselves
+inconsistent for a 65536px frame (0.5% ≈ 328px, not 15px). Set
+`_NOISE_FLOOR_FRACTION = 0.001` (0.1%, ~66px) — an order of magnitude
+tighter than the lead's example, justified because the real measured floor
+supports a stricter cutoff. Documented as my own derivation in the module
+docstring, not attributed to the lead's judgment.
+
+**Dataset-context default, and why the luminance-heuristic alternative was
+rejected**: a changed pair defaults to `"increased"` (never inferred as
+`"decreased"` from pixel content) because LEVIR-CD is a documented
+building-construction/growth benchmark — an explicit, LEVIR-CD-specific
+assumption, not a general capability. A luminance/grayscale/structural-delta
+heuristic for inferring real direction from pixel values was explicitly
+rejected (per the lead's decision) before this work started: BIT's vendored
+output is a binary mask/probability map with no land-cover class information,
+true built-up-specific direction would need NDBI (SWIR/NIR bands the RGB
+LEVIR-CD fixtures don't have), and any grayscale-based heuristic would be
+unverifiable against real data here — exactly the kind of fabricated-seeming
+mechanism this project's rules forbid.
+
+**`"decreased"` is real, reachable code — not dead code — but untested
+against any real observation**: `summarize_change(mask, reversed_order=True)`
+is the only path to `"decreased"`, never inferred from pixel content. Tested
+via one clearly-labeled synthetic case: the real predicted mask from
+`levir_train_103_9`'s real growth pair, re-labeled with `reversed_order=True`
+to simulate a caller stating the image order was reversed. Same real
+pixel-level numbers as the "increased" case, only the direction label
+differs — explicitly not presented as a validated real-world decrease
+observation, since LEVIR-CD has no real decrease pairs to test against.
+
+**Honest finding, not smoothed over**: of the two real bi-temporal pairs in
+this repo's fixtures, only `levir_train_103_9` is a real growth pair
+(`status=increased`, 27085/65536 px, 41.3284%, matching ROHAN-002's original
+BIT verification exactly). `levir_test_1` is genuinely a no-change pair — its
+own ground truth label is all-zero (established in ROHAN-002) — so it is
+reported as a second real `"unchanged"` case, not stretched into a second
+"increased" example.
+
+**Test layout**: extended the existing nested
+`bck/tests/change_detection/test_change_summary.py` directly (it already
+tests this exact module) rather than following `test_detector.py`'s flat
+convention, since fragmenting one module's tests across two files would be
+worse than the inconsistency already present in the repo.
+
+**Gates**: all four green — `ruff check` clean, `ruff format --check` (104
+files), `lint-imports` (101 files, 212 deps, 3/3 contracts kept), `pytest`
+144 passed.
+
+**Note on branch state**: unlike the first half's entry above, this work was
+done with `feature/26167-ROHAN-004-directional-change-vqa` correctly checked
+out throughout (confirmed via the user's own `git status` output showing the
+branch current with `origin/feature/26167-ROHAN-004-directional-change-vqa`).
