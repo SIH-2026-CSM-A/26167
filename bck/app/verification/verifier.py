@@ -1,125 +1,178 @@
-"""Conservative deterministic claim verification against grounded observations."""
+"""Central verification evaluator and trace integration (SHIVA-004, F15/F16)."""
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
-from enum import StrEnum
+from datetime import UTC, datetime
+from typing import Any
 
-CLAIM_BOUNDARY = re.compile(r"(?<=[.!?;])\s+|\s+(?:and|but|while|whereas)\s+", re.IGNORECASE)
-WORD_PATTERN = re.compile(r"[a-z0-9]+")
-NON_EVIDENTIAL_WORDS = frozenset(
-    {
-        "a",
-        "an",
-        "the",
-        "is",
-        "are",
-        "was",
-        "were",
-        "be",
-        "been",
-        "being",
-        "in",
-        "on",
-        "at",
-        "of",
-        "to",
-        "for",
-        "from",
-        "this",
-        "that",
-        "there",
-        "appears",
-        "appear",
-        "scene",
-        "image",
-    }
+from app.contracts import Evidence, ImageInput, TraceStep
+from app.verification.rules import (
+    evaluate_cloud_sar_reconciliation,
+    evaluate_confidence_floor,
+    evaluate_cross_modal_conflict,
+    evaluate_empty_evidence,
+    evaluate_sensor_compatibility,
+    evaluate_structured_numeric_grounding,
+)
+from app.verification.schemas import (
+    DisagreementCategory,
+    DisagreementRecord,
+    VerificationDecision,
+    VerificationPolicy,
+    VerificationStatus,
 )
 
 
-class VerificationStatus(StrEnum):
-    """Outcome of comparing candidate claims with grounded observations."""
+def verify(
+    evidence: list[Evidence],
+    raw_query: str | None = None,
+    images: list[ImageInput] | None = None,
+    policy: VerificationPolicy | None = None,
+) -> VerificationDecision:
+    """Master deterministic verification entrypoint.
 
-    SUPPORTED = "supported"
-    PARTIALLY_SUPPORTED = "partially_supported"
-    REJECTED = "rejected"
+    Executes sequential verification stages:
+    1. Empty Evidence Gate (RULE-VERIFY-01)
+    2. Physical Sensor Compatibility Gate (RULE-VERIFY-03)
+    3. Confidence Floor Gate (RULE-VERIFY-02)
+    4. Irreconcilable Cross-Modal Conflict Check (RULE-VERIFY-CONFLICT)
+    5. Structured Numeric Grounding (RULE-VERIFY-06)
+    6. Cloud vs. SAR Radar Reconciliation (RULE-VERIFY-04)
+    """
+    active_policy = policy or VerificationPolicy()
 
-
-@dataclass(frozen=True, slots=True)
-class VerificationResult:
-    """Verified answer plus an auditable record of accepted and rejected claims."""
-
-    status: VerificationStatus
-    verified_text: str
-    supported_claims: tuple[str, ...]
-    rejected_claims: tuple[str, ...]
-    abstained: bool
-    abstention_reason: str | None
-
-
-def verify_answer(
-    candidate_answer: str, supporting_observations: list[str] | tuple[str, ...]
-) -> VerificationResult:
-    """Retain only candidate claims whose content is present in a grounded observation."""
-    claims = _split_claims(candidate_answer)
-    observations = tuple(item.strip() for item in supporting_observations if item.strip())
-    supported = tuple(claim for claim in claims if _claim_is_supported(claim, observations))
-    rejected = tuple(claim for claim in claims if claim not in supported)
-
-    if not supported:
-        return VerificationResult(
-            status=VerificationStatus.REJECTED,
-            verified_text="",
-            supported_claims=(),
-            rejected_claims=rejected,
+    # Stage 1: Empty Evidence Gate
+    is_empty, empty_reason = evaluate_empty_evidence(evidence)
+    if is_empty:
+        return VerificationDecision(
+            status=VerificationStatus.ABSTAINED,
             abstained=True,
-            abstention_reason="No candidate claim was supported by grounded visual observations.",
+            abstention_reason=empty_reason,
+            verified_evidence=[],
+            disagreements=[],
+            confidence_penalty=0.0,
+            filtered_evidence_ids=[],
         )
 
-    status = (
-        VerificationStatus.SUPPORTED if not rejected else VerificationStatus.PARTIALLY_SUPPORTED
+    # Stage 2: Physical Sensor Compatibility Gate
+    is_incompatible, sensor_reason = evaluate_sensor_compatibility(raw_query, images)
+    if is_incompatible:
+        return VerificationDecision(
+            status=VerificationStatus.ABSTAINED,
+            abstained=True,
+            abstention_reason=sensor_reason,
+            verified_evidence=[],
+            disagreements=[
+                DisagreementRecord(
+                    rule_id="RULE-VERIFY-03",
+                    category=DisagreementCategory.SENSOR_PHYSICAL_LIMITATION,
+                    description=sensor_reason or "",
+                    action_taken="abstained",
+                    conflicting_evidence_ids=[e.id for e in evidence],
+                )
+            ],
+            confidence_penalty=0.0,
+            filtered_evidence_ids=[],
+        )
+
+    # Stage 3: Confidence Floor Gate
+    surviving, filtered_ids, is_subfloor, floor_reason = evaluate_confidence_floor(
+        evidence,
+        active_policy.min_confidence_floor,
     )
-    verified_text = " ".join(_as_sentence(claim) for claim in supported)
-    return VerificationResult(
-        status=status,
-        verified_text=verified_text,
-        supported_claims=supported,
-        rejected_claims=rejected,
+    if is_subfloor:
+        return VerificationDecision(
+            status=VerificationStatus.ABSTAINED,
+            abstained=True,
+            abstention_reason=floor_reason,
+            verified_evidence=[],
+            disagreements=[],
+            confidence_penalty=0.0,
+            filtered_evidence_ids=filtered_ids,
+        )
+
+    # Stage 4: Irreconcilable Cross-Modal Conflict Check
+    is_severe, severe_reason, severe_records, severe_penalty = evaluate_cross_modal_conflict(
+        surviving,
+        images,
+        active_policy,
+    )
+    if is_severe:
+        return VerificationDecision(
+            status=VerificationStatus.ABSTAINED,
+            abstained=True,
+            abstention_reason=severe_reason,
+            verified_evidence=[],
+            disagreements=severe_records,
+            confidence_penalty=severe_penalty,
+            filtered_evidence_ids=filtered_ids,
+        )
+
+    # Stage 5: Structured Numeric Grounding Check
+    numeric_records, numeric_penalty = evaluate_structured_numeric_grounding(
+        surviving,
+        active_policy,
+    )
+
+    # Stage 6: Cloud vs. SAR Radar Reconciliation Check
+    reconciliation_records = evaluate_cloud_sar_reconciliation(surviving)
+
+    all_disagreements = numeric_records + reconciliation_records
+    total_penalty = min(numeric_penalty, active_policy.max_total_penalty)
+
+    return VerificationDecision(
+        status=VerificationStatus.VERIFIED,
         abstained=False,
         abstention_reason=None,
+        verified_evidence=surviving,
+        disagreements=all_disagreements,
+        confidence_penalty=total_penalty,
+        filtered_evidence_ids=filtered_ids,
     )
 
 
-def _split_claims(answer: str) -> tuple[str, ...]:
-    """Split prose into atomic sentence and conjunction-delimited candidate claims."""
-    return tuple(
-        cleaned
-        for part in CLAIM_BOUNDARY.split(answer.strip())
-        if (cleaned := part.strip().strip("-• \t\r\n.!?;:"))
+def verification_trace_params(decision: VerificationDecision) -> dict[str, Any]:
+    """Generate strictly JSON-serializable parameter dictionary for TraceStep.params."""
+    status_str = (
+        decision.status.value if hasattr(decision.status, "value") else str(decision.status)
     )
+    return {
+        "status": str(status_str),
+        "abstained": bool(decision.abstained),
+        "abstention_reason": decision.abstention_reason,
+        "confidence_penalty": round(float(decision.confidence_penalty), 4),
+        "effective_confidence": round(float(decision.effective_confidence), 4),
+        "retained_evidence_count": len(decision.verified_evidence),
+        "filtered_evidence_count": len(decision.filtered_evidence_ids),
+        "filtered_evidence_ids": list(decision.filtered_evidence_ids),
+        "disagreement_count": len(decision.disagreements),
+        "disagreements": [
+            {
+                "rule_id": d.rule_id,
+                "category": (
+                    str(d.category.value) if hasattr(d.category, "value") else str(d.category)
+                ),
+                "description": d.description,
+                "action_taken": d.action_taken,
+                "conflicting_evidence_ids": list(d.conflicting_evidence_ids),
+            }
+            for d in decision.disagreements
+        ],
+    }
 
 
-def _claim_is_supported(claim: str, observations: tuple[str, ...]) -> bool:
-    """Require every evidential claim term to occur in at least one observation."""
-    claim_terms = _evidential_terms(claim)
-    if not claim_terms:
-        normalized_claim = " ".join(WORD_PATTERN.findall(claim.lower()))
-        return any(
-            normalized_claim == " ".join(WORD_PATTERN.findall(item.lower()))
-            for item in observations
-        )
-    return any(claim_terms.issubset(_evidential_terms(item)) for item in observations)
-
-
-def _evidential_terms(text: str) -> frozenset[str]:
-    """Normalize a claim into content terms without deleting negation."""
-    return frozenset(
-        word for word in WORD_PATTERN.findall(text.lower()) if word not in NON_EVIDENTIAL_WORDS
+def create_verification_trace_step(
+    decision: VerificationDecision,
+    started_at: datetime,
+    completed_at: datetime | None = None,
+) -> TraceStep:
+    """Build a valid TraceStep contract representing the verification hop."""
+    return TraceStep(
+        module="verification",
+        action="verify" if decision.is_verified else "abstain",
+        params=verification_trace_params(decision),
+        confidence=decision.effective_confidence,
+        started_at=started_at,
+        completed_at=completed_at or datetime.now(UTC),
+        evidence_ids=[e.id for e in decision.verified_evidence],
     )
-
-
-def _as_sentence(claim: str) -> str:
-    """Normalize one accepted claim for user-facing sentence assembly."""
-    sentence = claim[0].upper() + claim[1:] if claim else claim
-    return sentence if sentence.endswith((".", "!", "?")) else f"{sentence}."
