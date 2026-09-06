@@ -227,8 +227,16 @@ def evaluate_cross_modal_conflict(
 ) -> tuple[bool, str | None, list[DisagreementRecord], float]:
     """RULE-VERIFY-CONFLICT: Irreconcilable Cross-Modal Contradiction.
 
+    Implementation-level rule addition directly grounded in:
+    - DESIGN.md §5 (Sensor Disagreements: cross-sensor conflict resolution),
+    - DESIGN.md §7.2 (Verification Failure Modes: cross-modal contradiction handling), and
+    - DESIGN.md §9 (Verification Output Contract: SEVERE_MODALITY_CONFLICT abstention code).
+
     Evaluates whether optical and SAR assert direct, irreconcilable contradictions on the
-    identical target/region under clear observing conditions (neither is cloud-obscured).
+    identical target/region under clear observing conditions (where optical is not obscured
+    by cloud cover). When contradictory claims occur at high confidence across modalities,
+    this rule forces explicit typed abstention (AbstentionReasonCode.SEVERE_MODALITY_CONFLICT)
+    rather than arbitrarily preferring one modality or averaging contradictory confidences.
     """
     records: list[DisagreementRecord] = []
 
