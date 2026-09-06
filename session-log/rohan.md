@@ -162,3 +162,80 @@ confirms real collection — 93 items collected and passed, including both
 restored test files (`tests/change_detection/test_change_summary.py`,
 `tests/change_detection/test_confidence.py`) and `tests/test_detector.py` —
 not just a summary line claiming so.
+
+---
+
+### 2026-09-06 — ROHAN-004 (first half): registration-quality gate derivation — Claude Code
+
+**Method chosen, and why**: `skimage.registration.phase_cross_correlation`
+(global phase correlation), not ORB/SIFT + RANSAC keypoint matching — that
+approach was tried first and abandoned after real testing showed it produces
+physically implausible fitted transforms (rotations of ±30–132°, scale
+factors of 0.19–0.62, 100+ px translations) even on genuinely well-registered
+real LEVIR-CD pairs, because these 256x256 patches don't have enough
+distinctive, stable texture for reliable keypoint correspondence. Confirmed
+independently with both ORB and SIFT, and with both a full 6-DOF affine and a
+restricted 4-DOF similarity transform — same failure mode every time.
+
+**Canonical phase-correlation pipeline** (fixed after diagnostics, do not vary
+without re-deriving): PIL `.convert("RGB")` -> float32 array / 255.0 ->
+`skimage.color.rgb2gray` -> multiply by a 2D Hann window
+(`np.outer(np.hanning(h), np.hanning(w))`) ->
+`phase_cross_correlation(..., upsample_factor=100)`. Shift-vector Euclidean
+norm is the sole gating scalar.
+
+**`error` is deliberately unused**: a self-vs-self control (a real image
+against a byte-identical copy of itself — zero shift, zero difference) still
+returned `error=0.9999999982747276` in this environment (skimage 0.26.0).
+Since the shift computation on that same control is separately verified
+correct (exactly `[0, 0]`, norm `0.0`), `error` is not a meaningful signal at
+all here — it doesn't approach zero even for a literally identical pair.
+
+**Real-pair sample — every genuine bi-temporal pair in `bck/tests/fixtures/`,
+n=2** (searched the whole directory including inside both `.npz` archives;
+everything else is single-timepoint SAR/optical/cloud data, not a second real
+timepoint of the same modality):
+| Pair | Shift norm |
+|---|---|
+| `levir_test_1` | 1.93px |
+| `levir_train_103_9` | 12.04px |
+
+**Threshold set: 40.0px** — roughly 3x the maximum observed real-pair shift
+norm (12.04px), rounded up. Deliberately generous over a sample of only 2
+real pairs already showing ~6x variance between them — the goal is to never
+falsely refuse a real, correctly co-registered pair that happens to contain
+large real scene change (`levir_train_103_9`'s 12.04px is exactly that: real
+content change, not misregistration). Provisional per PRD §8's "TBD from real
+testing"; a future ticket should widen the real-pair sample before this is
+treated as final.
+
+**Synthetic shift sweep** (reference only, NOT used to set the threshold —
+`scipy.ndimage.shift`, `mode="reflect"`, never `np.roll`: an earlier attempt
+using `np.roll` introduced a wraparound seam that measurably distorted the
+shift estimate at larger offsets, confirmed by comparing measured/injected
+ratio drifting from 0.98 at 1px to 1.37 at 32px):
+1px→1.41px, 2px→2.83px, 4px→5.66px, 8px→11.31px, 16px→22.63px, 32px→45.25px.
+
+**Known v1 limitation, deliberately deferred**: this is global phase
+correlation over the whole frame. Bi-temporal change-detection pairs contain
+large real content change by definition, which can inflate the global shift
+estimate independent of true misregistration — this gate catches gross
+global misalignment, not subtle misregistration on a pair with major scene
+change. A more robust future approach (patch-based/block-voting phase
+correlation, median shift across sub-tiles) is a known, deliberately-deferred
+improvement, not built here due to time constraints.
+
+**Built**: `bck/app/tools/change_detection/registration_quality.py`
+(`require_registration_quality`, `RegistrationQualityError` — mirrors
+`fusion/guards.py`'s refusal style exactly: explicit exception, no silent
+pass-through, no fabricated fallback). Wired as a precondition at the very
+start of `detector.py`'s `detect_change()`, before any BIT loading/inference.
+Tests: `bck/tests/test_registration_quality.py` — both real pairs pass, plus
+two clearly-labeled synthetic cases (shape-mismatch via a resized copy;
+gross-misregistration via the same 32px `scipy.ndimage.shift` methodology as
+the reference sweep, measured at shift_norm_px=45.25, correctly refused).
+
+**Note on branch state**: this work was done with `main` checked out, not
+`feature/26167-ROHAN-004-directional-change-vqa` as expected — flagged
+directly to the user, not resolved via a write git command per this
+session's git rules.
