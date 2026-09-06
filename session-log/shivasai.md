@@ -64,3 +64,50 @@ Built via Antigravity CLI (Gemini 3.8 Flash, Windows / PowerShell).
 - `uv run ruff format --check .` $\rightarrow$ PASS (44 files already formatted)
 - `uv run lint-imports` $\rightarrow$ PASS (Leaf modules never import each other: KEPT, Only pipeline composes modules: KEPT, Contracts import nothing of ours: KEPT)
 - `uv run pytest` $\rightarrow$ PASS (37/37 tests passed)
+
+## 2026-09-06 — SHIVA-003: Conflict-Resolution & Verification Layer Design (F15/F16)
+
+- **Ticket:** SHIVA-003
+- **Status:** DESIGN COMPLETE (Implementation Pending in SHIVA-004)
+- **Branch:** `feature/26167-SHIVA-003-verification-design`
+
+**Did:**
+- Performed rigorous architecture and contract investigation across repository contracts (`bck/app/contracts/schemas.py`), pipeline seams (`bck/app/pipeline/stages.py`, `bck/app/pipeline/pipeline.py`), `ARCHITECTURE.md`, `AGENTS.md`, and project specifications (`01-SatQuery-AI-PRD.md`, `02-SatQuery-AI-Features-Spec.md`, `03-SatQuery-AI-Technical-Implementation.md`).
+- Confirmed `ToolResult` does not exist in `app.contracts` or anywhere in the repository; established `Evidence` as the sole canonical contract boundary for `app.verification`.
+- Completely restructured and authored `bck/app/verification/DESIGN.md` into an implementation-ready 15-section architecture blueprint for F15 and F16.
+- Formulated a 5-stage deterministic verification lifecycle: (1) Evidence Availability & Feasibility Gate, (2) Domain-Level Sensor Compatibility Gate, (3) Structured Claim Grounding, (4) Cross-Modal Relationship Classification, (5) Final Verification Decision Assembly.
+- Defined a deterministic 8-rule table (RULE-VERIFY-01 to RULE-VERIFY-08) operating strictly on available contract data (`Evidence.payload`, `Evidence.type`, `ImageInput.modality`), eliminating invented geometry fields and unsupported assumptions.
+- Formulated an explicit 5-state cross-modal relationship model (`AGREEMENT`, `DISAGREEMENT`, `COMPLEMENTARY`, `NOT_COMPARABLE`, `INSUFFICIENT_EVIDENCE`) to distinguish legitimate complementary sensor observations from genuine contradictions.
+- Defined strict boundaries for structured claim grounding (counts, areas, percentages, structured identifiers) against `EvidenceType.STATS` payloads; explicitly excluded unconstrained semantic natural-language fact-checking from deterministic post-processing.
+- Established a clean text mutation boundary: `app.verification` produces an immutable `VerificationDecision` reporting verified evidence, disagreement records, and penalties without mutating upstream inputs or constructing downstream `Answer` objects.
+- Formulated typed abstention protocols with deterministic reason codes (`NO_EVIDENCE_PRODUCED`, `INSUFFICIENT_CONFIDENCE`, `SENSOR_PHYSICAL_LIMITATION`, `SEVERE_MODALITY_CONFLICT`, `UNVERIFIABLE_MANDATORY_CLAIM`), strictly enforcing `Answer` contract constraints (`abstained=True` requires `abstention_reason`).
+- Verified 1:1 backward compatibility with the pipeline seam (`stub_verification(evidence: list[Evidence]) -> tuple[list[Evidence], bool, str | None]`) via `VerificationDecision.as_pipeline_tuple()`.
+- Designed trace integration (`verification_trace_params`, `create_verification_trace_step`) using strictly JSON-serializable primitives for `TraceStep.params`.
+- Outlined a concrete 9-point test suite specification for subsequent implementation in `SHIVA-004`.
+
+**Key Architectural Decisions:**
+- **Evidence as Canonical Verification Boundary:** Verification operates strictly on `list[Evidence]`. If `AASH-003` introduces tool-internal objects, they must be adapted to `Evidence` upstream before reaching verification; `app.verification` never imports `app.tools`.
+- **Configurable Policy Over Hardcoded Magic Numbers:** Replaced arbitrary universal thresholds (such as 0.30 confidence floor or IoU 0.30) with an explicit `VerificationPolicy` model. Documented that defaults are baseline implementation policies requiring empirical calibration against benchmark slices (VRSBench, RSVQA, BigEarthNet.txt).
+- **Conditional Spatial Geometry Consistency:** Eliminated assumptions about universal polygon/mask intersection. Spatial contradiction and extent comparison rules execute conditionally only when compatible, contract-defined coordinate reference systems and geometries are present in payloads; otherwise, the relationship is recorded as `NOT_COMPARABLE`.
+- **Complementary Sensor Physics Over Forced Sensor Superiority:** Rejected blanket rules declaring SAR superior to Optical during clouds. The verification layer surfaces both facts transparently: optical cloud limitation alongside independent radar observations, preserving physical nuance and uncertainty.
+- **Conservative Radar Scattering Physics:** Replaced claims of universal SAR canopy penetration with conservative physical characterization: differing returns are classified as distinct scattering mechanisms (volume/dielectric vs. spectral) rather than asserting penetration without sensor frequency/polarization metadata.
+- **Bounded Deterministic Grounding:** Restricted claim grounding strictly to numeric quantities and coordinates cross-referenced against structured `STATS` payloads. Descriptive qualitative prose is preserved without false claims of mathematical verification.
+- **Leaf Module Isolation (Zero Cross-Leaf Imports):** `app.verification` imports solely from `app.contracts`, `app.core`, and internal modules. No dependencies on `app.router`, `app.pipeline`, `app.tools`, or `app.models`.
+
+**Rejected Along the Way:**
+- **Inventing Unverified Contracts / ToolResult:** Rejected defining local duplicate schemas or assuming `ToolResult` exists.
+- **Second-LLM Verification / Evaluator LLM:** Explicitly rejected per Technical Implementation §2.6 to eliminate latency spikes, compute costs, and non-determinism.
+- **Arbitrary Threshold Claims:** Rejected presenting uncalibrated numbers as scientific facts.
+- **Direct Edits to `app.contracts`:** Preserved ownership boundaries for `@ybaddam8-png`.
+- **Premature Production Code in Design Ticket:** Maintained SHIVA-003 strictly as a design deliverable; implementation deferred to SHIVA-004.
+
+**Constraints Followed:**
+- Leaf module isolation verified via import-linter.
+- No changes to `app.contracts/` or other teammate modules.
+- No commit or push performed prior to explicit user approval.
+
+**Validation Evidence:**
+- `uv run ruff check .` $\rightarrow$ PASS (0 errors)
+- `uv run ruff format --check .` $\rightarrow$ PASS (50 files already formatted)
+- `uv run lint-imports` $\rightarrow$ PASS (Contracts: 3 kept, 0 broken)
+- `uv run pytest` $\rightarrow$ PASS (50 passed in 12.51s)
