@@ -18,6 +18,7 @@ MODEL_INPUT_SIZE = 448
 MAX_NEW_TOKENS = 128
 IMAGENET_MEAN = np.asarray((0.485, 0.456, 0.406), dtype=np.float32)
 IMAGENET_STD = np.asarray((0.229, 0.224, 0.225), dtype=np.float32)
+GENERATION_COMPAT_MARKER = "_satquery_generation_compatible"
 
 
 class InternVLModelError(RuntimeError):
@@ -40,10 +41,12 @@ def windows_cpu_safetensors_compat(device: str | torch.device) -> Iterator[None]
         return
 
     import safetensors
+    import safetensors.torch as safetensors_torch
     import transformers.modeling_utils as mu
 
     orig_mu_safe_open = getattr(mu, "safe_open", None)
     orig_st_safe_open = getattr(safetensors, "safe_open", None)
+    orig_st_torch_safe_open = getattr(safetensors_torch, "safe_open", None)
 
     def compat_safe_open(filename: str | os.PathLike[Any], *args: Any, **kwargs: Any) -> Any:
         if kwargs.get("backend") == "mmap" or "backend" not in kwargs:
@@ -58,12 +61,16 @@ def windows_cpu_safetensors_compat(device: str | torch.device) -> Iterator[None]
             mu.safe_open = compat_safe_open  # type: ignore[assignment]
         if orig_st_safe_open is not None:
             safetensors.safe_open = compat_safe_open  # type: ignore[assignment]
+        if orig_st_torch_safe_open is not None:
+            safetensors_torch.safe_open = compat_safe_open  # type: ignore[assignment]
         yield
     finally:
         if orig_mu_safe_open is not None:
             mu.safe_open = orig_mu_safe_open  # type: ignore[assignment]
         if orig_st_safe_open is not None:
             safetensors.safe_open = orig_st_safe_open  # type: ignore[assignment]
+        if orig_st_torch_safe_open is not None:
+            safetensors_torch.safe_open = orig_st_torch_safe_open  # type: ignore[assignment]
 
 
 def prepare_pixel_values(image: Image.Image) -> torch.Tensor:
@@ -83,13 +90,18 @@ def prepare_pixel_values(image: Image.Image) -> torch.Tensor:
 def _prepare_language_model_generation(model: Any) -> None:
     """Restore the complete generation interface on this nested instance only."""
     language_model = model.language_model
-    if callable(getattr(language_model, "generate", None)):
+    original_class = type(language_model)
+    if getattr(original_class, GENERATION_COMPAT_MARKER, False):
         return
 
     from transformers import GenerationConfig
     from transformers.generation import GenerationMixin
 
-    if not callable(getattr(language_model, "prepare_inputs_for_generation", None)):
+    has_generation = callable(getattr(language_model, "generate", None))
+    has_input_hook = callable(getattr(language_model, "prepare_inputs_for_generation", None))
+    if has_generation and not has_input_hook:
+        return
+    if not has_input_hook:
         raise InternVLModelError("The nested language model has no generation input hook")
 
     class LegacyGenerationMixin(GenerationMixin):
@@ -100,7 +112,6 @@ def _prepare_language_model_generation(model: Any) -> None:
             """Prevent Transformers from injecting an incompatible DynamicCache."""
             return False
 
-    original_class = type(language_model)
     orig_prepare = original_class.prepare_inputs_for_generation
 
     def prepare_inputs_for_generation(
@@ -134,11 +145,17 @@ def _prepare_language_model_generation(model: Any) -> None:
 
     # Dynamic imports can reload a class without updating the chat module's binding.
     # Adapt the actual instance, keeping upstream hooks ahead of mixin defaults.
+    compatible_bases = (
+        (original_class,) if has_generation else (original_class, LegacyGenerationMixin)
+    )
+    dynamic_cache_support = LegacyGenerationMixin._supports_default_dynamic_cache
     compatible_class = type(
         f"{original_class.__name__}WithGenerationMixin",
-        (original_class, LegacyGenerationMixin),
+        compatible_bases,
         {
             "__module__": __name__,
+            GENERATION_COMPAT_MARKER: True,
+            "_supports_default_dynamic_cache": dynamic_cache_support,
             "prepare_inputs_for_generation": prepare_inputs_for_generation,
         },
     )

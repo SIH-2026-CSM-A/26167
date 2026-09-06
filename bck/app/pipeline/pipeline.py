@@ -12,7 +12,7 @@ from app.ingestion import (
 )
 from app.models import InternVL2Adapter, InternVLModelError
 from app.pipeline.stages import PipelineError, PipelineUpload, TraceRecorder
-from app.router import route_request
+from app.router import route
 from app.tools.vqa_grounding import VqaModel, VqaToolError, execute_vqa
 from app.verification import verify_answer
 
@@ -97,19 +97,35 @@ def run(
     request = QueryRequest(query=query.strip(), images=[item.source for item in ingested])
 
     recorder.record("router", "routing_started")
-    decision = route_request(request)
+    decision = route(request)
+    dispatch_plan = decision.dispatch_plan
+    route_reason = (
+        decision.veto.message
+        if decision.veto is not None
+        else "Request satisfies router feasibility checks."
+    )
     recorder.record(
         "router",
         "route_selected",
         params={
-            "intent": decision.intent.value,
-            "tool": decision.tool_name,
-            "supported": decision.supported,
-            "reason": decision.reason,
+            "intent": decision.intent.task_type.value,
+            "tool": dispatch_plan.tool_name if dispatch_plan is not None else None,
+            "supported": decision.is_dispatched,
+            "reason": route_reason,
         },
     )
-    if not decision.supported or decision.tool_name != "internvl_vqa":
-        _fail(recorder, stage="routing", message=decision.reason, status_code=422)
+    if not decision.is_dispatched or dispatch_plan is None:
+        _fail(recorder, stage="routing", message=route_reason, status_code=422)
+    if dispatch_plan.tool_name != "vqa_grounding":
+        _fail(
+            recorder,
+            stage="routing",
+            message=(
+                "The selected tool is unavailable in this vertical slice: "
+                f"{dispatch_plan.tool_name}"
+            ),
+            status_code=422,
+        )
 
     active_model = model or _get_default_model()
     source = ingested[0]

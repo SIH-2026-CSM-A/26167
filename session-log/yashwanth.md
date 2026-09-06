@@ -227,3 +227,19 @@ cache had been checked earlier; that conclusion was incomplete.
   - AC2: PASS (Verification & Grounding with real model outputs, rejecting ungrounded claims and abstaining cleanly)
   - AC3: PASS (Canonical Evidence & ExecutionTrace preserved end-to-end through pipeline and frontend)
   - AC4: PASS (Session log fidelity, measured facts, all quality gates green)
+
+## 2026-09-06 — YASH-003 rebased after JASH-001
+
+- Rebased the unique YASH-003 commit onto `origin/develop` at JASH-001 squash merge
+  `f0d710fc827402fc4c8eee196d3b120f2b41e6fc`; local backup
+  `backup/yash003-pre-develop-rebase-06d0a38` preserves the old head.
+- Canonical `bck/app/ingestion/**` comes unchanged from develop. Removed the temporary runtime
+  router and connected the pipeline to develop's canonical router. Retained the `app.api`
+  import-linter contract and the develop CI workflow.
+- Real browser E2E used `RGB.byte.tif` (1,745,956 bytes; 791x718; three uint8 bands;
+  EPSG:32618) and the offline `OpenGVLab/InternVL2-2B` cache on CPU. `POST /query` returned 200
+  in 463.47 seconds, verification was `partially_supported`, abstention was false, evidence ID
+  was `64cd8f11-116e-4b72-8566-8246c7e485d2`, and the trace contained 13 stages.
+- Compatibility findings: InternVL2 requires SentencePiece 0.2.1 for its cached tokenizer;
+  Transformers 4.44 loads through `safetensors.torch.safe_open`, so the existing Windows CPU
+  pread guard now covers and restores that alias as well.
