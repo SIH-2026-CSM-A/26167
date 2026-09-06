@@ -32,19 +32,19 @@ def run(request: QueryRequest) -> Answer:
     steps.append(new_trace_step("router", "stub_router", started, params={"intent": intent}))
 
     started = datetime.now(UTC)
-    evidence_item = stub_tool(intent, request.query, images)
+    evidence_items = stub_tool(intent, request.query, images)
     steps.append(
         new_trace_step(
             "tool",
             "stub_tool",
             started,
-            confidence=evidence_item.confidence,
-            evidence_ids=[evidence_item.id],
+            confidence=min(item.confidence for item in evidence_items),
+            evidence_ids=[item.id for item in evidence_items],
         )
     )
 
     started = datetime.now(UTC)
-    verified_evidence, abstained, abstention_reason = stub_verification([evidence_item])
+    verified_evidence, abstained, abstention_reason = stub_verification(evidence_items)
     steps.append(
         new_trace_step(
             "verification",

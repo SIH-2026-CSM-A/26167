@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import tempfile
 import uuid
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -32,11 +34,16 @@ async def submit_query(
     image_inputs = []
     for image, image_modality in zip(images, modality, strict=True):
         content = await image.read()
+        suffix = Path(image.filename or "").suffix or ".bin"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
         image_inputs.append(
             ImageInput(
                 id=str(uuid.uuid4()),
                 modality=image_modality,
                 format=image.content_type or "application/octet-stream",
+                path=tmp_path,
                 metadata={"filename": image.filename, "size_bytes": len(content)},
             )
         )

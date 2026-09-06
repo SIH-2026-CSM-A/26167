@@ -37,7 +37,7 @@ def _trace() -> ExecutionTrace:
 
 
 def test_query_request_round_trip():
-    image = ImageInput(id="img-1", modality=Modality.OPTICAL, format="GeoTIFF")
+    image = ImageInput(id="img-1", modality=Modality.OPTICAL, format="GeoTIFF", path="img-1.tif")
     req = QueryRequest(query="what is this?", images=[image])
     assert req.images[0].modality is Modality.OPTICAL
 

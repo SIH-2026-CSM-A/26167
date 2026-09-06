@@ -31,6 +31,7 @@ class ImageInput(BaseModel):
     id: str
     modality: Modality
     format: str
+    path: str
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

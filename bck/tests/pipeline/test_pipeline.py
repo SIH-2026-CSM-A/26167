@@ -3,7 +3,7 @@ from app.pipeline.pipeline import run
 
 
 def test_run_reflects_actual_request_not_a_fixture():
-    image = ImageInput(id="img-1", modality=Modality.OPTICAL, format="image/tiff")
+    image = ImageInput(id="img-1", modality=Modality.OPTICAL, format="image/tiff", path="img-1.tif")
     request = QueryRequest(query="how many buildings are visible?", images=[image])
 
     answer = run(request)

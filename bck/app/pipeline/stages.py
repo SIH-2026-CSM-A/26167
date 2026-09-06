@@ -51,7 +51,7 @@ def stub_router(query: str, images: list[ImageInput]) -> str:
     return "vqa_grounding"
 
 
-def stub_tool(intent: str, query: str, images: list[ImageInput]) -> Evidence:
+def stub_tool(intent: str, query: str, images: list[ImageInput]) -> list[Evidence]:
     """Placeholder for `app.tools.*` / `app.models` (F4-F7).
 
     Real tools run the selected model/tool and return real evidence. This stub returns one
@@ -66,14 +66,14 @@ def stub_tool(intent: str, query: str, images: list[ImageInput]) -> Evidence:
         "image_ids": [image.id for image in images],
     }
     timing = time.perf_counter() - started
-    return Evidence(
+    return [Evidence(
         id=str(uuid.uuid4()),
         tool=intent,
         type=EvidenceType.TEXT,
         payload=payload,
         confidence=0.5,
         timing=timing,
-    )
+    )]
 
 
 def stub_verification(evidence: list[Evidence]) -> tuple[list[Evidence], bool, str | None]:
