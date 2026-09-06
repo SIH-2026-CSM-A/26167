@@ -16,8 +16,8 @@ from app.pipeline.stages import (
     stub_ingestion,
     stub_router,
     stub_tool,
+    stub_verification,
 )
-from app.verification import verification_trace_params, verify
 
 
 def run(request: QueryRequest) -> Answer:
@@ -44,15 +44,34 @@ def run(request: QueryRequest) -> Answer:
     )
 
     started = datetime.now(UTC)
-    decision = verify([evidence_item], raw_query=request.query, images=images)
-    verified_evidence, abstained, abstention_reason = decision.as_pipeline_tuple()
+    verified_evidence, abstained, abstention_reason = stub_verification(
+        [evidence_item],
+        raw_query=request.query,
+        images=images,
+    )
+    status = "abstained" if abstained else "verified"
+    effective_confidence = (
+        0.0
+        if abstained
+        else (
+            sum(item.confidence for item in verified_evidence) / len(verified_evidence)
+            if verified_evidence
+            else 0.0
+        )
+    )
     steps.append(
         new_trace_step(
             "verification",
             "verify",
             started,
-            params=verification_trace_params(decision),
-            confidence=decision.effective_confidence,
+            params={
+                "status": status,
+                "abstained": abstained,
+                "abstention_reason": abstention_reason,
+                "effective_confidence": effective_confidence,
+                "retained_evidence_count": len(verified_evidence),
+            },
+            confidence=effective_confidence,
             evidence_ids=[item.id for item in verified_evidence],
         )
     )

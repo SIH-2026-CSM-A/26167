@@ -66,9 +66,6 @@ modules = [
     "app.ingestion",
     "app.api",
 ]
-ignore_imports = [
-    "app.api.main -> app.pipeline.pipeline",
-]
 
 [[tool.importlinter.contracts]]
 name = "Only pipeline composes modules"

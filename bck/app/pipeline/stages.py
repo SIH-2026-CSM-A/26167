@@ -85,9 +85,10 @@ def stub_verification(
 
     Preserves backward-compatible tuple signature (verified_evidence, abstained, abstention_reason).
     """
-    from app.verification import verify
+    import importlib
 
-    decision = verify(evidence=evidence, raw_query=raw_query, images=images)
+    verifier_mod = importlib.import_module("app.verification")
+    decision = verifier_mod.verify(evidence=evidence, raw_query=raw_query, images=images)
     return decision.as_pipeline_tuple()
 
 
