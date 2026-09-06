@@ -1,136 +1,82 @@
-"""The five pipeline stages, as a Protocol plus stub implementations.
-
-Every stub here is a placeholder seam: real work lands as `app.ingestion`, `app.router`,
-`app.tools.*`, `app.verification`, and `app.evidence` are built out, and `pipeline.py` swaps
-the corresponding stub for the real module. Each stub is named `stub_<stage>` so a grep for
-"stub_" finds every seam still open.
-"""
+"""Pipeline-owned upload, trace, and failure types for cross-module composition."""
 
 from __future__ import annotations
 
-import time
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol, TypeVar
+from typing import Any
 
-from app.contracts import (
-    Answer,
-    Evidence,
-    EvidenceType,
-    ExecutionTrace,
-    ImageInput,
-    TraceStep,
-)
-
-T_in = TypeVar("T_in", contravariant=True)
-T_out = TypeVar("T_out", covariant=True)
+from app.contracts import ExecutionTrace, Modality, TraceStep
 
 
-class Stage(Protocol[T_in, T_out]):
-    """A pipeline stage: takes one input, produces one output. No shared state between calls."""
+@dataclass(frozen=True, slots=True)
+class PipelineUpload:
+    """Raw multipart asset passed from the API without losing its bytes."""
 
-    def __call__(self, data: T_in) -> T_out: ...
-
-
-def stub_ingestion(images: list[ImageInput]) -> list[ImageInput]:
-    """Placeholder for `app.ingestion` (F1-F3).
-
-    Real ingestion validates modality/format compatibility and rejects bad input; this stub
-    passes images through unchanged since there is nothing yet to validate against.
-    """
-    return list(images)
+    id: str
+    filename: str
+    content_type: str
+    content: bytes
+    modality: Modality
 
 
-def stub_router(query: str, images: list[ImageInput]) -> str:
-    """Placeholder for `app.router` (F9-F11).
+class PipelineError(RuntimeError):
+    """Safe user-facing pipeline failure carrying the trace recorded before failure."""
 
-    Real router classifies intent from query + input inventory and selects a tool from the
-    fixed registry. This stub always returns the same hardcoded intent regardless of input.
-    """
-    del query, images
-    return "vqa_grounding"
-
-
-def stub_tool(intent: str, query: str, images: list[ImageInput]) -> list[Evidence]:
-    """Placeholder for `app.tools.*` / `app.models` (F4-F7).
-
-    Real tools run the selected model/tool and return real evidence. This stub returns one
-    Evidence object whose payload is explicitly marked as a stub value, but whose content
-    (query text, image count/ids) reflects the actual request rather than a static fixture.
-    """
-    started = time.perf_counter()
-    payload = {
-        "stub": True,
-        "note": f"stub_tool ran for intent={intent!r}",
-        "query": query,
-        "image_ids": [image.id for image in images],
-    }
-    timing = time.perf_counter() - started
-    return [Evidence(
-        id=str(uuid.uuid4()),
-        tool=intent,
-        type=EvidenceType.TEXT,
-        payload=payload,
-        confidence=0.5,
-        timing=timing,
-    )]
+    def __init__(
+        self,
+        *,
+        message: str,
+        stage: str,
+        status_code: int,
+        trace: ExecutionTrace,
+    ) -> None:
+        """Store a sanitized message, failed stage, HTTP status, and partial trace."""
+        super().__init__(message)
+        self.message = message
+        self.stage = stage
+        self.status_code = status_code
+        self.trace = trace
 
 
-def stub_verification(evidence: list[Evidence]) -> tuple[list[Evidence], bool, str | None]:
-    """Placeholder for `app.verification` (F15/F16).
+class TraceRecorder:
+    """Append actual pipeline events and serialize them through canonical trace contracts."""
 
-    Real verification strips unsupported claims, flags modality disagreement, and forces an
-    explicit abstention where evidence is insufficient. This stub passes evidence through
-    unchanged and never abstains.
-    """
-    return list(evidence), False, None
+    def __init__(self) -> None:
+        """Create one trace identity and an empty ordered step collection."""
+        self._trace_id = str(uuid.uuid4())
+        self._created_at = datetime.now(UTC)
+        self._steps: list[TraceStep] = []
 
+    def record(
+        self,
+        module: str,
+        action: str,
+        *,
+        params: dict[str, Any] | None = None,
+        confidence: float | None = None,
+        evidence_ids: list[str] | None = None,
+        started_at: datetime | None = None,
+    ) -> None:
+        """Append one completed event containing only supplied execution facts."""
+        event_started = started_at or datetime.now(UTC)
+        self._steps.append(
+            TraceStep(
+                module=module,
+                action=action,
+                params=params or {},
+                confidence=confidence,
+                started_at=event_started,
+                completed_at=datetime.now(UTC),
+                evidence_ids=evidence_ids or [],
+            )
+        )
 
-def stub_evidence(
-    query: str,
-    evidence: list[Evidence],
-    abstained: bool,
-    abstention_reason: str | None,
-    trace: ExecutionTrace,
-) -> Answer:
-    """Placeholder for `app.evidence` (F14/F23).
-
-    Real assembly renders text + visual evidence + confidence + trace + optional PDF report.
-    This stub builds a real Answer from what the prior stages actually produced: the text
-    names the query and how many evidence items backed it, and confidence is the mean of the
-    evidence confidences (0.0 with no evidence, matching the abstention case).
-    """
-    confidence = sum(item.confidence for item in evidence) / len(evidence) if evidence else 0.0
-    text = (
-        f"[stub] Answered {len(evidence)} evidence item(s) for query: {query!r}"
-        if evidence
-        else f"[stub] No evidence produced for query: {query!r}"
-    )
-    return Answer(
-        text=text,
-        evidence=evidence,
-        trace=trace,
-        confidence=confidence,
-        abstained=abstained,
-        abstention_reason=abstention_reason,
-    )
-
-
-def new_trace_step(
-    module: str,
-    action: str,
-    started_at: datetime,
-    params: dict[str, Any] | None = None,
-    confidence: float | None = None,
-    evidence_ids: list[str] | None = None,
-) -> TraceStep:
-    """Shared helper so pipeline.py doesn't repeat the same TraceStep construction five times."""
-    return TraceStep(
-        module=module,
-        action=action,
-        params=params or {},
-        confidence=confidence,
-        started_at=started_at,
-        completed_at=datetime.now(UTC),
-        evidence_ids=evidence_ids or [],
-    )
+    def build(self) -> ExecutionTrace:
+        """Return an immutable canonical snapshot of all events recorded so far."""
+        return ExecutionTrace(
+            trace_id=self._trace_id,
+            steps=list(self._steps),
+            created_at=self._created_at,
+        )
