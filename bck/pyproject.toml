@@ -66,6 +66,10 @@ modules = [
     "app.ingestion",
     "app.api",
 ]
+# Pipeline stages compose verification as part of pipeline orchestration.
+ignore_imports = [
+    "app.pipeline.stages -> app.verification",
+]
 
 [[tool.importlinter.contracts]]
 name = "Only pipeline composes modules"

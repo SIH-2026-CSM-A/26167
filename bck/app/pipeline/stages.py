@@ -21,6 +21,7 @@ from app.contracts import (
     ImageInput,
     TraceStep,
 )
+from app.verification import verify
 
 T_in = TypeVar("T_in", contravariant=True)
 T_out = TypeVar("T_out", covariant=True)
@@ -85,10 +86,7 @@ def stub_verification(
 
     Preserves backward-compatible tuple signature (verified_evidence, abstained, abstention_reason).
     """
-    import importlib
-
-    verifier_mod = importlib.import_module("app.verification")
-    decision = verifier_mod.verify(evidence=evidence, raw_query=raw_query, images=images)
+    decision = verify(evidence=evidence, raw_query=raw_query, images=images)
     return decision.as_pipeline_tuple()
 
 
