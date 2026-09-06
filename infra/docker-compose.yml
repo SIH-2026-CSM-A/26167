@@ -1,0 +1,51 @@
+name: satquery-local
+
+services:
+  postgres:
+    image: postgres:17.11-alpine3.24
+    environment:
+      POSTGRES_DB: satquery
+      POSTGRES_USER: satquery
+      POSTGRES_PASSWORD: satquery_local_dev
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U satquery -d satquery"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  titiler:
+    image: ghcr.io/developmentseed/titiler:2.2.1
+    command:
+      - uvicorn
+      - titiler.application.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+    environment:
+      AWS_NO_SIGN_REQUEST: "YES"
+      GDAL_DISABLE_READDIR_ON_OPEN: EMPTY_DIR
+    ports:
+      - "127.0.0.1:8001:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/healthz', timeout=2)
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  postgres_data:

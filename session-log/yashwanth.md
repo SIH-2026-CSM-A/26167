@@ -243,3 +243,25 @@ cache had been checked earlier; that conclusion was incomplete.
 - Compatibility findings: InternVL2 requires SentencePiece 0.2.1 for its cached tokenizer;
   Transformers 4.44 loads through `safetensors.torch.safe_open`, so the existing Windows CPU
   pread guard now covers and restores that alias as well.
+
+## 2026-09-06 — JASH-002: Local PostgreSQL and TiTiler
+
+Built via Codex on `feature/26167-JASH-002-local-dev`.
+
+**Did:** added `infra/docker-compose.yml` with pinned PostgreSQL 17.11 and TiTiler 2.2.1
+containers, persistent PostgreSQL storage, service health checks, and the approved local-only
+ports and database credentials. Appended startup, connection, shutdown, and real Sentinel-2 XYZ
+tile verification instructions to `SETUP.md`.
+
+**Rejected:** did not use floating image tags, fabricate a COG URL, synthesize a GeoTIFF, add a
+Dockerfile, or add an environment template that would introduce a manual setup step. The default
+Compose project name `infra` was also rejected after runtime inspection found an unrelated stopped
+stack already using it; the configuration now uses the isolated project name `satquery-local`.
+
+**Real verification:** `docker-compose up -d` created both services from one command. PostgreSQL
+reported healthy and returned database/user `satquery` from a real `psql` query. TiTiler reported
+healthy, read metadata from the public Sentinel-2 COG at
+`https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/11/S/KV/2026/6/S2B_11SKV_20260614_0_L2A/B04.tif`,
+and served `/cog/tiles/WebMercatorQuad/12/685/1616.png` as HTTP 200 `image/png` with 121,196 bytes.
+The temporary tile SHA-256 was
+`D1AF18F8CA0F2B3B93E85744526CA39875685B9603AE472822B88B11587C1DA9`; it was not added to Git.
