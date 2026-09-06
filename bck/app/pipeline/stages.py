@@ -76,14 +76,19 @@ def stub_tool(intent: str, query: str, images: list[ImageInput]) -> Evidence:
     )
 
 
-def stub_verification(evidence: list[Evidence]) -> tuple[list[Evidence], bool, str | None]:
-    """Placeholder for `app.verification` (F15/F16).
+def stub_verification(
+    evidence: list[Evidence],
+    raw_query: str | None = None,
+    images: list[ImageInput] | None = None,
+) -> tuple[list[Evidence], bool, str | None]:
+    """Verification stage calling app.verification.verify (F15/F16).
 
-    Real verification strips unsupported claims, flags modality disagreement, and forces an
-    explicit abstention where evidence is insufficient. This stub passes evidence through
-    unchanged and never abstains.
+    Preserves backward-compatible tuple signature (verified_evidence, abstained, abstention_reason).
     """
-    return list(evidence), False, None
+    from app.verification import verify
+
+    decision = verify(evidence=evidence, raw_query=raw_query, images=images)
+    return decision.as_pipeline_tuple()
 
 
 def stub_evidence(
