@@ -10,6 +10,7 @@ def test_vqa_evidence_contains_actual_asset_and_model_provenance() -> None:
         id="asset-1",
         modality=Modality.OPTICAL,
         format="GTiff",
+        path="scene.tif",
         metadata={"filename": "scene.tif", "width": 4, "height": 3},
     )
 

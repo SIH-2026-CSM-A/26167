@@ -21,11 +21,11 @@ PS_QUERY_5 = "Has the built-up area increased, decreased, or remained unchanged?
 
 
 def _opt(img_id: str = "opt-01") -> ImageInput:
-    return ImageInput(id=img_id, modality=Modality.OPTICAL, format="GeoTIFF")
+    return ImageInput(id=img_id, modality=Modality.OPTICAL, format="GeoTIFF", path=f"{img_id}.tif")
 
 
 def _sar(img_id: str = "sar-01") -> ImageInput:
-    return ImageInput(id=img_id, modality=Modality.SAR, format="GeoTIFF")
+    return ImageInput(id=img_id, modality=Modality.SAR, format="GeoTIFF", path=f"{img_id}.tif")
 
 
 # ---------------------------------------------------------------------------

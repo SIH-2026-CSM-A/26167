@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,6 +70,7 @@ def ingest_raster(upload: RasterUpload) -> IngestedRaster:
                 id=upload.id,
                 modality=upload.modality,
                 format=dataset.driver,
+                path=_persist_temp(upload),
                 metadata=metadata,
             )
     except UnsupportedRasterError:
@@ -78,6 +80,14 @@ def ingest_raster(upload: RasterUpload) -> IngestedRaster:
             f"TIFF '{upload.filename}' could not be read as a raster"
         ) from error
     return IngestedRaster(source=source, visual=visual)
+
+
+def _persist_temp(upload: RasterUpload) -> str:
+    """Write the upload's raw bytes to disk so downstream tools (e.g. BIT) can load by path."""
+    suffix = Path(upload.filename).suffix or ".tif"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(upload.content)
+        return tmp.name
 
 
 def _validate_upload(upload: RasterUpload) -> None:
