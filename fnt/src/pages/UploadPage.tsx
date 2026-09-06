@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ConfigSelector, PipelineConfigMode } from '../components/Upload/ConfigSelector';
 import { SlotUploader } from '../components/Upload/SlotUploader';
 import { QueryResultCard } from '../components/Upload/QueryResultCard';
-import { submitQuery } from '../services/api';
+import { submitImageQuery } from '@/services/query';
 import type { Answer, Modality } from '../types/contracts';
 
 interface SlotData {
@@ -56,27 +56,25 @@ export const UploadPage: React.FC = () => {
     e.preventDefault();
     if (!canSubmit) return;
 
+    if (mode !== 'single') {
+      setError(
+        'Multi-slot pipeline execution is not supported in the YASH-003 single-image VQA slice. Please select "Single Image" configuration.'
+      );
+      return;
+    }
+
+    const primaryFile = slots[0]?.file;
+    if (!primaryFile) {
+      setError('Select a GeoTIFF or TIFF image.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const images: File[] = [];
-      const modalities: Modality[] = [];
-
-      slots.forEach((slot) => {
-        if (slot.file) {
-          images.push(slot.file);
-          modalities.push(slot.modality);
-        }
-      });
-
-      const response = await submitQuery({
-        query: query.trim(),
-        images,
-        modalities,
-      });
-
+      const response = await submitImageQuery(primaryFile, query.trim());
       setResult(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error or backend failed.');
@@ -137,7 +135,7 @@ export const UploadPage: React.FC = () => {
       </form>
 
       {error && (
-        <div className="p-4 bg-rose-950/30 border border-rose-800 rounded-lg text-xs text-rose-300">
+        <div role="alert" className="p-4 bg-rose-950/30 border border-rose-800 rounded-lg text-xs text-rose-300">
           <strong>Submission Error:</strong> {error}
         </div>
       )}
