@@ -266,4 +266,3 @@ Rebased `feature/26167-SHIVA-004-abstention-path` onto latest `origin/main` (`82
 Either:
 - (A) Add narrative claim decomposition and sentence-level grounding to `app.verification` as an explicit capability, OR
 - (B) Declare selective prose hallucination stripping out of scope for deterministic verification and update the vertical-slice contract accordingly (e.g. abstaining completely on ungrounded narrative claims or validating atomic evidence items).
-
