@@ -28,3 +28,4 @@ checkpoints/
 
 # OS
 .DS_Store
+bck/app/training/checkpoints/
