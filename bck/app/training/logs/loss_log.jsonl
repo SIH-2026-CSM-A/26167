@@ -1,0 +1,50 @@
+{"step": 0, "loss": 5.110720634460449, "category": "adjacency", "type": "binary"}
+{"step": 1, "loss": 11.792085647583008, "category": "adjacency", "type": "binary"}
+{"step": 2, "loss": 8.526904106140137, "category": "area", "type": "binary"}
+{"step": 3, "loss": 4.9342498779296875, "category": "area", "type": "binary"}
+{"step": 4, "loss": 5.197646141052246, "category": "count", "type": "binary"}
+{"step": 5, "loss": 6.38875675201416, "category": "count", "type": "binary"}
+{"step": 6, "loss": 4.577787399291992, "category": "presence", "type": "binary"}
+{"step": 7, "loss": 3.1802241802215576, "category": "presence", "type": "binary"}
+{"step": 8, "loss": 2.262244462966919, "category": "None", "type": "captioning"}
+{"step": 9, "loss": 4.565901756286621, "category": "adjacency", "type": "mcq"}
+{"step": 10, "loss": 3.8099474906921387, "category": "area", "type": "mcq"}
+{"step": 11, "loss": 1.2792247533798218, "category": "climate zone", "type": "mcq"}
+{"step": 12, "loss": 1.8481696844100952, "category": "count", "type": "mcq"}
+{"step": 13, "loss": 2.639780282974243, "category": "country", "type": "mcq"}
+{"step": 14, "loss": 1.6079844236373901, "category": "presence", "type": "mcq"}
+{"step": 15, "loss": 2.816754102706909, "category": "season", "type": "mcq"}
+{"step": 16, "loss": 6.105007648468018, "category": "adjacency", "type": "binary"}
+{"step": 17, "loss": 7.137086868286133, "category": "adjacency", "type": "binary"}
+{"step": 18, "loss": 4.92839241027832, "category": "area", "type": "binary"}
+{"step": 19, "loss": 5.864935874938965, "category": "area", "type": "binary"}
+{"step": 20, "loss": 5.084702491760254, "category": "count", "type": "binary"}
+{"step": 21, "loss": 4.531545162200928, "category": "count", "type": "binary"}
+{"step": 22, "loss": 4.726439476013184, "category": "presence", "type": "binary"}
+{"step": 23, "loss": 8.145423889160156, "category": "presence", "type": "binary"}
+{"step": 24, "loss": 1.9874705076217651, "category": "None", "type": "captioning"}
+{"step": 25, "loss": 0.9395401477813721, "category": "adjacency", "type": "mcq"}
+{"step": 26, "loss": 2.2637484073638916, "category": "area", "type": "mcq"}
+{"step": 27, "loss": 1.081998348236084, "category": "climate zone", "type": "mcq"}
+{"step": 28, "loss": 1.7119687795639038, "category": "count", "type": "mcq"}
+{"step": 29, "loss": 3.2242960929870605, "category": "country", "type": "mcq"}
+{"step": 30, "loss": 2.490649700164795, "category": "presence", "type": "mcq"}
+{"step": 31, "loss": 2.8904409408569336, "category": "season", "type": "mcq"}
+{"step": 32, "loss": 3.9200496673583984, "category": "adjacency", "type": "binary"}
+{"step": 33, "loss": 3.4264965057373047, "category": "adjacency", "type": "binary"}
+{"step": 34, "loss": 2.6557693481445312, "category": "area", "type": "binary"}
+{"step": 35, "loss": 5.149693012237549, "category": "area", "type": "binary"}
+{"step": 36, "loss": 3.6924610137939453, "category": "count", "type": "binary"}
+{"step": 37, "loss": 3.0515873432159424, "category": "count", "type": "binary"}
+{"step": 38, "loss": 2.399684190750122, "category": "presence", "type": "binary"}
+{"step": 39, "loss": 5.7144646644592285, "category": "presence", "type": "binary"}
+{"step": 40, "loss": 1.8974190950393677, "category": "None", "type": "captioning"}
+{"step": 41, "loss": 2.5168988704681396, "category": "adjacency", "type": "mcq"}
+{"step": 42, "loss": 2.8140153884887695, "category": "area", "type": "mcq"}
+{"step": 43, "loss": 1.004002571105957, "category": "climate zone", "type": "mcq"}
+{"step": 44, "loss": 3.9882524013519287, "category": "count", "type": "mcq"}
+{"step": 45, "loss": 2.527252197265625, "category": "country", "type": "mcq"}
+{"step": 46, "loss": 2.2720890045166016, "category": "presence", "type": "mcq"}
+{"step": 47, "loss": 2.9317164421081543, "category": "relative pos", "type": "mcq"}
+{"step": 48, "loss": 0.8587734699249268, "category": "season", "type": "mcq"}
+{"step": 49, "loss": 1.0096654891967773, "category": "adjacency", "type": "binary"}
