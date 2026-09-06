@@ -1,4 +1,3 @@
-
 """
 AASH-002 Path C: text-only LoRA training loop.
 Targets InternVL3-2B's last 2 decoder layers (26, 27) using real
@@ -8,12 +7,14 @@ Does NOT touch mlp1 projector (needs real Sentinel imagery, separate
 follow-up -- see HANDOFF). This proves AASH-002 acceptance criteria 2/3:
 real training run, real loss log, real saved adapter.
 """
+
 import json
 import os
+
 import torch
 from datasets import load_dataset
-from transformers import AutoModel, AutoTokenizer
 from peft import LoraConfig, get_peft_model
+from transformers import AutoModel, AutoTokenizer
 
 MODEL_ID = "OpenGVLab/InternVL3-2B"
 DATASET_ID = "BIFOLD-BigEarthNetv2-0/BigEarthNet.txt"
