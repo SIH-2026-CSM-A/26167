@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 .uv-cache/
 bck/.system-libs/
+.pytest_cache/
 
 # Node
 node_modules/

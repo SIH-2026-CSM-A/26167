@@ -13,6 +13,7 @@ dependencies = [
     "alembic>=1.14",
     "pydantic-settings>=2.5",
     "transformers==4.44.2",
+    "safetensors>=0.8.0",
     "torch>=2.4",
     "accelerate==0.34.2",
     "bitsandbytes>=0.44",
@@ -64,7 +65,6 @@ modules = [
     "app.verification",
     "app.evidence",
     "app.ingestion",
-    "app.api",
 ]
 
 [[tool.importlinter.contracts]]
