@@ -228,3 +228,22 @@ Second review feedback from `@ybaddam8-png` rejected the dynamic import `importl
 - `uv run --no-sync pytest` $\rightarrow$ PASS (98 passed in 21.75s)
 - PR #17 reopened, reviewer response posted, and review re-requested from `@ybaddam8-png`.
 
+---
+
+### Rebase onto origin/main (YASH-003 Integration) & Architecture Reconciliation
+
+**Context & Objectives:**
+Rebased `feature/26167-SHIVA-004-abstention-path` onto latest `origin/main` (`8254c46`, PR #25 YASH-003 vertical slice). Manually resolved architecture conflicts without global `--ours`/`--theirs` flags according to core architecture decisions:
+1. Canonical SHIVA-004 verification preserved entirely (`verify()`, deterministic rule-table evaluation, schemas, rules).
+2. Retired temporary placeholder `verify_answer()` and `VerificationResult` removed from `app.verification`.
+3. Preserved `main`'s pipeline architecture (`bck/app/pipeline/stages.py` kept as HEAD; `bck/app/pipeline/pipeline.py` reconciled to invoke canonical `verify([evidence], policy=...)` and record auditable `verification_completed` trace step).
+4. `bck/pyproject.toml` reverted to 0 diff against `origin/main`. `app.pipeline` is an orchestrator rather than a leaf module, so static `from app.verification import verify` satisfies all architectural contracts without `ignore_imports`.
+5. Reconciled tests in `test_adversarial_abstention.py`, `test_pipeline.py`, and `test_vertical_slice.py` to assert against canonical verification decisions and traces.
+
+**Verification Results:**
+- `git diff --check` $\rightarrow$ PASS (0 whitespace errors)
+- `uv run --no-sync ruff check .` $\rightarrow$ PASS (0 errors)
+- `uv run --no-sync ruff format --check .` $\rightarrow$ PASS (90 files formatted)
+- `uv run --no-sync lint-imports` $\rightarrow$ PASS (Contracts: 3 kept, 0 broken, 0 ignored imports)
+- `uv run --no-sync pytest` $\rightarrow$ PASS (114 passed in 10.5s)
+

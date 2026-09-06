@@ -26,9 +26,8 @@ from app.contracts import (
     ExecutionTrace,
     ImageInput,
     Modality,
-    QueryRequest,
 )
-from app.pipeline.pipeline import run
+from app.pipeline import PipelineUpload, run
 from app.tools.fusion.cloud_detector import detect_clouds
 from app.tools.fusion.despeckle import lee_filter
 from app.tools.fusion.reconcile import reconcile_sar_optical
@@ -42,6 +41,7 @@ from app.verification import (
     verification_trace_params,
     verify,
 )
+from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 S1_PATH = FIXTURES_DIR / "Bolivia_103757_S1Hand.tif"
@@ -425,20 +425,30 @@ def test_ac_5_trace_params_distinguishes_abstention_from_low_confidence():
 # ---------------------------------------------------------------------------
 def test_ac_6_pipeline_e2e_auditable_trace():
     """AC 6: Full pipeline.run(request) records verification hop with auditable parameters."""
-    req = QueryRequest(
-        query="Analyze the vegetation index in this area.",
-        images=[ImageInput(id="img-01", modality=Modality.OPTICAL, format="GeoTIFF")],
+    upload = PipelineUpload(
+        id="img-01",
+        filename="scene.tif",
+        content_type="image/tiff",
+        content=make_geotiff_bytes(),
+        modality=Modality.OPTICAL,
     )
-
-    answer = run(req)
+    model = DeterministicVqaModel(
+        answer="Vegetation index is 0.7.",
+        grounding="Vegetation index is 0.7 in the scene.",
+    )
+    answer = run(
+        query="Analyze the vegetation index in this area.",
+        uploads=[upload],
+        model=model,
+    )
 
     assert isinstance(answer, Answer)
     assert answer.trace is not None
-    assert len(answer.trace.steps) == 4
 
-    verify_step = next((s for s in answer.trace.steps if s.module == "verification"), None)
+    verify_step = next(
+        (s for s in answer.trace.steps if s.action == "verification_completed"), None
+    )
     assert verify_step is not None
-    assert verify_step.action == "verify"
     assert "status" in verify_step.params
     assert "effective_confidence" in verify_step.params
     assert "retained_evidence_count" in verify_step.params

@@ -193,9 +193,7 @@ def run(
 
     verified_text = "" if decision.is_abstained else tool_result.raw_answer
     rejected_claims = (
-        tuple(d.description for d in decision.disagreements)
-        if decision.is_abstained
-        else ()
+        tuple(d.description for d in decision.disagreements) if decision.is_abstained else ()
     )
     evidence = build_vqa_evidence(
         asset=source.source,
