@@ -2,6 +2,7 @@
 
 import numpy as np
 import rasterio
+from PIL import Image
 from rasterio.io import MemoryFile
 from rasterio.transform import from_origin
 
@@ -29,3 +30,22 @@ def make_geotiff_bytes() -> bytes:
                 rasterio.enums.ColorInterp.blue,
             )
         return memory_file.read()
+
+
+class DeterministicVqaModel:
+    """Stand in only for expensive inference while preserving the real model boundary."""
+
+    model_id = "test/deterministic-vqa"
+    device = "test"
+
+    def __init__(self, answer: str, grounding: str) -> None:
+        """Store deterministic outputs for answer and grounding passes."""
+        self._answer = answer
+        self._grounding = grounding
+
+    def generate(self, image: Image.Image, prompt: str) -> str:
+        """Return grounding only when the production grounding prompt is supplied."""
+        assert image.mode == "RGB"
+        if "Candidate answer:" in prompt:
+            return self._grounding
+        return self._answer
