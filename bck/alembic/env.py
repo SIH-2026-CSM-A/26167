@@ -1,14 +1,19 @@
 import asyncio
+import sys
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from alembic import context
 from app.core.config import get_settings
 from app.core.db import get_engine
+from app.db.models import Base
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 config = context.config
 
-target_metadata = None
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:

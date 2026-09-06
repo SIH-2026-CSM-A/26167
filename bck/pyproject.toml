@@ -67,6 +67,7 @@ modules = [
     "app.verification",
     "app.evidence",
     "app.ingestion",
+    "app.db",
 ]
 
 [[tool.importlinter.contracts]]
@@ -75,7 +76,7 @@ type = "layers"
 layers = [
     "app.api",
     "app.pipeline",
-    "app.router | app.verification | app.evidence | app.ingestion | app.models | app.training | app.tools.vqa_grounding | app.tools.change_detection | app.tools.fusion",
+    "app.router | app.verification | app.evidence | app.ingestion | app.models | app.training | app.tools.vqa_grounding | app.tools.change_detection | app.tools.fusion | app.db",
     "app.core",
     "app.contracts",
 ]
@@ -87,4 +88,5 @@ source_modules = ["app.contracts"]
 forbidden_modules = [
     "app.core", "app.pipeline", "app.api", "app.models", "app.training",
     "app.tools", "app.router", "app.verification", "app.evidence", "app.ingestion",
+    "app.db",
 ]

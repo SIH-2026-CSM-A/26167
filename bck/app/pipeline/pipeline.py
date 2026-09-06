@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.contracts import Answer, QueryRequest
+from app.db import persist_trace
 from app.evidence import assemble_answer, build_vqa_evidence
 from app.ingestion import (
     InvalidRasterError,
@@ -225,10 +226,16 @@ def run(
         },
         evidence_ids=[item.id for item in evidence_list],
     )
+    trace = recorder.build()
+    try:
+        persist_trace(trace, evidence_list)
+    except Exception as error:
+        _fail(recorder, stage="persistence", message=str(error), status_code=500)
+
     return assemble_answer(
         text=verified_text,
         evidence=evidence_list,
-        trace=recorder.build(),
+        trace=trace,
         abstained=decision.is_abstained,
         abstention_reason=decision.abstention_reason,
     )
