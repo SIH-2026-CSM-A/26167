@@ -287,3 +287,20 @@ untouched, since 05 is still legitimately reserved for scattering divergence.
 - `uv run ruff format --check .` → PASS
 - `uv run lint-imports` → PASS (Contracts: 3 kept, 0 broken)
 - `uv run pytest` → PASS (114 passed)
+
+## 2026-09-06 — JASH-003: Backend TiTiler Configuration and URL Helper
+
+Built via Antigravity on `feature/JASH-003-titiler-serving`.
+
+**Did:**
+- Added `titiler_base_url: str = "http://localhost:8001"` to `Settings` in `bck/app/core/config.py`.
+- Created `bck/app/core/tiles.py` implementing `get_cog_tile_url(cog_path, tile_matrix_set="WebMercatorQuad", settings=None) -> str` returning the XYZ tile template format `f"{base_url}/cog/tiles/{tile_matrix_set}/{{z}}/{{x}}/{{y}}?url={quote_plus(cog_path)}"`.
+- Created comprehensive unit tests in `bck/tests/test_tiles.py` verifying template structure against local paths and remote URLs, ensuring `{z}`, `{x}`, `{y}` remain literal curly braces, validating special characters and slashes encoding, and checking base URL trailing slash normalization and argument validation.
+- Added tests in `bck/tests/core/test_config.py` validating default and environment overrides for `titiler_base_url`.
+
+**Rejected along the way:**
+- Rejected hardcoding the TileMatrixSet in the template string; defaulted to `"WebMercatorQuad"` as required by TiTiler while keeping it parameterizable and validated.
+- Rejected manual escaping in favor of `urllib.parse.quote_plus` to safely handle slashes, spaces, queries, and reserved URI characters in COG paths.
+- Rejected mutating curly braces or percent-encoding them; ensured `{z}`, `{x}`, `{y}` remain intact for frontend map client consumption (e.g. MapLibre / Leaflet).
+
+**Checks:** `uv run ruff check .` (PASS), `uv run ruff format --check .` (PASS), `uv run lint-imports` (PASS, 3 kept, 0 broken), `uv run pytest` (PASS, 132 passed, 3 skipped).
