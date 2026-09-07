@@ -467,3 +467,104 @@ Agent: Antigravity (handoff from Codex).
 
 **Incomplete**
 - None. Ready for backend integration with ticket AASH-005.
+
+## 2026-09-07 — JASH-004 preserved-branch audit and current-main E2E — Codex
+
+**Architecture and scope audit**
+- Preserved the existing `feature/26167-JASH-004-persist-trace` implementation; the invalid
+  `sentencepiece==0.2.1` commit exists only on the closed compatibility branch and is absent
+  from JASH-004.
+- Preserved Option B. PR #42 reviewer comment `5566236249` described JSONB TraceStep storage
+  as reasonable, and comment `5567915088` subsequently confirmed the persistence layer was
+  clean. No later comment explicitly revoked that architecture.
+- `bck/pyproject.toml` changes only add the `app.db` import-linter boundary. The branch retains
+  current-main `sentencepiece==0.2.2` and does not modify any model source or dependency pin.
+
+**Deployed migration repair and proof**
+- The live Docker database was stamped at `c9c6d725a002`, but catalog inspection found
+  `evidence.trace_id` nullable because that already-applied revision had later been edited.
+- Added follow-up revision `ed7c2c7c6c4a` rather than rewriting or deleting the original
+  migration. A focused offline-SQL regression failed before the revision and passed afterward.
+- Live migration output:
+
+```text
+=== alembic current before ===
+c9c6d725a002
+=== alembic heads ===
+ed7c2c7c6c4a (head)
+=== alembic upgrade head ===
+=== alembic current after ===
+ed7c2c7c6c4a (head)
+```
+
+- Direct PostgreSQL catalog proof after upgrade:
+
+```text
+    table_name    | column_name |        data_type         | is_nullable
+------------------+-------------+--------------------------+-------------
+ evidence         | id          | character varying        | NO
+ evidence         | trace_id    | character varying        | NO
+ evidence         | tool        | character varying        | NO
+ evidence         | type        | character varying        | NO
+ evidence         | payload     | jsonb                    | NO
+ evidence         | confidence  | double precision         | NO
+ evidence         | timing      | double precision         | NO
+ evidence         | created_at  | timestamp with time zone | NO
+ execution_traces | trace_id    | character varying        | NO
+ execution_traces | created_at  | timestamp with time zone | NO
+ execution_traces | steps       | jsonb                    | NO
+(11 rows)
+
+    constraint_name     | table_name | column_name | foreign_table_name | foreign_column_name | delete_rule
+------------------------+------------+-------------+--------------------+---------------------+-------------
+ evidence_trace_id_fkey | evidence   | trace_id    | execution_traces   | trace_id            | CASCADE
+(1 row)
+```
+
+**Current-main model readiness and real HTTP acceptance**
+- Synchronized the environment with `uv sync --all-extras --dev`; runtime SentencePiece is
+  `0.2.2`, matching the repository lock.
+- Staged `OpenGVLab/InternVL3-2B` revision
+  `899155015275a9b7338c7f4677e19c784e0e5a21`, then initialized the real `InternVLAdapter`
+  offline on CPU with `torch.bfloat16`. Readiness returned
+  `MODEL_READY True InternVLChatModel Qwen2Tokenizer`.
+- Used real `POST /query`, `RGB.byte.tif`, the real adapter/model, and Docker PostgreSQL. No
+  fake adapter, fixture, direct pipeline substitute, `persist_trace()` shortcut, or manual SQL
+  insert was used.
+- The preferred first question returned HTTP 200 in 499.02 seconds and honestly abstained;
+  trace `f764b2cb-85e2-4fba-a4ad-24b5342e62fa` has 13 steps and no Evidence row because all
+  unsupported claims were filtered.
+- Evidence-bearing acceptance query 1 returned HTTP 200 in 557.60 seconds: trace
+  `81145673-ad6e-4763-b6a9-ca13dfd25666`, Evidence
+  `da81c7be-17b7-4f1e-bed9-ca5f8f8cdfa6`.
+- Evidence-bearing acceptance query 2 returned HTTP 200 in 499.81 seconds: trace
+  `2f3321b9-fdcc-4f50-818f-ecb046febe07`, Evidence
+  `8509eaa6-c39d-46ae-b460-b4c65e0fd693`. This natural response produced one verification
+  disagreement, and the rejected-claim audit entry persisted without manipulating the query.
+
+**Raw PostgreSQL acceptance rows**
+
+```text
+               trace_id               |          created_at           | step_count |    final_action    |            final_evidence_ids
+--------------------------------------+-------------------------------+------------+--------------------+------------------------------------------
+ 81145673-ad6e-4763-b6a9-ca13dfd25666 | 2026-09-07 13:07:29.356276+00 |         13 | response_completed | ["da81c7be-17b7-4f1e-bed9-ca5f8f8cdfa6"]
+ 2f3321b9-fdcc-4f50-818f-ecb046febe07 | 2026-09-07 13:18:32.906868+00 |         13 | response_completed | ["8509eaa6-c39d-46ae-b460-b4c65e0fd693"]
+(2 rows)
+
+                  id                  |               trace_id               |     tool     | type |     confidence     |       timing       |        model_id        | rejected_claims | source_filename
+--------------------------------------+--------------------------------------+--------------+------+--------------------+--------------------+------------------------+-----------------+-----------------
+ da81c7be-17b7-4f1e-bed9-ca5f8f8cdfa6 | 81145673-ad6e-4763-b6a9-ca13dfd25666 | internvl_vqa | text |                  1 |  557.5028756000102 | OpenGVLab/InternVL3-2B | []              | RGB.byte.tif
+ 8509eaa6-c39d-46ae-b460-b4c65e0fd693 | 2f3321b9-fdcc-4f50-818f-ecb046febe07 | internvl_vqa | text | 0.8333333333333334 | 499.69043819996295 | OpenGVLab/InternVL3-2B | ["Narrative claim 'The satellite image reveals the following features:\n\n- **Land**: The visible landmass is the Canadian Shield, characterized by its green' is not supported by any grounded observation."] | RGB.byte.tif
+(2 rows)
+```
+
+Agent: Codex.
+
+**Final preserved-branch verification**
+- Focused rejected-claim/identity regression: `1 passed`.
+- `uv run ruff check .`: PASS.
+- `uv run ruff format --check .`: PASS (`116 files already formatted`).
+- `uv run lint-imports`: PASS (`3 kept, 0 broken`).
+- `uv run pytest -q`: PASS (`222 passed, 9 skipped, 50 warnings`). The run used a
+  branch-local pytest temp directory because the global Windows pytest temp path was locked;
+  no test assertions failed in the earlier environment-only run.
