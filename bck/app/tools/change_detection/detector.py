@@ -22,7 +22,6 @@ from app.contracts import Evidence, EvidenceType, ImageInput
 from app.tools.change_detection.change_summary import summarize_change
 from app.tools.change_detection.confidence import compute_confidence
 from app.tools.change_detection.confounder_gate import evaluate_confounder_gate
-from app.tools.change_detection.registration_quality import require_registration_quality
 from bit_vendor.networks import define_G
 
 _TOOL_NAME = "change_detection.bit"
@@ -62,8 +61,6 @@ def detect_change(
     this function should guess.
     """
     started = time.perf_counter()
-
-    require_registration_quality(image_a.path, image_b.path)
 
     tensor_a = _load_and_preprocess(image_a.path)
     tensor_b = _load_and_preprocess(image_b.path)

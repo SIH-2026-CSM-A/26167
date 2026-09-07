@@ -88,8 +88,13 @@ def normalize_radiometry(
     post = np.asarray(image_post, dtype=np.float32)
     if pre.shape != post.shape:
         raise ValueError(f"image shapes differ: {pre.shape} vs {post.shape}")
-    if valid_mask is not None and valid_mask.shape != pre.shape[:2]:
-        raise ValueError(f"valid_mask shape {valid_mask.shape} != image shape {pre.shape[:2]}")
+    spatial_shape = (
+        pre.shape
+        if pre.ndim == 2
+        else (pre.shape[1:] if pre.shape[0] < pre.shape[-1] else pre.shape[:2])
+    )
+    if valid_mask is not None and valid_mask.shape != spatial_shape:
+        raise ValueError(f"valid_mask shape {valid_mask.shape} != image shape {spatial_shape}")
 
     vm = np.asarray(valid_mask, dtype=bool) if valid_mask is not None else None
     norm_post = np.empty_like(post)
@@ -145,12 +150,29 @@ def filter_confounder_mask(
     return filtered, valid_mask, cloud_frac
 
 
+def _apply_radiometric_gate(
+    mask: np.ndarray,
+    pre: np.ndarray,
+    post: np.ndarray,
+    valid_mask: np.ndarray,
+) -> np.ndarray:
+    """Filter out spurious changes where post-RRN radiometric delta is negligible."""
+    _, norm_post = normalize_radiometry(pre, post, valid_mask=valid_mask)
+    diff = np.abs(pre - norm_post)
+    axis = 0 if (diff.ndim == 3 and diff.shape[0] < diff.shape[-1]) else -1
+    rad_delta = np.max(diff, axis=axis) if diff.ndim == 3 else diff
+    rad_threshold = 1.0 if float(np.max(pre)) > 1.0 else 0.05
+    return mask & (rad_delta > rad_threshold)
+
+
 def evaluate_confounder_gate(
     raw_mask: np.ndarray,
     path_a: str | None = None,
     path_b: str | None = None,
     cloud_mask: np.ndarray | None = None,
     area_threshold: float = _FALSE_CHANGE_AREA_THRESHOLD,
+    image_pre: np.ndarray | None = None,
+    image_post: np.ndarray | None = None,
 ) -> ConfounderGateResult:
     """Pre-check gate evaluating registration, cloud/shadow masks, and precision threshold."""
     shift_px: float | None = None
@@ -158,6 +180,8 @@ def evaluate_confounder_gate(
         shift_px = require_registration_quality(path_a, path_b)
 
     filtered_mask, valid_mask, cloud_frac = filter_confounder_mask(raw_mask, cloud_mask)
+    if image_pre is not None and image_post is not None:
+        filtered_mask = _apply_radiometric_gate(filtered_mask, image_pre, image_post, valid_mask)
     valid_pixels = int(valid_mask.sum())
     total_pixels = int(raw_mask.size)
     changed_pixels = int(filtered_mask.sum())

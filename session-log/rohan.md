@@ -357,3 +357,8 @@ branch current with `origin/feature/26167-ROHAN-004-directional-change-vqa`).
 ## Agent
 Antigravity (Gemini 3.8 Flash High)
 
+
+## Code Review Defect Resolution
+- **Eliminated Duplicate Registration Check**: Purged redundant `require_registration_quality()` call from `bck/app/tools/change_detection/detector.py`; registration validation is now encapsulated exclusively inside `evaluate_confounder_gate()`.
+- **Wired Radiometric Normalization into Execution Path**: Integrated `normalize_radiometry()` into `evaluate_confounder_gate()` via `_apply_radiometric_gate()`, actively filtering negligible post-RRN radiometric deltas on real arrays prior to thresholding.
+- **Rewrote Seasonal Illumination Test**: Refactored `test_real_sen1floods11_seasonal_illumination_suppressed_by_radiometric_norm()` in `bck/tests/test_confounder_gate.py` to pass raw unnormalized image arrays directly into `evaluate_confounder_gate()`, verifying end-to-end normalization within the gate.

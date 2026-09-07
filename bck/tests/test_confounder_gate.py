@@ -9,7 +9,6 @@ from app.tools.change_detection.confounder_gate import (
     _FALSE_CHANGE_AREA_THRESHOLD,
     evaluate_confounder_gate,
     filter_confounder_mask,
-    normalize_radiometry,
 )
 from app.tools.change_detection.registration_quality import RegistrationQualityError
 from app.tools.fusion.cloud_detector import detect_clouds
@@ -69,16 +68,16 @@ def test_real_sen1floods11_seasonal_illumination_suppressed_by_radiometric_norm(
     unnormalized_change_frac = raw_delta.mean()
     assert unnormalized_change_frac > 0.20  # >20% spurious change from illumination alone
 
-    # With Relative Radiometric Normalization, seasonal variance is eliminated
-    _, norm_winter = normalize_radiometry(arr, winter_scene)
-    norm_delta = np.abs(arr - norm_winter)
-    assert norm_delta.max() < 1e-2
-
-    normalized_mask = norm_delta[0] > 1.0  # Zero pixels exceed threshold
-    gate_result = evaluate_confounder_gate(raw_mask=normalized_mask)
+    # Gate applies Relative Radiometric Normalization internally to suppress false change
+    gate_result = evaluate_confounder_gate(
+        raw_mask=raw_delta,
+        image_pre=arr,
+        image_post=winter_scene,
+    )
     assert gate_result.suppressed is True
     assert gate_result.changed_pixel_count == 0
     assert gate_result.changed_percentage == 0.0
+    assert "suppressed as false change" in gate_result.reason
 
 
 def test_real_sen12ms_cr_complete_cloud_obstruction_suppresses_detection():
