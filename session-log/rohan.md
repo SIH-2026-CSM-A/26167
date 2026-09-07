@@ -398,3 +398,92 @@ All four green: `ruff check` clean, `ruff format --check` (108 files),
 
 - The Bhoonidhi / domain-gap-test half of AASH-004 — not touched.
 - Nothing committed. `inspect_live_model()` not run locally.
+
+---
+
+# AASH-004 — Bhoonidhi domain-gap investigation (second half)
+
+### 2026-09-07 — Claude Code
+
+## What was checked
+
+Installed the real open-source `bhoonidhi-downloader` package (PyPI, v0.5.5,
+CLI `bhd`) via `uv tool install` — outside the repo, no repo files touched. Used
+its live catalogue and scene-search commands (`bhd archive list`,
+`bhd query create ... --no-save`) against ISRO/NRSC's Bhoonidhi portal
+(bhoonidhi.nrsc.gov.in).
+
+Catalogue browsing and scene search ran with **no login, no session file, no
+auth prompt** — confirming the portal's own FAQ ("For browsing through the
+products catalogue user login is not required"). `bhd archive`'s own help text
+also states "No login required". No Bhoonidhi account was used or created.
+
+No custom scraper was written — the existing tool was used as instructed. No
+authentication attempted, nothing downloaded.
+
+## Real findings
+
+**Both target missions exist in the live catalogue** (`bhd archive list`,
+fetched live from the portal):
+
+| Satellite | Availability window | Access tier | Sensors | Res (m) |
+|---|---|---|---|---|
+| CartoSat-2S | 25 Jun 2017 – till date | Priced | MX(SPOT), PAN(SPOT) | 0.65 – 1.6 |
+| RISAT-1 | 01 Jul 2012 – 30 Sep 2016 | OnOrder | SAR CRS/FRS1/FRS2/MRS | 3 – 30 |
+
+Only RISAT-1 is present — no RISAT-2/2B under a "RISAT" name.
+
+**AOI searched: Delhi NCR bounding box, `minx 76.8, maxx 77.6, miny 28.2,
+maxy 29.0`** (≈76.8–77.6°E, 28.2–29.0°N). Chosen as a coverage sanity check: a
+continuously-tasked urban area across both missions' full lifetimes, so a hit is
+guaranteed if any exists. Not a science AOI.
+
+- **CartoSat-2S**, `2025-01-01 → 2025-03-31`: **60 scenes** (a full-year
+  `2025-01-01 → 2025-12-31` run returned 177). Sample dates 25-Jan, 16-Feb,
+  19-Feb, 21-Feb 2025; products `CartoSat-2S_MX(SPOT)` (1.6 m) and
+  `CartoSat-2S_PAN(SPOT)` (0.65 m). Example scene ID:
+  `C2E_PAN_SP_25-JAN-2025_1_1_SAN_42103_25-JAN-2025_SSR _42103_1_0`.
+  **Every row `Availability = Priced`.** Legend printed by the tool:
+  "Priced — requires payment — purchase it on the Bhoonidhi portal".
+- **RISAT-1**, `2016-01-01 → 2016-09-30`: **94 scenes** (Jan–Sep 2016).
+  Availability splits by product: **FRS1 (3 m) = `Priced`**;
+  **MRS (30 m) and CRS (50 m) = `OnOrder`** (free, must be requested). Example
+  IDs: `RI1_SAR_FR1_03-JAN-2016_20322_9_SAN_PLD_03-JAN-2016_20322_1_R_V+H_A`
+  (Priced), `RI1_SAR_CRS_21-APR-2016_21972_12_ANT_SSRD_...` (OnOrder).
+- **No recent RISAT-1 imagery exists at all.** A `2025` search is refused
+  outright by the tool: "skipped RISAT-1 — data ends 2016-09-30, before search
+  end / Search failed: No valid selections to search". RISAT-1's archive ends
+  30 Sep 2016.
+
+## Honest bottom line
+
+**No freely-downloadable sub-10 m Cartosat-2S or RISAT imagery exists on
+Bhoonidhi.** All Cartosat sub-metre optical is `Priced` (NSIL-commercial). The
+only fine-resolution RISAT product (FRS1, 3 m) is also `Priced`. The single free
+tier — RISAT-1 MRS/CRS at 30–50 m — is *coarser* than the embedding half's own
+0.5–2 m extrapolation target (Cartosat/RISAT fine end), so pulling it would not
+meaningfully exercise the domain-gap test even if pursued. There is nothing free
+and useful to obtain here.
+
+## AC status
+
+- **AC-1 (Bhoonidhi account registration)** — **NOT completed.** Deferred by team
+  decision: registration would not have changed the outcome (nothing free or
+  useful to gain, per the findings above). **Flagged for lead sign-off:** does
+  AC-1 close as-is on the documented investigation, or must the registration be
+  done regardless of the null result?
+- **AC-3 ("if real imagery obtained, run un-adapted vs Sentinel-trained
+  baseline")** — **never triggers.** No real fine-GSD imagery was obtained, so
+  the un-adapted-vs-Sentinel baseline ambiguity Yashwanth raised is moot for
+  this run.
+- **AC-4 (GSD-conditioning embedding + multi-scale augmentation)** — already
+  satisfied by the embedding half of AASH-004, committed separately
+  (`gsd_conditioning.py`, `verify_gsd_conditioning.py`, wiring in
+  `train_lora_mlp1_vision.py`).
+
+## Out of scope / untouched
+
+- Embedding-half files — not touched this step.
+- `bhoonidhi-downloader` installed as a `uv` tool outside the repo; no
+  dependency added to `bck`.
+- Nothing committed.
