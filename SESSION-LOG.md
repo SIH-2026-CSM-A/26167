@@ -445,6 +445,7 @@ ORDER BY created_at;
 - Fixed local pytest failure: Added in-memory SQLite `StaticPool` sessionmaker patches to `test_main.py`, `test_vertical_slice.py`, `test_pipeline.py`, and `test_adversarial_abstention.py`. Full pytest suite passes 100% green (145 passed, 8 skipped) with `DATABASE_URL` and `COST_CEILING` completely unset.
 - AC3 Verification: Pasted actual raw PostgreSQL query rows from `docker exec satquery-local-postgres-1 psql` for both E2E requests.
 - Option B Architecture Sign-Off: Confirmed Option B document persistence (`steps` and `payload` as JSONB in `execution_traces` and `evidence`) avoids schema migrations on adding tools, awaiting final lead sign-off.
+- Branch Synchronization (PR #44 / sentencepiece 0.2.2): Merged latest `origin/main` (incorporating PR #44 `sentencepiece==0.2.2`, PR #40 JASH-005 demo dataset, and PR #45 SHIVA-005 verification layer). Confirmed `sentencepiece` resolves to `0.2.2` in `pyproject.toml` and `uv.lock`. Updated `tests/core/test_demo_manifest.py` with `sqlite_db` fixture for offline persistence. All 4 verification gates passed 100% locally (`ruff`, `ruff format`, `lint-imports`, `pytest -q`: 220 passed, 9 skipped).
 
 Agent: Antigravity (handoff from Codex).
 
