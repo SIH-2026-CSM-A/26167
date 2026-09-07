@@ -200,6 +200,18 @@ Agent: Claude Code (Sonnet 5).
   injected-model single-image boundary are verified; judge-level all-preset
   production inference remains partial pending those preconditions.
 
+**Review fix (PR #40 send-back)**
+- PR #40 reviewed by ybaddam8-png with two blockers:
+  1. Missing direct regression test for _normalize_band() int16 masked-array handling in test_raster.py.
+  2. Manifest contract / field shape unblock comment for LIKI-006 needed on handoff surface.
+- Added direct unit regression test_normalize_band_handles_int16_masked_array() in bck/tests/ingestion/test_raster.py.
+- Verified RED reproduction against pre-fix code order np.asarray(band.filled(np.nan), dtype=np.float32): raised TypeError: Cannot convert fill_value nan to dtype int16.
+- Verified GREEN with production line band.astype(np.float32).filled(np.nan) (1 passed in 0.36s).
+- Targeted suites: tests/ingestion/test_raster.py 4 passed; tests/core/test_demo_manifest.py 36 passed, 1 skipped.
+- Full backend gates: Ruff check PASS, Ruff format PASS (106 files), import-linter 3 kept, 0 broken, full pytest 173 passed, 9 skipped in 11.92s.
+- Manifest contract handoff documented and posted for LIKI-006.
+- Manifest JSON and asset binaries remain untouched.
+
 ## 2026-09-06 — ROHAN-004: registration-quality gate + directional change classification — Rohan (Claude Code)
 
 **Done**
