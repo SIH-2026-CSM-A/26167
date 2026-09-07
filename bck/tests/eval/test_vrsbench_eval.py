@@ -18,10 +18,10 @@ def test_iou_xyxy():
     # No intersection
     assert iou_xyxy([0.0, 0.0, 5.0, 5.0], [10.0, 10.0, 15.0, 15.0]) == 0.0
 
-    # Partial overlap (5x10 intersection area = 50, total union area = 150 -> 1/3)
+    # Partial overlap (5x10 intersection area = 50, union area = 150 -> 1/3)
     box_a = [0.0, 0.0, 10.0, 10.0]
     box_b = [5.0, 0.0, 15.0, 10.0]
-    assert abs(iou_xyxy(box_a, box_b) - 50.0 / 150.0) < 1e-5
+    assert abs(iou_xyxy(box_a, box_b) - (50.0 / 150.0)) < 1e-5
 
     # Degenerate invalid box
     assert iou_xyxy([10.0, 10.0, 5.0, 5.0], [0.0, 0.0, 10.0, 10.0]) == 0.0
@@ -30,19 +30,22 @@ def test_iou_xyxy():
 def test_normalize_answer():
     assert normalize_answer("  Yes.  ") == "yes"
     assert normalize_answer("Two airplanes, parked.") == "two airplanes parked"
-    assert normalize_answer("A building with a roof.") == "a building with a roof"
+    # Drops articles: 'a', 'an', 'the'
+    assert normalize_answer("A building with a roof.") == "building with roof"
+    assert normalize_answer("The plane and an airport") == "plane and airport"
 
 
 def test_parse_vrsbench_box():
-    # Typical VRSBench ground truth formats
-    assert parse_vrsbench_box("[10, 20, 30, 40]") == [10, 20, 30, 40]
+    # VRSBench coordinate string format: {<x1><y1><x2><y2>}
+    assert parse_vrsbench_box("{<10><20><30><40>}") == [10, 20, 30, 40]
     assert parse_vrsbench_box("10, 20, 30, 40") == [10, 20, 30, 40]
-    assert parse_vrsbench_box("invalid format") is None
+    # Invalid: fewer or more than 4 integers
+    assert parse_vrsbench_box("10, 20, 30") is None
     assert parse_vrsbench_box("") is None
 
 
 def test_vrsbench_box_to_pixels():
-    # Assuming VRSBench normalized 0-100 range box mapped to width=200, height=100
+    # Normalized 0-100 scale to pixel coordinates
     box_0_100 = [10, 20, 50, 80]
     pixels = vrsbench_box_to_pixels(box_0_100, width=200, height=100)
     assert pixels == [20.0, 20.0, 100.0, 80.0]
@@ -59,6 +62,7 @@ def test_aggregate_vqa():
         {
             "exact_match": True,
             "normalized_match": True,
+            "pred_answer": "building",
             "bbox_pass_fired": True,
             "bbox_pass_returned_box": True,
             "error": None,
@@ -66,6 +70,7 @@ def test_aggregate_vqa():
         {
             "exact_match": False,
             "normalized_match": True,
+            "pred_answer": "trees",
             "bbox_pass_fired": False,
             "bbox_pass_returned_box": False,
             "error": None,
@@ -73,6 +78,7 @@ def test_aggregate_vqa():
         {
             "exact_match": False,
             "normalized_match": False,
+            "pred_answer": None,
             "bbox_pass_fired": False,
             "bbox_pass_returned_box": False,
             "error": "TimeoutError",
@@ -90,18 +96,21 @@ def test_aggregate_referring():
         {
             "trigger_fired": True,
             "returned_box": True,
+            "bbox_pred_px": [10.0, 10.0, 50.0, 50.0],
             "iou": 0.8,
             "error": None,
         },
         {
             "trigger_fired": True,
             "returned_box": False,
+            "bbox_pred_px": None,
             "iou": 0.0,
             "error": None,
         },
         {
             "trigger_fired": False,
             "returned_box": False,
+            "bbox_pred_px": None,
             "iou": None,
             "error": "ExecutionError",
         },
