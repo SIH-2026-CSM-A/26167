@@ -16,11 +16,27 @@
 
 ## SEN12MS
 
-**Source (VERIFIED):** TU Munich — supplementary training data
+**Sources (VERIFIED):**
+- TU Munich — supplementary training data
+- Schmitt et al., "SEN12MS -- A Curated Dataset of Georeferenced
+  Multi-Spectral Sentinel-1/2 Imagery for Deep Learning and Data Fusion"
+  (arXiv:1906.07789 / DLR preprint elib.dlr.de/133280)
 
 - 180,662 Sentinel-1 / Sentinel-2 / MODIS triplets
 - Used for supplementary SAR-optical fusion training, not a PS-named
   requirement
+- Sentinel-1 SAR channels (VV, VH) are already provided as calibrated
+  sigma-nought (σ0) backscatter in dB scale, at 5m (azimuth) × 20m (range)
+  pixel spacing — **not raw digital numbers.** No raw DN exists in this
+  dataset to calibrate from.
+- The dataset's own authors explicitly state they leave further processing
+  (e.g. speckle filtering) to the end user and do not apply it themselves.
+
+> [!IMPORTANT]
+> **Known pitfall, already hit once:** this is the exact mistake ROHAN-001
+> made and was corrected for — attempting to calibrate SEN12MS SAR data from
+> an assumed-raw DN when it was already in dB. Documented here so it isn't
+> repeated.
 
 ## LEVIR-CD
 
