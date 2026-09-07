@@ -14,11 +14,13 @@ from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
 
 S2_FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "Bolivia_103757_S2Hand.tif"
 
+
 @pytest.fixture(autouse=True)
 def _disable_persistence():
     """Keep degradation-signal tests independent of database configuration."""
     with patch("app.pipeline.pipeline.persist_trace"):
         yield
+
 
 def test_pipeline_real_bolivia_fixture_clean_under_default_threshold() -> None:
     """AC4 / AC2: Real unmocked Sentinel-2 Bolivia fixture has measured cloud_fraction
