@@ -21,6 +21,7 @@ from PIL import Image
 from app.contracts import Evidence, EvidenceType, ImageInput
 from app.tools.change_detection.change_summary import summarize_change
 from app.tools.change_detection.confidence import compute_confidence
+from app.tools.change_detection.confounder_gate import evaluate_confounder_gate
 from app.tools.change_detection.registration_quality import require_registration_quality
 from bit_vendor.networks import define_G
 
@@ -48,7 +49,12 @@ def _load_bit_model(checkpoint_path: str) -> torch.nn.Module:
     return net
 
 
-def detect_change(image_a: ImageInput, image_b: ImageInput, checkpoint_path: str) -> list[Evidence]:
+def detect_change(
+    image_a: ImageInput,
+    image_b: ImageInput,
+    checkpoint_path: str,
+    cloud_mask: np.ndarray | None = None,
+) -> list[Evidence]:
     """Run BIT on a co-registered bi-temporal pair and return change-detection Evidence.
 
     `checkpoint_path` is a required parameter, not an invented default — the
@@ -68,15 +74,25 @@ def detect_change(image_a: ImageInput, image_b: ImageInput, checkpoint_path: str
         probability_changed = torch.softmax(logits, dim=1)[0, 1].numpy()
         predicted_mask = torch.argmax(logits, dim=1)[0].numpy().astype(bool)
 
-    confidence = compute_confidence(probability_changed, predicted_mask)
-    summary = summarize_change(predicted_mask)
+    gate_result = evaluate_confounder_gate(
+        raw_mask=predicted_mask,
+        path_a=image_a.path,
+        path_b=image_b.path,
+        cloud_mask=cloud_mask,
+    )
+    effective_mask = (
+        np.zeros_like(predicted_mask) if gate_result.suppressed else gate_result.filtered_mask
+    )
+    confidence = compute_confidence(probability_changed, effective_mask)
+    summary = summarize_change(effective_mask)
 
     evidence = Evidence(
         id=str(uuid.uuid4()),
         tool=_TOOL_NAME,
         type=EvidenceType.MASK,
         payload={
-            "change_mask": predicted_mask,
+            "change_mask": effective_mask,
+            "raw_mask": predicted_mask,
             "description": summary.description,
             "bbox": summary.bbox,
             "relative_position": summary.relative_position,
@@ -85,6 +101,9 @@ def detect_change(image_a: ImageInput, image_b: ImageInput, checkpoint_path: str
             "changed_percentage": summary.changed_percentage,
             "source_image_a_id": image_a.id,
             "source_image_b_id": image_b.id,
+            "confounder_suppressed": gate_result.suppressed,
+            "confounder_reason": gate_result.reason,
+            "cloud_fraction": gate_result.cloud_fraction,
         },
         confidence=confidence,
         timing=time.perf_counter() - started,

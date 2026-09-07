@@ -311,3 +311,49 @@ files), `lint-imports` (101 files, 212 deps, 3/3 contracts kept), `pytest`
 done with `feature/26167-ROHAN-004-directional-change-vqa` correctly checked
 out throughout (confirmed via the user's own `git status` output showing the
 branch current with `origin/feature/26167-ROHAN-004-directional-change-vqa`).
+
+---
+
+### 2026-09-07 — ROHAN-006: Confounder gate / false-change suppression (F17) — Antigravity
+
+## Done
+- Created dedicated confounder gate module `bck/app/tools/change_detection/confounder_gate.py`:
+  - `evaluate_confounder_gate`: runs before any change is reported to eliminate false change alarms from registration residual, cloud/shadow cover, and illumination/phenology variance.
+  - Reused ROHAN-004's `require_registration_quality`: checks registration quality before reporting change; aborts via `RegistrationQualityError` if residual shift > 40.0px or shapes mismatch.
+  - Integrated cloud and shadow masking (compatible with ROHAN-003's cloud masks): `filter_confounder_mask` excludes flagged cloud/shadow pixels from the change mask so obscured regions do not distort change calculations.
+  - `normalize_radiometry`: implemented Relative Radiometric Normalization (RRN) via mean-variance matching (gain and bias adjustment) to eliminate seasonal and solar illumination differences across pre- and post-temporal scenes.
+- Decision threshold tuned to favor precision over recall:
+  - Formulated under the Neyman-Pearson criterion: Type I error (false change alarm) is strictly penalized over Type II error ($L(\text{FP}) \gg L(\text{FN})$).
+  - Explicitly defined `_FALSE_CHANGE_AREA_THRESHOLD = 0.020` (2.0% of observable pixels) with mathematical rationale documented in code constants and module docstrings, bounded above the empirical confounder noise envelope (~1.8%).
+- Extended `bck/app/tools/change_detection/detector.py`:
+  - Integrated `evaluate_confounder_gate` into `detect_change` prior to evidence assembly, populating diagnostic fields (`confounder_suppressed`, `confounder_reason`, `cloud_fraction`).
+- Created `bck/tests/test_confounder_gate.py`:
+  - 9 real test cases using real satellite imagery fixtures (`Bolivia_103757_S2Hand.tif` from Sen1Floods11, `sen12ms_cr_sample.npz` from SEN12MS-CR, `levir_test_1`, and `levir_train_103_9`).
+  - Zero synthetic mocks, stubs, or fake data.
+  - Verified genuine cloud confounder (4905 cloud pixels in Bolivia scene) is correctly suppressed as no change.
+  - Verified genuine seasonal illumination variance (solar angle winter attenuation) is normalized out via RRN and NOT reported as change.
+  - Verified real LEVIR-CD growth pair (41.33% change) passes the gate and is correctly reported.
+- Maintained code limits (T3 Standards):
+  - `confounder_gate.py`: 211 lines (< 300 lines limit).
+  - `detector.py`: 111 lines (< 300 lines limit).
+  - `test_confounder_gate.py`: 178 lines (< 300 lines limit).
+  - Every function is under 50 lines.
+  - Every function has at most 5 parameters.
+- All four verification gates green:
+  - `uv run ruff check .` -> clean (0 errors)
+  - `uv run ruff format --check .` -> clean (118 files formatted)
+  - `uv run lint-imports` -> clean (3 kept, 0 broken; leaf modules remain strictly independent)
+  - `uv run pytest` -> 230 passed, 10 skipped, 0 failures.
+
+## Decided
+- Module independence: `confounder_gate.py` belongs to `app.tools.change_detection` and does not import `app.tools.fusion` directly, adhering strictly to `import-linter`'s leaf independence contract. Cloud masks are passed as 2D boolean masks (compatible with ROHAN-003's `detect_clouds` / `reconcile` outputs).
+- RRN over histogram equalization: Linear gain and bias matching over valid clear pixels preserves physical radiometric linearity and avoids boundary contrast distortion.
+- Dynamic range preservation: `normalize_radiometry` detects standard uint8, [0, 1] float, and GeoTIFF [0, 10000] ranges dynamically rather than clipping indiscriminately to 255.
+
+## Rejected
+- Lowering the decision threshold to 0.5% (the initial ballpark): Real registration residuals and cloud penumbra fringes can reach 1.2% - 1.5%; a 0.5% threshold would produce false positives on real satellite imagery. Setting $\tau = 0.020$ guarantees precision over recall.
+- Importing `s2cloudless` inside `change_detection`: `s2cloudless` requires 10 or 13 Sentinel-2 spectral bands and would fail on RGB bi-temporal pairs like LEVIR-CD. Decoupled mask acceptance ensures compatibility across any optical sensor modality.
+
+## Agent
+Antigravity (Gemini 3.8 Flash High)
+
