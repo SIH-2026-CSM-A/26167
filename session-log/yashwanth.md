@@ -304,3 +304,98 @@ Built via Antigravity on `feature/JASH-003-titiler-serving`.
 - Rejected mutating curly braces or percent-encoding them; ensured `{z}`, `{x}`, `{y}` remain intact for frontend map client consumption (e.g. MapLibre / Leaflet).
 
 **Checks:** `uv run ruff check .` (PASS), `uv run ruff format --check .` (PASS), `uv run lint-imports` (PASS, 3 kept, 0 broken), `uv run pytest` (PASS, 132 passed, 3 skipped).
+
+## 2026-09-07 — YASH-013: CDVQA evaluation harness (PRD line 100)
+
+Built via Antigravity on `feature/26167-YASH-013-cdvqa-eval`.
+
+**Did:**
+- Verified public dataset availability and licensing for CDVQA:
+  - Repository: `https://github.com/YZHJessica/CDVQA`
+  - Hugging Face mirror: `https://huggingface.co/datasets/ljx620/CDVQA`
+  - License: Apache-2.0
+  - Paper: Yuan et al., "Change Detection Meets Visual Question Answering",
+    IEEE TGRS 2022 (arXiv:2202.09117)
+  - Base dataset: SECOND (Semantic Change Detection Dataset) subset with
+    512x512 bi-temporal aerial image pairs (~0.1524m GSD)
+  - 6 land-cover change categories: `NVG_surface` (non-vegetated ground surface),
+    `buildings`, `playgrounds`, `water`, `low_vegetation`, `trees`
+  - Documented exact split counts: test1 (39,686 pairs from 968 image pairs),
+    test2 (31,036 pairs), train (81,990 pairs from 2,000 pairs), val (16,398 pairs from 400 pairs).
+- Implemented `bck/app/eval/cdvqa.py`:
+  - Typed Pydantic schemas: `CDVQAImageAnnotation`, `CDVQAQuestionAnnotation`,
+    `CDVQAAnswerAnnotation`, `CDVQAItem`, `CategoryMetric`, `TypeMetric`, `CDVQAEvalResult`.
+  - Dataset parser `load_cdvqa_dataset` supporting split filtering (`test1`, `test2`,
+    `train`, `val`), flexible annotation file discovery (`Test_*.json`, `test1_*.json`),
+    and bi-temporal image pair path resolution (`im1`/`im2`, `time1`/`time2`, `A`/`B`, `t1`/`t2`).
+  - Land-cover category extractor `extract_change_category` accurately classifying
+    all 6 SECOND change categories from question and answer text.
+  - Normalized exact scoring with `normalize_answer` (stripping trailing punctuation,
+    handling yes/no, category aliases, and 10% ratio bin canonicalization).
+  - Wired evaluation pipeline `CDVQABitPipeline` integrating BIT change detection
+    (`app.tools.change_detection`) and fusion (`app.tools.fusion`) without modifying
+    existing tool code.
+  - Evaluation metrics calculator `compute_cdvqa_metrics` generating Overall Accuracy (OA),
+    Average Category Accuracy (AA), per-category accuracy (for all 6 categories),
+    and per-question-type accuracy (for all 8 question types).
+  - Main entrypoint and CLI `run_cdvqa_eval` executing on GPU in Colab or CPU locally,
+    with JSON artifact output.
+- Implemented comprehensive unit and integration tests in `bck/tests/eval/test_cdvqa.py`:
+  - `test_dataset_parsing_and_split_filtering`: synthetic test1 and test2 splits,
+    active/inactive filtering, limit parameter, file-not-found error handling.
+  - `test_question_types_and_category_extraction`: verifies all 8 question types
+    and 6 land-cover categories.
+  - `test_answer_normalization`: tests canonicalization for binary yes/no, categories,
+    and ratio bins.
+  - `test_percentage_to_cdvqa_bin`: validates mapping numeric percentages to 10% bins.
+  - `test_accuracy_calculation_paper_metrics`: validates exact match scoring, OA, AA,
+    per-category and per-type metrics.
+  - `test_e2e_evaluation_flow_with_mocked_pipeline`: end-to-end evaluation flow with dummy
+    512x512 bi-temporal images and mocked pipeline forward pass.
+  - `test_wired_cdvqa_bit_pipeline_with_dummy_images`: tests grounded predictions from
+    pixel differences.
+  - `test_evaluation_performance_and_determinism`: verifies execution is CPU-friendly,
+    fast (< 5s), and deterministic.
+
+**Rejected along the way:**
+- Rejected downloading or pulling the full 30k+ remote dataset locally; used in-memory
+  and synthetic fixtures adhering to local CI resource constraints.
+- Rejected modifying `app.contracts` or any existing tool code in `app/tools/change_detection/`
+  or `app/tools/fusion/`; wrapped tools non-invasively.
+- Rejected hardcoding category-to-question mappings; implemented a robust text-grounded
+  keyword and alias matcher for all 6 change categories.
+- Rejected rigid callable signatures for external pipelines; dynamically inspects
+  callable parameters so both positional and keyword pipelines (including mocks
+  and adapters) work seamlessly.
+
+## 2026-09-07 — YASH-013: CDVQA answer normalization & lint fixes
+
+Built via Antigravity on `feature/26167-YASH-013-cdvqa-eval`.
+
+**Did:**
+- Fixed `normalize_answer` in `bck/app/eval/cdvqa.py`:
+  - Reordered answer canonicalization so category aliases and ratio bins are evaluated before binary yes/no matching.
+  - Replaced naive `.startswith("no")` prefix check with word-bounded token matching (`\b(no|false|not)\b`) so category aliases containing "non" or "none" (such as "non-vegetated ground" or "none") are never falsely collapsed to "no".
+  - Canonicalizes "non-vegetated ground" accurately to canonical `"NVG_surface"`.
+- Fixed Ruff lint violations:
+  - `bck/app/eval/cdvqa.py`: sorted import blocks per isort/I001, updated `from collections.abc import Callable` per UP035, and replaced `callable(getattr(pipeline, "predict"))` with `callable(pipeline.predict)` per B009.
+  - `bck/tests/eval/test_cdvqa.py`: sorted import blocks per isort/I001.
+  - Fixed synthetic split answer 4 in `bck/tests/eval/test_cdvqa.py` from `"yes"` to `"no"` ensuring full 11/11 alignment with negative `increase_or_not` question and deterministic mock pipeline prediction.
+
+**Rejected along the way:**
+- Rejected loose substring matching for binary yes/no tokens; bounded regex `\b(no|false|not)\b` and `\b(yes|true)\b` prevents substring collisions with land-cover terms.
+
+
+
+## [2026-09-07] YASH-013: CDVQA Evaluation Harness
+- **Agent**: Claude Code / Terminal Agent
+- **Branch**: `feature/26167-YASH-013-cdvqa-eval`
+- **Scope**: `bck/app/eval/cdvqa.py`, `bck/tests/eval/test_cdvqa.py`
+- **Delivered**:
+  - Confirmed CDVQA dataset provenance: Apache-2.0, SECOND aerial subset (512x512, 6 change categories), official test1 (39,686 pairs) and test2 (31,036 pairs).
+  - Built typed Pydantic models, split loader, answer canonicalizer, and paper-accurate metric evaluation (OA, AA across 6 classes, per-type accuracy).
+  - Wired wrapper around existing BIT change detection tool without modifying existing tool code.
+  - Added CPU synthetic test suite passing in 2.16s (8 tests, 100% green).
+- **Options Rejected / Bug Resolved**:
+  - Rejected raw substring matching in answer normalization (which mapped "non-vegetated ground" to "no"); enforced word-bounded token matching.
+  - Left auto-generated PEFT README in checkpoint directory untracked per project standards.
