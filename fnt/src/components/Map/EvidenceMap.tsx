@@ -12,6 +12,8 @@ import {
   buildFeatureCollection,
   getFeatureBounds,
   getCollectionBounds,
+  isOutsideViewport,
+  normalizeBoundsForFit,
 } from '@/utils/evidenceGeoJson';
 import { MapControls, BasemapMode } from './MapControls';
 import { EvidenceDetailCard } from './EvidenceDetailCard';
@@ -102,10 +104,11 @@ function useEvidenceSource(
     const features = evidenceToFeatures(evidenceList);
     source.setData(buildFeatureCollection(features));
 
-    if (features.length > 0 && !selectedId) {
+    if (features.length > 0 && !selectedId && map.fitBounds) {
       const bounds = getCollectionBounds(features);
       if (bounds) {
-        map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]] as LngLatBoundsLike, {
+        const fitBox = normalizeBoundsForFit(bounds);
+        map.fitBounds([[fitBox[0], fitBox[1]], [fitBox[2], fitBox[3]]] as LngLatBoundsLike, {
           padding: 60,
           maxZoom: 16,
           duration: 1200,
@@ -133,13 +136,32 @@ function useFeatureHighlight(
     if (!target) return;
 
     const bounds = getFeatureBounds(target);
-    if (bounds) {
-      map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]] as LngLatBoundsLike, {
-        padding: 80,
-        maxZoom: 16,
-        duration: 1200,
-        essential: true,
-      });
+    if (bounds && map.fitBounds) {
+      let shouldFit = true;
+      try {
+        const vp = map.getBounds?.();
+        if (vp) {
+          const vpBounds: [number, number, number, number] = [
+            vp.getWest(),
+            vp.getSouth(),
+            vp.getEast(),
+            vp.getNorth(),
+          ];
+          shouldFit = isOutsideViewport(bounds, vpBounds);
+        }
+      } catch {
+        shouldFit = true;
+      }
+
+      if (shouldFit) {
+        const fitBox = normalizeBoundsForFit(bounds);
+        map.fitBounds([[fitBox[0], fitBox[1]], [fitBox[2], fitBox[3]]] as LngLatBoundsLike, {
+          padding: 80,
+          maxZoom: 16,
+          duration: 1200,
+          essential: true,
+        });
+      }
     }
   }, [map, isLoaded, selectedId, evidenceList]);
 }
@@ -194,10 +216,11 @@ function useMapActions(
   }, [map, evidenceList, onSelect, setBasemap]);
 
   const handleFitAll = useCallback(() => {
-    if (!map) return;
+    if (!map || !map.fitBounds) return;
     const bounds = getCollectionBounds(evidenceToFeatures(evidenceList));
     if (bounds) {
-      map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]] as LngLatBoundsLike, {
+      const fitBox = normalizeBoundsForFit(bounds);
+      map.fitBounds([[fitBox[0], fitBox[1]], [fitBox[2], fitBox[3]]] as LngLatBoundsLike, {
         padding: 60,
         maxZoom: 16,
         duration: 1000,
