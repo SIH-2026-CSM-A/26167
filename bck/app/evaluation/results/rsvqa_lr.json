@@ -1,0 +1,30 @@
+{
+  "benchmark": "RSVQA-LR",
+  "source": "https://zenodo.org/records/6344334",
+  "model_id": "OpenGVLab/InternVL3-2B",
+  "adapter_path": "app/training/checkpoints/yash004_mlp1_vision_lora",
+  "adapter_commit": "760c0466e372a540d777ce1ef621f3e0663e0a3e",
+  "slice_size": 5002,
+  "is_full_active_slice": false,
+  "active_image_count": 100,
+  "active_question_count": 10004,
+  "subset_seed": 42,
+  "accuracy": 0.5247900839664135,
+  "num_correct": 2625,
+  "num_total": 5002,
+  "accuracy_by_type": {
+    "count": 0.269571136827774,
+    "comp": 0.6955867602808425,
+    "presence": 0.5439892545332438,
+    "rural_urban": 0.64
+  },
+  "count_by_type": {
+    "count": 1469,
+    "comp": 1994,
+    "presence": 1489,
+    "rural_urban": 50
+  },
+  "timestamp": "2026-09-07T20:15:51.544951+00:00",
+  "domain_mismatch_note": "RSVQA-LR images are aerial RGB photography at roughly 0.1m ground sample distance. The evaluated LoRA adapter (mlp1.1/mlp1.3) was trained on Sentinel-2 EuroSAT imagery at 10m ground sample distance -- a different sensor and roughly 100x coarser resolution. This accuracy score reflects that domain gap, not a broken evaluation pipeline.",
+  "scope_note": "This result covers AC2 (RSVQA-LR) only. AC1 (BigEarthNet.txt manually-verified benchmark split) is out of scope for YASH-007 and owned by ROHAN-008."
+}

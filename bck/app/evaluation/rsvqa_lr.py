@@ -114,7 +114,7 @@ def select_subset(
 
 def build_prompt(example: RsvqaExample) -> str:
     """Build InternVL's chat-format question text for one RSVQA-LR example."""
-    return f"{_IMAGE_CONTEXT_TAG}\n{example.question}"
+    return f"{_IMAGE_CONTEXT_TAG}\n{example.question}\nAnswer with a single word or number."
 
 
 def _active_rows_by_id(path: Path, list_key: str) -> dict[int, dict]:

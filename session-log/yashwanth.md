@@ -399,3 +399,42 @@ Built via Antigravity on `feature/26167-YASH-013-cdvqa-eval`.
 - **Options Rejected / Bug Resolved**:
   - Rejected raw substring matching in answer normalization (which mapped "non-vegetated ground" to "no"); enforced word-bounded token matching.
   - Left auto-generated PEFT README in checkpoint directory untracked per project standards.
+
+## 2026-09-08 — YASH-007: RSVQA-LR eval — DIAGNOSTIC RESULT, NOT FULL AC2 SLICE (follow-up to merged PR #55)
+
+**PR #55 merged the harness code but with an unfixed prompt bug and no real eval run
+attached** — `build_prompt` didn't instruct brief answers, causing near-0% accuracy
+against the exact-match scorer if run as merged. This entry documents the fix and the
+actual disclosed result, found and run after that merge.
+
+**Deadline-driven scope cut, disclosed:** Round 1 submission deadline (today) did not
+leave time for the full 10,004-question active slice (~2hr GPU run). Ran a 5,002-item
+random subset instead (seed=42, half the active slice).
+
+**Env:** Kaggle T4, InternVL3-2B + YASH-004 LoRA adapter (commit b60d9ae).
+
+**Numbers (5,002 of 10,004 active questions — NOT the full AC2 slice):**
+- Overall accuracy: 52.48% (2625/5002)
+- By type: count 26.96%, comp 69.56%, presence 54.40%, rural_urban 64.00%
+- `is_full_active_slice: false` in `app/evaluation/results/rsvqa_lr.json`
+
+**Debugging note (relevant to trusting this number):** initial runs scored nearly 0%
+due to `build_prompt` not instructing brief answers — model returned full sentences
+against an exact-match scorer. Fixed by appending "Answer with a single word or
+number." to the prompt. Verified via 10-item raw-output spot check before and after.
+This result is post-fix.
+
+**Domain-gap note (already in `results.py`'s DOMAIN_MISMATCH_NOTE, reconfirmed here):**
+adapter trained on Sentinel-2 EuroSAT (10m GSD, classification labels), evaluated on
+RSVQA-LR's 0.1m aerial photography VQA — different sensor, different task. `count`
+accuracy (27%) reflects this most clearly — model isn't counting objects, guessing
+small numbers.
+
+**AC2 status: NOT MET at stated scope.** Ticket requires the full 10,004-question
+active slice ("no invented sample counts" — see prior handoff decision). This is a
+5,002-item diagnostic substituted under deadline pressure. Follow-up needed: run the
+full slice when GPU time allows, replace this result, close AC2 for real.
+
+**Checks:** `uv run ruff check .` / `ruff format --check .` / `lint-imports` / `pytest
+tests/evaluation` all green after fixing a pre-existing test that hardcoded the old
+prompt string.

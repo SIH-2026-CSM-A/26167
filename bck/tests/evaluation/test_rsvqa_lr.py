@@ -167,4 +167,4 @@ def test_build_prompt_matches_internvl_chat_format(tmp_path: Path) -> None:
     examples = load_active_test_examples(
         images_path=images_path, questions_path=questions_path, answers_path=answers_path
     )
-    assert build_prompt(examples[0]) == "<image>\nIs there a road?"
+    assert build_prompt(examples[0]) == "<image>\nIs there a road?\nAnswer with a single word or number."
