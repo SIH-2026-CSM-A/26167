@@ -1,9 +1,11 @@
 """GeoTIFF ingestion behavior tests."""
 
+import numpy as np
 import pytest
 
 from app.contracts import Modality
 from app.ingestion import InvalidRasterError, RasterUpload, UnsupportedRasterError, ingest_raster
+from app.ingestion.raster import _normalize_band
 from tests.helpers import make_geotiff_bytes
 
 
@@ -47,3 +49,17 @@ def test_ingest_rejects_unreadable_tiff() -> None:
     """Invalid TIFF bytes must become a typed ingestion error rather than a crash."""
     with pytest.raises(InvalidRasterError, match="could not be read"):
         ingest_raster(_upload("broken.tif", b"not-a-raster"))
+
+
+def test_normalize_band_handles_int16_masked_array() -> None:
+    """Integer masked arrays must cast to float before filling NaN to prevent TypeError."""
+    data = np.array([[100, 200], [300, 400]], dtype=np.int16)
+    mask = np.array([[False, False], [False, True]])
+    band = np.ma.MaskedArray(data, mask=mask)
+
+    normalized = _normalize_band(band)
+
+    assert normalized.dtype == np.uint8
+    assert normalized.shape == (2, 2)
+    assert normalized[1, 1] == 0
+    assert normalized[0, 0] <= normalized[0, 1] <= normalized[1, 0]

@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "presets": [
+    {
+      "id": "single-image-land-cover",
+      "label": "Land-cover and object overview",
+      "query": "Describe the land-cover and major objects visible in this image.",
+      "intent": "vqa",
+      "tool": "vqa_grounding",
+      "scenario": "single_image",
+      "assets": [
+        {
+          "id": "sen1floods11-bolivia-103757-optical",
+          "path": "assets/sen1floods11_bolivia_103757_s2_optical.tif",
+          "modality": "optical",
+          "role": "image"
+        }
+      ]
+    },
+    {
+      "id": "flood-water-grounding",
+      "label": "Flood-water grounding",
+      "query": "Highlight the water body referred to in the query.",
+      "intent": "grounding",
+      "tool": "vqa_grounding",
+      "scenario": "flood_water",
+      "assets": [
+        {
+          "id": "sen1floods11-bolivia-103757-optical",
+          "path": "assets/sen1floods11_bolivia_103757_s2_optical.tif",
+          "modality": "optical",
+          "role": "image"
+        }
+      ]
+    },
+    {
+      "id": "bi-temporal-change-location",
+      "label": "Built-up change location",
+      "query": "What changed between these two dates, and where did the change occur?",
+      "intent": "change_vqa",
+      "tool": "change_detection",
+      "scenario": "bi_temporal_change",
+      "assets": [
+        {
+          "id": "levir-cd-train-103-9-before",
+          "path": "assets/levir_cd_train_103_9_before.png",
+          "modality": "optical",
+          "role": "pre_image"
+        },
+        {
+          "id": "levir-cd-train-103-9-after",
+          "path": "assets/levir_cd_train_103_9_after.png",
+          "modality": "optical",
+          "role": "post_image"
+        }
+      ]
+    },
+    {
+      "id": "cross-modal-built-up-water",
+      "label": "Optical + SAR built-up and water",
+      "query": "Use the optical and SAR images together to identify built-up and water-covered regions.",
+      "intent": "fusion",
+      "tool": "fusion",
+      "scenario": "cross_modal",
+      "assets": [
+        {
+          "id": "sen1floods11-bolivia-103757-optical",
+          "path": "assets/sen1floods11_bolivia_103757_s2_optical.tif",
+          "modality": "optical",
+          "role": "optical_image"
+        },
+        {
+          "id": "sen1floods11-bolivia-103757-sar",
+          "path": "assets/sen1floods11_bolivia_103757_s1_sar.tif",
+          "modality": "sar",
+          "role": "sar_image"
+        }
+      ]
+    },
+    {
+      "id": "bi-temporal-built-up-direction",
+      "label": "Built-up change direction",
+      "query": "Has the built-up area increased, decreased, or remained unchanged?",
+      "intent": "change_vqa",
+      "tool": "change_detection",
+      "scenario": "bi_temporal_change",
+      "assets": [
+        {
+          "id": "levir-cd-train-103-9-before",
+          "path": "assets/levir_cd_train_103_9_before.png",
+          "modality": "optical",
+          "role": "pre_image"
+        },
+        {
+          "id": "levir-cd-train-103-9-after",
+          "path": "assets/levir_cd_train_103_9_after.png",
+          "modality": "optical",
+          "role": "post_image"
+        }
+      ]
+    }
+  ]
+}

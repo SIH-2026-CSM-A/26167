@@ -186,7 +186,7 @@ def _normalize_band(band: np.ma.MaskedArray) -> np.ndarray:
     lower, upper = np.percentile(values, [LOWER_VISUAL_PERCENTILE, UPPER_VISUAL_PERCENTILE])
     if upper <= lower:
         return np.zeros(band.shape, dtype=np.uint8)
-    filled = np.asarray(band.filled(np.nan), dtype=np.float32)
+    filled = band.astype(np.float32).filled(np.nan)
     scaled = np.clip((filled - lower) / (upper - lower), 0.0, 1.0)
     return np.nan_to_num(scaled * 255.0, nan=0.0).astype(np.uint8)
 
