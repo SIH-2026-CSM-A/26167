@@ -14,6 +14,7 @@ from app.verification.rules import (
     evaluate_cross_modal_conflict,
     evaluate_empty_evidence,
     evaluate_narrative_claim_grounding,
+    evaluate_optical_degradation,
     evaluate_scattering_divergence,
     evaluate_sensor_compatibility,
     evaluate_spatial_extent_comparison,
@@ -51,6 +52,10 @@ def verify(
     10. Scattering Mechanism Divergence (RULE-VERIFY-05)
     """
     active_policy = policy or VerificationPolicy()
+    degradation_notice = evaluate_optical_degradation(
+        images,
+        active_policy.cloud_degradation_threshold,
+    )
 
     # Stage 1: Empty Evidence Gate
     is_empty, empty_reason = evaluate_empty_evidence(evidence)
@@ -63,6 +68,7 @@ def verify(
             disagreements=[],
             confidence_penalty=0.0,
             filtered_evidence_ids=[],
+            degradation_notice=degradation_notice,
         )
 
     # Stage 2: Physical Sensor Compatibility Gate
@@ -84,6 +90,7 @@ def verify(
             ],
             confidence_penalty=0.0,
             filtered_evidence_ids=[],
+            degradation_notice=degradation_notice,
         )
 
     # Stage 3: Narrative Claim Grounding Gate (runs before the confidence floor so a
@@ -108,6 +115,7 @@ def verify(
             disagreements=claim_records,
             confidence_penalty=0.0,
             filtered_evidence_ids=filtered_ids,
+            degradation_notice=degradation_notice,
         )
 
     # Stage 5: Irreconcilable Cross-Modal Conflict Check
@@ -125,6 +133,7 @@ def verify(
             disagreements=severe_records,
             confidence_penalty=severe_penalty,
             filtered_evidence_ids=filtered_ids,
+            degradation_notice=degradation_notice,
         )
 
     # Stage 6: Structured Numeric Grounding Check
@@ -175,6 +184,7 @@ def verify(
         disagreements=all_disagreements,
         confidence_penalty=total_penalty,
         filtered_evidence_ids=filtered_ids,
+        degradation_notice=degradation_notice,
     )
 
 
@@ -199,7 +209,7 @@ def verification_trace_params(decision: VerificationDecision) -> dict[str, Any]:
         }
         for ev1, ev2 in combinations(decision.verified_evidence, 2)
     ]
-    return {
+    params = {
         "status": str(status_str),
         "abstained": bool(decision.abstained),
         "abstention_reason": decision.abstention_reason,
@@ -227,6 +237,9 @@ def verification_trace_params(decision: VerificationDecision) -> dict[str, Any]:
             for d in decision.disagreements
         ],
     }
+    if decision.degradation_notice is not None:
+        params["degradation_notice"] = decision.degradation_notice.model_dump(mode="json")
+    return params
 
 
 def create_verification_trace_step(

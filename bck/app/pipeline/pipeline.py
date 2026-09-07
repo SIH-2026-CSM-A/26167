@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from app.contracts import Answer, Evidence, QueryRequest
+import numpy as np
+import rasterio
+
+from app.contracts import Answer, Evidence, Modality, QueryRequest
 from app.db import persist_trace
 from app.evidence import assemble_answer, build_bbox_evidence, build_vqa_evidence
 from app.ingestion import (
@@ -14,8 +17,9 @@ from app.ingestion import (
 from app.models import InternVLAdapter, InternVLModelError
 from app.pipeline.stages import PipelineError, PipelineUpload, TraceRecorder
 from app.router import route
+from app.tools.fusion.cloud_detector import detect_clouds
 from app.tools.vqa_grounding import VqaModel, VqaToolError, execute_vqa
-from app.verification import verification_trace_params, verify
+from app.verification import VerificationPolicy, verification_trace_params, verify
 
 _default_model: InternVLAdapter | None = None
 
@@ -32,6 +36,7 @@ def run(
     query: str,
     uploads: list[PipelineUpload],
     model: VqaModel | None = None,
+    policy: VerificationPolicy | None = None,
 ) -> Answer:
     """Run the complete real single-image VQA slice and return the canonical answer."""
     recorder = TraceRecorder()
@@ -95,6 +100,23 @@ def run(
             "source_metadata": [item.source.metadata for item in ingested],
         },
     )
+
+    # AC3: Compute cloud-cover fraction at most once per optical input and reuse downstream
+    for item in ingested:
+        source = item.source
+        if source.modality == Modality.OPTICAL:
+            cloud_fraction = source.metadata.get("cloud_fraction")
+            if (
+                cloud_fraction is None
+                and source.metadata.get("band_count") in (10, 13)
+                and source.path
+            ):
+                with rasterio.open(source.path) as dataset:
+                    arr = dataset.read()
+                reflectance = np.moveaxis(arr, 0, -1).astype(np.float32) / 10000.0
+                cloud_res = detect_clouds(reflectance)
+                source.metadata["cloud_fraction"] = float(cloud_res.mask.mean())
+
     request = QueryRequest(query=query.strip(), images=[item.source for item in ingested])
 
     recorder.record("router", "routing_started")
@@ -197,6 +219,7 @@ def run(
         evidence=candidate_evidence_list,
         raw_query=request.query,
         images=[item.source for item in ingested],
+        policy=policy,
         supporting_observations=tool_result.supporting_observations,
     )
     recorder.record(
@@ -206,6 +229,12 @@ def run(
         confidence=decision.effective_confidence,
         evidence_ids=[item.id for item in decision.verified_evidence],
     )
+    if decision.degradation_notice is not None:
+        recorder.record(
+            "quality",
+            "degradation_detected",
+            params=decision.degradation_notice.model_dump(mode="json"),
+        )
 
     verified_ids = {item.id for item in decision.verified_evidence}
     text_survived = candidate_evidence.id in verified_ids
@@ -258,6 +287,8 @@ def run(
         abstained=decision.is_abstained,
         abstention_reason=decision.abstention_reason,
     )
+    if decision.degradation_notice is not None:
+        answer = answer.model_copy(update={"degradation_notice": decision.degradation_notice})
     try:
         persist_trace(trace, evidence_list)
     except Exception as error:
