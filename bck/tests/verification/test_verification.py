@@ -1,5 +1,6 @@
 """Unit tests for app.verification module (SHIVA-004, F15/F16)."""
 
+import json
 import uuid
 from datetime import UTC, datetime
 
@@ -12,6 +13,7 @@ from app.verification import (
     VerificationDecision,
     VerificationPolicy,
     VerificationStatus,
+    classify_cross_modal_relationship,
     create_verification_trace_step,
     verification_trace_params,
     verify,
@@ -21,7 +23,10 @@ from app.verification.rules import (
     evaluate_confidence_floor,
     evaluate_cross_modal_conflict,
     evaluate_empty_evidence,
+    evaluate_scattering_divergence,
     evaluate_sensor_compatibility,
+    evaluate_spatial_extent_comparison,
+    evaluate_spatial_geometry_consistency,
     evaluate_structured_numeric_grounding,
 )
 
@@ -401,8 +406,87 @@ def test_verification_trace_params_serialization():
     assert params["filtered_evidence_count"] == 1
     assert params["filtered_evidence_ids"] == ["filtered-1"]
     assert params["disagreement_count"] == 1
+    assert params["spatial_disagreement_count"] == 0
+    assert params["cross_modal_relationships"] == []
     assert len(params["disagreements"]) == 1
     assert params["disagreements"][0]["category"] == "complementary_observation"
+
+
+def test_verification_trace_includes_spatial_and_relationship_data():
+    opt_ev = _evidence(
+        tool="optical_detector",
+        payload={"modality": "optical", "cloud_fraction": 0.85, "optical_inconclusive": True},
+        confidence=0.85,
+    )
+    sar_ev = _evidence(
+        tool="fusion.reconcile",
+        payload={"modality": "sar", "water_fraction": 0.75, "water_mask": True},
+        confidence=0.85,
+    )
+    spatial_disagreement = DisagreementRecord(
+        rule_id="RULE-VERIFY-07",
+        category=DisagreementCategory.NOT_COMPARABLE,
+        description="Spatial geometries cannot be compared.",
+        action_taken="caveated",
+        conflicting_evidence_ids=[opt_ev.id, sar_ev.id],
+    )
+    decision = VerificationDecision(
+        status=VerificationStatus.VERIFIED,
+        abstained=False,
+        abstention_reason=None,
+        verified_evidence=[opt_ev, sar_ev],
+        disagreements=[spatial_disagreement],
+        confidence_penalty=0.0,
+    )
+
+    params = verification_trace_params(decision)
+    assert params["spatial_disagreement_count"] == 1
+    assert len(params["cross_modal_relationships"]) == 1
+
+    rel_entry = params["cross_modal_relationships"][0]
+    assert rel_entry["relationship"] == CrossModalRelationship.COMPLEMENTARY.value
+    assert rel_entry["evidence_ids"] == [opt_ev.id, sar_ev.id]
+
+    serialized = json.dumps(params)
+    assert isinstance(serialized, str)
+    assert "spatial_disagreement_count" in serialized
+    assert "cross_modal_relationships" in serialized
+
+
+def test_verification_trace_params_empty_or_single_evidence():
+    # 1. Empty verified evidence
+    empty_decision = VerificationDecision(
+        status=VerificationStatus.VERIFIED,
+        abstained=False,
+        abstention_reason=None,
+        verified_evidence=[],
+    )
+    params_empty = verification_trace_params(empty_decision)
+    assert params_empty["cross_modal_relationships"] == []
+    assert params_empty["spatial_disagreement_count"] == 0
+
+    # 2. Exactly one verified evidence item
+    single_ev = _evidence(confidence=0.85)
+    single_decision = VerificationDecision(
+        status=VerificationStatus.VERIFIED,
+        abstained=False,
+        abstention_reason=None,
+        verified_evidence=[single_ev],
+    )
+    params_single = verification_trace_params(single_decision)
+    assert params_single["cross_modal_relationships"] == []
+    assert params_single["spatial_disagreement_count"] == 0
+
+    # 3. Abstained decision
+    abstained_decision = VerificationDecision(
+        status=VerificationStatus.ABSTAINED,
+        abstained=True,
+        abstention_reason="NO_EVIDENCE_PRODUCED",
+        verified_evidence=[],
+    )
+    params_abstained = verification_trace_params(abstained_decision)
+    assert params_abstained["cross_modal_relationships"] == []
+    assert params_abstained["spatial_disagreement_count"] == 0
 
 
 def test_create_verification_trace_step():
@@ -421,3 +505,433 @@ def test_create_verification_trace_step():
     assert step.confidence == 0.85
     assert step.evidence_ids == [ev.id]
     assert step.params["status"] == "verified"
+
+
+# ---------------------------------------------------------------------------
+# RULE-VERIFY-07: Conditional Spatial Geometry Consistency
+# ---------------------------------------------------------------------------
+def test_rule_verify_07_direct_trigger_emits_not_comparable():
+    policy = VerificationPolicy()
+    bbox_ev = _evidence(ev_type=EvidenceType.BBOX)
+    mask_ev = _evidence(ev_type=EvidenceType.MASK)
+
+    records, penalty = evaluate_spatial_geometry_consistency([bbox_ev, mask_ev], policy)
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.rule_id == "RULE-VERIFY-07"
+    assert record.category == DisagreementCategory.NOT_COMPARABLE
+    assert record.action_taken == "caveated"
+    assert penalty == 0.0
+    assert bbox_ev.id in record.conflicting_evidence_ids
+    assert mask_ev.id in record.conflicting_evidence_ids
+    assert len(record.conflicting_evidence_ids) == 2
+
+
+def test_rule_verify_07_inapplicable_evidence_returns_empty():
+    policy = VerificationPolicy()
+
+    # Empty evidence
+    records, penalty = evaluate_spatial_geometry_consistency([], policy)
+    assert records == []
+    assert penalty == 0.0
+
+    # TEXT only
+    text_ev = _evidence(ev_type=EvidenceType.TEXT)
+    records, penalty = evaluate_spatial_geometry_consistency([text_ev], policy)
+    assert records == []
+    assert penalty == 0.0
+
+    # BBOX only (missing MASK)
+    bbox_ev = _evidence(ev_type=EvidenceType.BBOX)
+    records, penalty = evaluate_spatial_geometry_consistency([bbox_ev], policy)
+    assert records == []
+    assert penalty == 0.0
+
+    # MASK only (missing BBOX)
+    mask_ev = _evidence(ev_type=EvidenceType.MASK)
+    records, penalty = evaluate_spatial_geometry_consistency([mask_ev], policy)
+    assert records == []
+    assert penalty == 0.0
+
+
+def test_rule_verify_07_multiple_spatial_items_prevent_duplicate_records():
+    policy = VerificationPolicy()
+    bbox_1 = _evidence(ev_type=EvidenceType.BBOX)
+    bbox_2 = _evidence(ev_type=EvidenceType.BBOX)
+    mask_1 = _evidence(ev_type=EvidenceType.MASK)
+    mask_2 = _evidence(ev_type=EvidenceType.MASK)
+    text_ev = _evidence(ev_type=EvidenceType.TEXT)
+
+    records, penalty = evaluate_spatial_geometry_consistency(
+        [bbox_1, mask_1, bbox_2, text_ev, mask_2],
+        policy,
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.rule_id == "RULE-VERIFY-07"
+    assert record.category == DisagreementCategory.NOT_COMPARABLE
+    assert record.action_taken == "caveated"
+    assert penalty == 0.0
+
+    expected_ids = [bbox_1.id, mask_1.id, bbox_2.id, mask_2.id]
+    assert record.conflicting_evidence_ids == expected_ids
+    assert len(record.conflicting_evidence_ids) == len(set(record.conflicting_evidence_ids))
+    assert text_ev.id not in record.conflicting_evidence_ids
+
+
+# ---------------------------------------------------------------------------
+# RULE-VERIFY-08: Cross-Modal Spatial Extent Comparison
+# ---------------------------------------------------------------------------
+def test_rule_verify_08_direct_trigger_emits_not_comparable():
+    policy = VerificationPolicy()
+    mask_1 = _evidence(ev_type=EvidenceType.MASK)
+    mask_2 = _evidence(ev_type=EvidenceType.MASK)
+
+    records, penalty = evaluate_spatial_extent_comparison([mask_1, mask_2], policy)
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.rule_id == "RULE-VERIFY-08"
+    assert record.category == DisagreementCategory.NOT_COMPARABLE
+    assert record.action_taken == "caveated"
+    assert penalty == 0.0
+    assert mask_1.id in record.conflicting_evidence_ids
+    assert mask_2.id in record.conflicting_evidence_ids
+    assert len(record.conflicting_evidence_ids) == 2
+
+
+def test_rule_verify_08_inapplicable_evidence_returns_empty():
+    policy = VerificationPolicy()
+
+    # Empty evidence
+    records, penalty = evaluate_spatial_extent_comparison([], policy)
+    assert records == []
+    assert penalty == 0.0
+
+    # TEXT only
+    text_ev = _evidence(ev_type=EvidenceType.TEXT)
+    records, penalty = evaluate_spatial_extent_comparison([text_ev], policy)
+    assert records == []
+    assert penalty == 0.0
+
+    # Exactly one MASK evidence item
+    mask_ev = _evidence(ev_type=EvidenceType.MASK)
+    records, penalty = evaluate_spatial_extent_comparison([mask_ev], policy)
+    assert records == []
+    assert penalty == 0.0
+
+
+def test_rule_verify_08_multiple_masks_prevent_duplicate_records():
+    policy = VerificationPolicy()
+    mask_1 = _evidence(ev_type=EvidenceType.MASK)
+    mask_2 = _evidence(ev_type=EvidenceType.MASK)
+    mask_3 = _evidence(ev_type=EvidenceType.MASK)
+    text_1 = _evidence(ev_type=EvidenceType.TEXT)
+    text_2 = _evidence(ev_type=EvidenceType.TEXT)
+
+    records, penalty = evaluate_spatial_extent_comparison(
+        [text_1, mask_1, mask_2, text_2, mask_3],
+        policy,
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.rule_id == "RULE-VERIFY-08"
+    assert record.category == DisagreementCategory.NOT_COMPARABLE
+    assert record.action_taken == "caveated"
+    assert penalty == 0.0
+
+    expected_ids = [mask_1.id, mask_2.id, mask_3.id]
+    assert record.conflicting_evidence_ids == expected_ids
+    assert len(record.conflicting_evidence_ids) == len(set(record.conflicting_evidence_ids))
+    assert text_1.id not in record.conflicting_evidence_ids
+    assert text_2.id not in record.conflicting_evidence_ids
+
+
+# ---------------------------------------------------------------------------
+# CrossModalRelationship Classifier (DESIGN.md §7)
+# ---------------------------------------------------------------------------
+def test_cross_modal_relationship_insufficient_evidence():
+    policy = VerificationPolicy(min_confidence_floor=0.30)
+    ev_strong = _evidence(confidence=0.85)
+    ev_weak = _evidence(confidence=0.20)
+
+    assert (
+        classify_cross_modal_relationship(ev_weak, ev_strong, policy)
+        == CrossModalRelationship.INSUFFICIENT_EVIDENCE
+    )
+    assert (
+        classify_cross_modal_relationship(ev_strong, ev_weak, policy)
+        == CrossModalRelationship.INSUFFICIENT_EVIDENCE
+    )
+    assert (
+        classify_cross_modal_relationship(ev_weak, ev_weak, policy)
+        == CrossModalRelationship.INSUFFICIENT_EVIDENCE
+    )
+
+
+def test_cross_modal_relationship_not_comparable():
+    policy = VerificationPolicy()
+
+    # Case A: TEXT paired with spatial BBOX or MASK
+    ev_text = _evidence(ev_type=EvidenceType.TEXT, confidence=0.85)
+    ev_bbox = _evidence(ev_type=EvidenceType.BBOX, confidence=0.85)
+    ev_mask = _evidence(ev_type=EvidenceType.MASK, confidence=0.85)
+    assert (
+        classify_cross_modal_relationship(ev_text, ev_bbox, policy)
+        == CrossModalRelationship.NOT_COMPARABLE
+    )
+    assert (
+        classify_cross_modal_relationship(ev_mask, ev_text, policy)
+        == CrossModalRelationship.NOT_COMPARABLE
+    )
+
+    # Case B: BBOX paired with MASK (incompatible geometry formats per RULE-VERIFY-07)
+    assert (
+        classify_cross_modal_relationship(ev_bbox, ev_mask, policy)
+        == CrossModalRelationship.NOT_COMPARABLE
+    )
+
+    # Case C: Disjoint non-matching spatial regions
+    ev_reg_a = _evidence(payload={"region": "sector_north"}, confidence=0.85)
+    ev_reg_b = _evidence(payload={"region": "sector_south"}, confidence=0.85)
+    assert (
+        classify_cross_modal_relationship(ev_reg_a, ev_reg_b, policy)
+        == CrossModalRelationship.NOT_COMPARABLE
+    )
+
+
+def test_cross_modal_relationship_complementary():
+    policy = VerificationPolicy()
+    opt_cloud_ev = _evidence(
+        tool="optical_cloud_detector",
+        payload={"modality": "optical", "cloud_fraction": 0.85, "optical_inconclusive": True},
+        confidence=0.85,
+    )
+    sar_water_ev = _evidence(
+        tool="fusion.reconcile",
+        payload={"modality": "sar", "water_fraction": 0.75, "water_mask": True},
+        confidence=0.85,
+    )
+
+    assert (
+        classify_cross_modal_relationship(opt_cloud_ev, sar_water_ev, policy)
+        == CrossModalRelationship.COMPLEMENTARY
+    )
+    assert (
+        classify_cross_modal_relationship(sar_water_ev, opt_cloud_ev, policy)
+        == CrossModalRelationship.COMPLEMENTARY
+    )
+
+
+def test_cross_modal_relationship_disagreement():
+    policy = VerificationPolicy()
+    opt_dry_ev = _evidence(
+        payload={
+            "modality": "optical",
+            "cloud_fraction": 0.0,
+            "water_fraction": 0.0,
+            "optical_inconclusive": False,
+            "region": "full_scene",
+        },
+        confidence=0.90,
+    )
+    sar_flood_ev = _evidence(
+        payload={
+            "modality": "sar",
+            "water_fraction": 0.85,
+            "cloud_fraction": 0.0,
+            "region": "full_scene",
+        },
+        confidence=0.90,
+    )
+
+    assert (
+        classify_cross_modal_relationship(opt_dry_ev, sar_flood_ev, policy)
+        == CrossModalRelationship.DISAGREEMENT
+    )
+    assert (
+        classify_cross_modal_relationship(sar_flood_ev, opt_dry_ev, policy)
+        == CrossModalRelationship.DISAGREEMENT
+    )
+
+
+def test_cross_modal_relationship_agreement():
+    policy = VerificationPolicy()
+    opt_water_ev = _evidence(
+        payload={
+            "modality": "optical",
+            "water_fraction": 0.80,
+            "cloud_fraction": 0.0,
+            "region": "full_scene",
+        },
+        confidence=0.90,
+    )
+    sar_water_ev = _evidence(
+        payload={
+            "modality": "sar",
+            "water_fraction": 0.85,
+            "cloud_fraction": 0.0,
+            "region": "full_scene",
+        },
+        confidence=0.90,
+    )
+
+    assert (
+        classify_cross_modal_relationship(opt_water_ev, sar_water_ev, policy)
+        == CrossModalRelationship.AGREEMENT
+    )
+    assert (
+        classify_cross_modal_relationship(sar_water_ev, opt_water_ev, policy)
+        == CrossModalRelationship.AGREEMENT
+    )
+
+
+# ---------------------------------------------------------------------------
+# RULE-VERIFY-05: Scattering Mechanism Divergence
+# ---------------------------------------------------------------------------
+def test_rule_verify_05_explicit_divergence_emits_complementary_observation():
+    policy = VerificationPolicy()
+    opt_ev = _evidence(
+        tool="optical_canopy_sensor",
+        payload={"modality": "optical", "scattering_mechanism": "canopy_reflection"},
+        confidence=0.85,
+    )
+    sar_ev = _evidence(
+        tool="sar_dielectric_radar",
+        payload={"modality": "sar", "scattering_mechanism": "dielectric_roughness"},
+        confidence=0.85,
+    )
+
+    records, penalty = evaluate_scattering_divergence([opt_ev, sar_ev], policy)
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.rule_id == "RULE-VERIFY-05"
+    assert record.category == DisagreementCategory.COMPLEMENTARY_OBSERVATION
+    assert record.action_taken == "caveated"
+    assert penalty == 0.0
+    assert record.conflicting_evidence_ids == [opt_ev.id, sar_ev.id]
+    assert "canopy_reflection" in record.description
+    assert "dielectric_roughness" in record.description
+
+
+def test_rule_verify_05_matching_mechanisms_returns_empty():
+    policy = VerificationPolicy()
+    opt_ev = _evidence(
+        payload={"modality": "optical", "scattering_mechanism": "specular"},
+        confidence=0.85,
+    )
+    sar_ev = _evidence(
+        payload={"modality": "sar", "scattering_mechanism": "specular"},
+        confidence=0.85,
+    )
+
+    records, penalty = evaluate_scattering_divergence([opt_ev, sar_ev], policy)
+    assert records == []
+    assert penalty == 0.0
+
+
+def test_rule_verify_05_missing_or_unsupported_semantics_returns_not_comparable():
+    policy = VerificationPolicy()
+    opt_ev = _evidence(
+        payload={"modality": "optical"},
+        confidence=0.85,
+    )
+    sar_ev = _evidence(
+        payload={"modality": "sar"},
+        confidence=0.85,
+    )
+
+    records, penalty = evaluate_scattering_divergence([opt_ev, sar_ev], policy)
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.rule_id == "RULE-VERIFY-05"
+    assert record.category == DisagreementCategory.NOT_COMPARABLE
+    assert record.action_taken == "caveated"
+    assert penalty == 0.0
+    assert record.conflicting_evidence_ids == [opt_ev.id, sar_ev.id]
+
+
+def test_rule_verify_05_inapplicable_evidence_boundaries():
+    policy = VerificationPolicy()
+
+    # Empty evidence
+    records, penalty = evaluate_scattering_divergence([], policy)
+    assert records == []
+    assert penalty == 0.0
+
+    # Optical only
+    opt_ev = _evidence(
+        payload={"modality": "optical", "scattering_mechanism": "canopy_reflection"},
+        confidence=0.85,
+    )
+    records, penalty = evaluate_scattering_divergence([opt_ev], policy)
+    assert records == []
+    assert penalty == 0.0
+
+    # SAR only
+    sar_ev = _evidence(
+        payload={"modality": "sar", "scattering_mechanism": "dielectric_roughness"},
+        confidence=0.85,
+    )
+    records, penalty = evaluate_scattering_divergence([sar_ev], policy)
+    assert records == []
+    assert penalty == 0.0
+
+
+def test_rule_verify_05_integration_in_verify():
+    opt_ev = _evidence(
+        tool="optical_surface_sensor",
+        payload={"modality": "optical", "scattering_mechanism": "canopy_reflection"},
+        confidence=0.85,
+    )
+    sar_ev = _evidence(
+        tool="sar_backscatter_radar",
+        payload={"modality": "sar", "scattering_mechanism": "volume_scattering"},
+        confidence=0.85,
+    )
+
+    decision = verify([opt_ev, sar_ev])
+
+    assert decision.is_verified is True
+    assert decision.is_abstained is False
+    assert len(decision.verified_evidence) == 2
+
+    # RULE-VERIFY-05 record present
+    scattering_recs = [
+        d
+        for d in decision.disagreements
+        if d.rule_id == "RULE-VERIFY-05"
+        and d.category == DisagreementCategory.COMPLEMENTARY_OBSERVATION
+    ]
+    assert len(scattering_recs) == 1
+    assert scattering_recs[0].action_taken == "caveated"
+    assert decision.confidence_penalty == 0.0
+
+
+def test_rule_verify_05_preserves_id_order_and_deduplicates():
+    policy = VerificationPolicy()
+    opt1 = _evidence(
+        payload={"modality": "optical", "scattering_mechanism": "canopy_a"}, ev_id="opt-1"
+    )
+    opt2 = _evidence(
+        payload={"modality": "optical", "scattering_mechanism": "canopy_b"}, ev_id="opt-2"
+    )
+    sar1 = _evidence(
+        payload={"modality": "sar", "scattering_mechanism": "roughness_a"}, ev_id="sar-1"
+    )
+    sar2 = _evidence(
+        payload={"modality": "sar", "scattering_mechanism": "roughness_b"}, ev_id="sar-2"
+    )
+
+    records, penalty = evaluate_scattering_divergence([opt1, sar1, opt2, sar2], policy)
+
+    assert len(records) == 1
+    record = records[0]
+    expected_ids = ["opt-1", "sar-1", "opt-2", "sar-2"]
+    assert record.conflicting_evidence_ids == expected_ids
+    assert len(record.conflicting_evidence_ids) == len(set(record.conflicting_evidence_ids))

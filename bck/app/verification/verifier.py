@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from itertools import combinations
 from typing import Any
 
 from app.contracts import Evidence, ImageInput, TraceStep
 from app.verification.rules import (
+    classify_cross_modal_relationship,
     evaluate_cloud_sar_reconciliation,
     evaluate_confidence_floor,
     evaluate_cross_modal_conflict,
     evaluate_empty_evidence,
     evaluate_narrative_claim_grounding,
+    evaluate_scattering_divergence,
     evaluate_sensor_compatibility,
+    evaluate_spatial_extent_comparison,
+    evaluate_spatial_geometry_consistency,
     evaluate_structured_numeric_grounding,
 )
 from app.verification.schemas import (
@@ -41,6 +46,9 @@ def verify(
     5. Irreconcilable Cross-Modal Conflict Check (RULE-VERIFY-CONFLICT)
     6. Structured Numeric Grounding (RULE-VERIFY-06)
     7. Cloud vs. SAR Radar Reconciliation (RULE-VERIFY-04)
+    8. Spatial Geometry Consistency Check (RULE-VERIFY-07)
+    9. Cross-Modal Spatial Extent Comparison (RULE-VERIFY-08)
+    10. Scattering Mechanism Divergence (RULE-VERIFY-05)
     """
     active_policy = policy or VerificationPolicy()
 
@@ -128,8 +136,36 @@ def verify(
     # Stage 7: Cloud vs. SAR Radar Reconciliation Check
     reconciliation_records = evaluate_cloud_sar_reconciliation(surviving)
 
-    all_disagreements = claim_records + numeric_records + reconciliation_records
-    total_penalty = min(numeric_penalty, active_policy.max_total_penalty)
+    # Stage 8: Spatial Geometry Consistency Check (RULE-VERIFY-07)
+    spatial_records, spatial_penalty = evaluate_spatial_geometry_consistency(
+        surviving,
+        active_policy,
+    )
+
+    # Stage 9: Cross-Modal Spatial Extent Comparison (RULE-VERIFY-08)
+    extent_records, extent_penalty = evaluate_spatial_extent_comparison(
+        surviving,
+        active_policy,
+    )
+
+    # Stage 10: Scattering Mechanism Divergence (RULE-VERIFY-05)
+    scattering_records, scattering_penalty = evaluate_scattering_divergence(
+        surviving,
+        active_policy,
+    )
+
+    all_disagreements = (
+        claim_records
+        + numeric_records
+        + reconciliation_records
+        + spatial_records
+        + extent_records
+        + scattering_records
+    )
+    total_penalty = min(
+        numeric_penalty + spatial_penalty + extent_penalty + scattering_penalty,
+        active_policy.max_total_penalty,
+    )
 
     return VerificationDecision(
         status=VerificationStatus.VERIFIED,
@@ -147,6 +183,22 @@ def verification_trace_params(decision: VerificationDecision) -> dict[str, Any]:
     status_str = (
         decision.status.value if hasattr(decision.status, "value") else str(decision.status)
     )
+    spatial_count = sum(
+        1
+        for d in decision.disagreements
+        if d.rule_id in ("RULE-VERIFY-07", "RULE-VERIFY-08")
+        or d.category == DisagreementCategory.SPATIAL_CONTRADICTION
+    )
+    pairwise_relationships = [
+        {
+            "evidence_ids": [ev1.id, ev2.id],
+            "relationship": classify_cross_modal_relationship(
+                ev1,
+                ev2,
+            ).value,
+        }
+        for ev1, ev2 in combinations(decision.verified_evidence, 2)
+    ]
     return {
         "status": str(status_str),
         "abstained": bool(decision.abstained),
@@ -157,9 +209,11 @@ def verification_trace_params(decision: VerificationDecision) -> dict[str, Any]:
         "filtered_evidence_count": len(decision.filtered_evidence_ids),
         "filtered_evidence_ids": list(decision.filtered_evidence_ids),
         "disagreement_count": len(decision.disagreements),
+        "spatial_disagreement_count": spatial_count,
         "rejected_claim_count": sum(
             1 for d in decision.disagreements if d.rule_id == "RULE-VERIFY-09"
         ),
+        "cross_modal_relationships": pairwise_relationships,
         "disagreements": [
             {
                 "rule_id": d.rule_id,

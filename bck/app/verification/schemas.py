@@ -21,6 +21,7 @@ class DisagreementCategory(StrEnum):
     """Classification of detected cross-modal conflicts or ungrounded claims."""
 
     CROSS_MODAL_CONFLICT = "cross_modal_conflict"
+    SPATIAL_CONTRADICTION = "spatial_contradiction"
     UNSUPPORTED_NUMERIC_CLAIM = "unsupported_numeric_claim"
     UNSUPPORTED_NARRATIVE_CLAIM = "unsupported_narrative_claim"
     SENSOR_PHYSICAL_LIMITATION = "sensor_physical_limitation"
@@ -70,6 +71,8 @@ class VerificationPolicy(BaseModel):
 
     min_confidence_floor: float = 0.30
     unsupported_numeric_penalty: float = 0.15
+    spatial_contradiction_penalty: float = 0.40
+    extent_divergence_penalty: float = 0.20
     severe_conflict_penalty: float = 0.40
     max_total_penalty: float = 0.50
 
