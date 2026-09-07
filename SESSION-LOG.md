@@ -222,12 +222,45 @@ Agent: Codex (continuation after Antigravity handoff).
   - DB Verification: Trace and Evidence matched exactly. `evidence.trace_id == trace_id`, trace Evidence ID == persisted Evidence ID.
 - Distinct Traces: Request #1 and Request #2 trace IDs are verified distinct (`d87a63fc-c095-4ed9-a507-2ea8ecf9a673` != `733b6875-c395-4af0-873f-c78c5387e45a`).
 
+**PostgreSQL Query Output (AC3 Verification)**
+Direct queries executed against local PostgreSQL (`satquery-local-postgres-1`):
+
+```sql
+SELECT trace_id, created_at, jsonb_array_length(steps) AS steps_count, steps->-1->>'action' AS last_action, steps->-1->'evidence_ids' AS evidence_ids
+FROM execution_traces
+WHERE trace_id IN ('d87a63fc-c095-4ed9-a507-2ea8ecf9a673', '733b6875-c395-4af0-873f-c78c5387e45a')
+ORDER BY created_at;
+```
+
+```text
+               trace_id               |          created_at           | steps_count |    last_action     |               evidence_ids
+--------------------------------------+-------------------------------+-------------+--------------------+------------------------------------------
+ d87a63fc-c095-4ed9-a507-2ea8ecf9a673 | 2026-09-07 05:54:47.840433+00 |          13 | response_completed | ["081fb1fe-ec01-4109-8bd5-57dfb938e6b3"]
+ 733b6875-c395-4af0-873f-c78c5387e45a | 2026-09-07 06:22:23.948861+00 |          13 | response_completed | ["29dfa47e-37b3-4e40-8e55-2ea3f2f778ef"]
+(2 rows)
+```
+
+```sql
+SELECT id, trace_id, tool, type, confidence, timing, created_at, payload->>'model_id' AS model_id, payload->>'source_filename' AS filename
+FROM evidence
+WHERE trace_id IN ('d87a63fc-c095-4ed9-a507-2ea8ecf9a673', '733b6875-c395-4af0-873f-c78c5387e45a')
+ORDER BY created_at;
+```
+
+```text
+                  id                  |               trace_id               |     tool     | type |     confidence     |      timing       |          created_at           |        model_id        |   filename
+--------------------------------------+--------------------------------------+--------------+------+--------------------+-------------------+-------------------------------+------------------------+--------------
+ 081fb1fe-ec01-4109-8bd5-57dfb938e6b3 | d87a63fc-c095-4ed9-a507-2ea8ecf9a673 | internvl_vqa | text | 0.3333333333333333 | 452.8667647999828 | 2026-09-07 06:02:21.200494+00 | OpenGVLab/InternVL2-2B | RGB.byte.tif
+ 29dfa47e-37b3-4e40-8e55-2ea3f2f778ef | 733b6875-c395-4af0-873f-c78c5387e45a | internvl_vqa | text |                  1 | 473.4714236999862 | 2026-09-07 06:30:17.590064+00 | OpenGVLab/InternVL2-2B | RGB.byte.tif
+(2 rows)
+```
+
 **Migration & Gate Verification**
 - Clean disposable migration test: PASS (migrated `satquery_disp_test` to head `c9c6d725a002`, verified `execution_traces.steps` is JSONB, `evidence.payload` is JSONB, `evidence.trace_id` is `NOT NULL` with cascading FK, and dropped cleanly).
 - Alembic head: `c9c6d725a002 (head)`.
 - `uv run ruff check .`: PASS.
 - `uv run ruff format --check .`: PASS (111 files already formatted).
 - `uv run lint-imports`: PASS (3 kept, 0 broken).
-- `uv run pytest -q`: PASS (145 passed, 8 skipped).
+- `uv run pytest -q`: PASS (145 passed, 8 skipped). Patched `app.db.session.get_sync_session_maker` with in-memory SQLite sessionmaker in `test_main.py`, `test_vertical_slice.py`, `test_pipeline.py`, and `test_adversarial_abstention.py` so tests pass 100% cleanly locally even without `DATABASE_URL` or `COST_CEILING` environment variables.
 
 Agent: Antigravity (handoff from Codex).

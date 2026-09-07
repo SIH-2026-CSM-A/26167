@@ -1,8 +1,31 @@
-"""Full pipeline behavior tests using only the expensive-model boundary as a double."""
+from collections.abc import Iterator
+from unittest.mock import patch
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.contracts import Modality
+from app.db.models import Base
 from app.pipeline import PipelineUpload, run
 from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
+
+
+@pytest.fixture(autouse=True)
+def sqlite_db() -> Iterator[None]:
+    """Provide an in-memory SQLite database sessionmaker for pipeline persistence."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_maker = sessionmaker(bind=engine, expire_on_commit=False)
+    with patch("app.db.session.get_sync_session_maker", return_value=session_maker):
+        yield
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 def test_pipeline_verifies_model_output_and_builds_evidence_and_trace() -> None:

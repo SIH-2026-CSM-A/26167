@@ -1,9 +1,31 @@
-"""API-style proof that verification participates in the complete request path."""
+from collections.abc import Iterator
+from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.api.main import app
+from app.db.models import Base
 from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
+
+
+@pytest.fixture(autouse=True)
+def sqlite_db() -> Iterator[None]:
+    """Provide an in-memory SQLite database sessionmaker for pipeline persistence."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_maker = sessionmaker(bind=engine, expire_on_commit=False)
+    with patch("app.db.session.get_sync_session_maker", return_value=session_maker):
+        yield
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 def test_live_api_path_removes_an_unsupported_model_claim() -> None:
