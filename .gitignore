@@ -24,8 +24,10 @@ data/*
 *.safetensors
 *.bin
 *.ckpt
-checkpoints/
+# checkpoints/  (scoped below instead)
 
 # OS
 .DS_Store
-bck/app/training/checkpoints/
+bck/app/training/checkpoints/*
+!bck/app/training/checkpoints/yash004_mlp1_vision_lora
+!bck/app/training/checkpoints/yash004_mlp1_vision_lora/adapter_model.safetensors
