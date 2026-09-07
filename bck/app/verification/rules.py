@@ -7,6 +7,7 @@ import re
 from app.contracts import Evidence, EvidenceType, ImageInput, Modality
 from app.verification.schemas import (
     AbstentionReasonCode,
+    CrossModalRelationship,
     DisagreementCategory,
     DisagreementRecord,
     VerificationPolicy,
@@ -394,6 +395,266 @@ def evaluate_narrative_claim_grounding(
         )
 
     return updated, records
+
+
+def evaluate_spatial_geometry_consistency(
+    evidence: list[Evidence],
+    policy: VerificationPolicy,
+) -> tuple[list[DisagreementRecord], float]:
+    """RULE-VERIFY-07: Conditional Spatial Geometry Consistency.
+
+    Evaluates spatial geometry consistency between terrestrial detections (BBOX) and
+    water/flood extent masks (MASK). Under the current standardized contract, no shared
+    coordinate reference system (CRS) or standardized geometry schema is available across
+    specialist tools (DESIGN.md §6 Table 6, §15.2).
+
+    When both BBOX and MASK evidence exist, this evaluator safely records NOT_COMPARABLE
+    with action_taken="caveated" and penalty 0.0, as mandated by DESIGN.md Table 6:
+    "If geometries are missing or incompatible, record NOT_COMPARABLE."
+    """
+    bbox_items = [e for e in evidence if e.type == EvidenceType.BBOX]
+    mask_items = [e for e in evidence if e.type == EvidenceType.MASK]
+
+    if not bbox_items or not mask_items:
+        return [], 0.0
+
+    participating_ids: list[str] = []
+    seen: set[str] = set()
+    for e in evidence:
+        if (e.type == EvidenceType.BBOX or e.type == EvidenceType.MASK) and e.id not in seen:
+            seen.add(e.id)
+            participating_ids.append(e.id)
+
+    record = DisagreementRecord(
+        rule_id="RULE-VERIFY-07",
+        category=DisagreementCategory.NOT_COMPARABLE,
+        description=(
+            "Spatial bounding box and mask geometries cannot be evaluated for physical "
+            "consistency because a standardized compatible geometry representation or "
+            "shared verified coordinate reference frame is not available."
+        ),
+        action_taken="caveated",
+        conflicting_evidence_ids=participating_ids,
+    )
+    return [record], 0.0
+
+
+def evaluate_spatial_extent_comparison(
+    evidence: list[Evidence],
+    policy: VerificationPolicy,
+) -> tuple[list[DisagreementRecord], float]:
+    """RULE-VERIFY-08: Cross-Modal Spatial Extent Comparison.
+
+    Evaluates spatial extent overlap between multiple segmentation masks (MASK).
+    Under the current standardized contract, no shared coordinate reference system
+    (CRS), georeferenced raster alignment, or standardized mask schema is available
+    across specialist tools (DESIGN.md §6 Table 6, §15.2).
+
+    When at least two MASK evidence items exist, this evaluator safely records
+    NOT_COMPARABLE with action_taken="caveated" and penalty 0.0, as mandated by
+    DESIGN.md Table 6: "If incompatible or absent, record NOT_COMPARABLE."
+    """
+    mask_items = [e for e in evidence if e.type == EvidenceType.MASK]
+    if len(mask_items) < 2:
+        return [], 0.0
+
+    participating_ids: list[str] = []
+    seen: set[str] = set()
+    for e in evidence:
+        if e.type == EvidenceType.MASK and e.id not in seen:
+            seen.add(e.id)
+            participating_ids.append(e.id)
+
+    record = DisagreementRecord(
+        rule_id="RULE-VERIFY-08",
+        category=DisagreementCategory.NOT_COMPARABLE,
+        description=(
+            "Spatial segmentation masks cannot be evaluated for spatial extent consistency "
+            "because a standardized compatible geometry representation or shared verified "
+            "coordinate reference frame is not available."
+        ),
+        action_taken="caveated",
+        conflicting_evidence_ids=participating_ids,
+    )
+    return [record], 0.0
+
+
+def evaluate_scattering_divergence(
+    evidence: list[Evidence],
+    policy: VerificationPolicy | None = None,
+) -> tuple[list[DisagreementRecord], float]:
+    """RULE-VERIFY-05: Scattering Mechanism Divergence.
+
+    Evaluates whether multi-sensor Optical and SAR observations indicate divergent
+    physical scattering mechanisms over vegetation or built structures (DESIGN.md Table 6, §7).
+
+    - If Optical and SAR report explicitly divergent scattering mechanisms, records
+      COMPLEMENTARY_OBSERVATION with action_taken="caveated" and penalty 0.0 without abstaining.
+    - If scattering mechanisms match, no divergence is recorded.
+    - If Optical and SAR evidence exist but scattering semantics cannot be safely compared
+      under the current contract (e.g. uncharacterized payloads), safely records NOT_COMPARABLE
+      with action_taken="caveated" and penalty 0.0.
+    - If evidence is not multimodal (lacks optical or SAR items), returns ([], 0.0).
+    """
+    optical_items = [
+        e
+        for e in evidence
+        if isinstance(e.payload, dict)
+        and (e.payload.get("modality") == "optical" or "optical" in e.tool.lower())
+    ]
+    sar_items = [
+        e
+        for e in evidence
+        if isinstance(e.payload, dict)
+        and (
+            e.payload.get("modality") == "sar"
+            or "sar" in e.tool.lower()
+            or "water_mask" in e.payload
+        )
+    ]
+
+    if not optical_items or not sar_items:
+        return [], 0.0
+
+    participating_ids: list[str] = []
+    seen: set[str] = set()
+    for e in evidence:
+        if (e in optical_items or e in sar_items) and e.id not in seen:
+            seen.add(e.id)
+            participating_ids.append(e.id)
+
+    opt_mechanisms: set[str] = set()
+    for e in optical_items:
+        val = e.payload.get("scattering_mechanism") or e.payload.get("surface_characteristic")
+        if isinstance(val, str) and val.strip():
+            opt_mechanisms.add(val.strip().lower())
+
+    sar_mechanisms: set[str] = set()
+    for e in sar_items:
+        val = e.payload.get("scattering_mechanism") or e.payload.get("surface_characteristic")
+        if isinstance(val, str) and val.strip():
+            sar_mechanisms.add(val.strip().lower())
+
+    # Fallback: if scattering semantics cannot be safely compared under current contract
+    if not opt_mechanisms or not sar_mechanisms:
+        record = DisagreementRecord(
+            rule_id="RULE-VERIFY-05",
+            category=DisagreementCategory.NOT_COMPARABLE,
+            description=(
+                "Optical and SAR surface scattering mechanisms cannot be evaluated for physical "
+                "divergence because structured scattering mechanism attributes are not available "
+                "in the evidence payloads."
+            ),
+            action_taken="caveated",
+            conflicting_evidence_ids=participating_ids,
+        )
+        return [record], 0.0
+
+    # Matching mechanisms -> no divergence
+    if opt_mechanisms == sar_mechanisms:
+        return [], 0.0
+
+    # Divergent scattering mechanisms
+    record = DisagreementRecord(
+        rule_id="RULE-VERIFY-05",
+        category=DisagreementCategory.COMPLEMENTARY_OBSERVATION,
+        description=(
+            f"Optical surface reflection ({', '.join(sorted(opt_mechanisms))}) and "
+            f"SAR backscatter ({', '.join(sorted(sar_mechanisms))}) indicate divergent "
+            "physical scattering mechanisms over the observed terrain."
+        ),
+        action_taken="caveated",
+        conflicting_evidence_ids=participating_ids,
+    )
+    return [record], 0.0
+
+
+def classify_cross_modal_relationship(
+    ev1: Evidence,
+    ev2: Evidence,
+    policy: VerificationPolicy | None = None,
+) -> CrossModalRelationship:
+    """Classify the relationship between two multi-sensor evidence items (DESIGN.md §7).
+
+    Evaluates evidence against five mutually exclusive relationship states in deterministic order:
+    1. INSUFFICIENT_EVIDENCE: either evidence item fails the minimum confidence floor.
+    2. NOT_COMPARABLE: evidence representations or footprints cannot safely be juxtaposed
+       under current contracts (e.g. text caption vs spatial geometry, bounding box vs mask,
+       or disjoint spatial regions).
+    3. COMPLEMENTARY: differing observations explained by sensor physics (e.g. optical cloud
+       cover limitation alongside SAR flood observation per RULE-VERIFY-04).
+    4. DISAGREEMENT: modalities evaluate the same comparable footprint under clear conditions
+       and assert directly contradictory findings (per RULE-VERIFY-CONFLICT).
+    5. AGREEMENT: modalities evaluate the same comparable footprint and produce consistent findings.
+    """
+    active_policy = policy or VerificationPolicy()
+
+    # Priority 1: Confidence floor check
+    if (
+        ev1.confidence < active_policy.min_confidence_floor
+        or ev2.confidence < active_policy.min_confidence_floor
+    ):
+        return CrossModalRelationship.INSUFFICIENT_EVIDENCE
+
+    # Priority 2: Incompatible representations or spatial footprints
+    # 2a. Disjoint regions
+    r1 = ev1.payload.get("region")
+    r2 = ev2.payload.get("region")
+    if r1 is not None and r2 is not None and r1 != r2:
+        return CrossModalRelationship.NOT_COMPARABLE
+
+    # 2b. Caption (TEXT) paired with unreferenced spatial geometries (BBOX or MASK)
+    if (ev1.type == EvidenceType.TEXT and ev2.type in (EvidenceType.BBOX, EvidenceType.MASK)) or (
+        ev2.type == EvidenceType.TEXT and ev1.type in (EvidenceType.BBOX, EvidenceType.MASK)
+    ):
+        return CrossModalRelationship.NOT_COMPARABLE
+
+    # 2c. BBOX paired with MASK (incompatible spatial geometry representations per RULE-VERIFY-07)
+    if (ev1.type == EvidenceType.BBOX and ev2.type == EvidenceType.MASK) or (
+        ev1.type == EvidenceType.MASK and ev2.type == EvidenceType.BBOX
+    ):
+        return CrossModalRelationship.NOT_COMPARABLE
+
+    # Priority 3: Sensor physics complementarity (Optical clouds + SAR radar water
+    # per RULE-VERIFY-04)
+    opt_cloud_1 = (
+        ev1.payload.get("optical_inconclusive") is True
+        or float(ev1.payload.get("cloud_fraction", 0.0)) > 0.0
+    )
+    opt_cloud_2 = (
+        ev2.payload.get("optical_inconclusive") is True
+        or float(ev2.payload.get("cloud_fraction", 0.0)) > 0.0
+    )
+
+    sar_water_1 = (
+        ev1.payload.get("modality") == "sar"
+        or "sar" in ev1.tool.lower()
+        or "water_mask" in ev1.payload
+        or float(ev1.payload.get("water_fraction", 0.0)) > 0.0
+    )
+    sar_water_2 = (
+        ev2.payload.get("modality") == "sar"
+        or "sar" in ev2.tool.lower()
+        or "water_mask" in ev2.payload
+        or float(ev2.payload.get("water_fraction", 0.0)) > 0.0
+    )
+
+    if (opt_cloud_1 and sar_water_2) or (opt_cloud_2 and sar_water_1):
+        return CrossModalRelationship.COMPLEMENTARY
+
+    # Priority 4: Direct cross-modal conflict / contradiction (per RULE-VERIFY-CONFLICT)
+    wf1 = ev1.payload.get("water_fraction")
+    wf2 = ev2.payload.get("water_fraction")
+    if isinstance(wf1, (int, float)) and isinstance(wf2, (int, float)):
+        c1 = float(ev1.payload.get("cloud_fraction", 0.0))
+        c2 = float(ev2.payload.get("cloud_fraction", 0.0))
+        # Clear sky contradiction: one asserts dry land and other asserts standing water
+        if c1 == 0.0 and c2 == 0.0:
+            if (wf1 < 0.10 and wf2 >= 0.70) or (wf2 < 0.10 and wf1 >= 0.70):
+                return CrossModalRelationship.DISAGREEMENT
+
+    # Priority 5: Consistent / agreement findings
+    return CrossModalRelationship.AGREEMENT
 
 
 def _split_claims(answer: str) -> tuple[str, ...]:
