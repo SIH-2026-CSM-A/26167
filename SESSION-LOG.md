@@ -92,3 +92,19 @@ Agent: Claude Code (Sonnet 5).
   not this ticket's scope).
 
 Agent: Claude Code (Sonnet 5).
+
+### 2026-09-07 — Render BBOX evidence on map (LIKI-005) — Antigravity
+
+**Done**
+- Converted BBoxPayload [minLon, minLat, maxLon, maxLat] tuples into closed 5-point GeoJSON Polygon rings.
+- Integrated BBOX rendering into satquery-evidence across evidence-mask-fill, evidence-boundary-line, and evidence-selected-halo layers.
+- Wired highlight selection to useFeatureHighlight to keep CitationChip interaction unified without parallel state logic.
+- Implemented camera fitBounds with padding when selected bounding boxes fall outside the active viewport.
+- Added 22 unit and component tests across evidenceGeoJson.test.ts and EvidenceMap.test.tsx.
+
+**Decided**
+- Reused existing MapLibre layers and selection filter instead of creating separate BBOX layers to avoid pipeline divergence.
+- Guarded zero-area/point degenerate bounding boxes with an epsilon offset to prevent MapLibre camera crashes.
+
+**Incomplete**
+- None. Ready for backend integration with ticket AASH-005.
