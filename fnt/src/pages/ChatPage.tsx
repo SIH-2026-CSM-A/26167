@@ -64,15 +64,21 @@ const ChatConversationPane: React.FC<{
   </div>
 );
 
-const ChatPageHeader: React.FC<{ isMapVisible: boolean; onToggleMap: () => void }> = ({
-  isMapVisible,
-  onToggleMap,
-}) => (
+// ponytail: no dedicated model-identity API field yet, so this falls back to a
+// hardcoded string until B14's backend metadata is exposed to the frontend.
+const FALLBACK_MODEL_IDENTITY = 'InternVL3-2B + LoRA (YASH-004)';
+
+const ChatPageHeader: React.FC<{
+  isMapVisible: boolean;
+  onToggleMap: () => void;
+  modelIdentity: string | null;
+}> = ({ isMapVisible, onToggleMap, modelIdentity }) => (
   <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
     <div>
       <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">VLM Assistant & Query</h1>
       <p className="mt-1 text-xs sm:text-sm text-slate-400">
-        Natural language interrogation powered by InternVL2-2B with strict evidence grounding.
+        Natural language interrogation powered by {modelIdentity ?? FALLBACK_MODEL_IDENTITY} with
+        strict evidence grounding.
       </p>
     </div>
     <div className="flex items-center gap-2">
@@ -138,10 +144,20 @@ export const ChatPage: React.FC = () => {
     error,
   } = useSatQuery();
   const [isMapVisible, setIsMapVisible] = useState(true);
+  const modelIdentity =
+    [...messages]
+      .reverse()
+      .flatMap((message) => message.answer?.evidence ?? [])
+      .map((evidence) => evidence.payload?.model_id)
+      .find((value): value is string => typeof value === 'string') ?? null;
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <ChatPageHeader isMapVisible={isMapVisible} onToggleMap={() => setIsMapVisible(!isMapVisible)} />
+      <ChatPageHeader
+        isMapVisible={isMapVisible}
+        onToggleMap={() => setIsMapVisible(!isMapVisible)}
+        modelIdentity={modelIdentity}
+      />
       <ChatErrorBanner
         error={error}
         canRetry={Boolean(error && lastSubmission)}
