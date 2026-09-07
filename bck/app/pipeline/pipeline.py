@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from app.contracts import Answer, QueryRequest
-from app.evidence import assemble_answer, build_vqa_evidence
+from app.contracts import Answer, Evidence, QueryRequest
+from app.evidence import assemble_answer, build_bbox_evidence, build_vqa_evidence
 from app.ingestion import (
     InvalidRasterError,
     RasterUpload,
@@ -175,9 +175,24 @@ def run(
         timing_seconds=tool_result.timing_seconds,
     )
 
+    bbox_evidence: Evidence | None = None
+    if tool_result.bbox is not None and tool_result.bbox_source is not None:
+        bbox_evidence = build_bbox_evidence(
+            asset=source.source,
+            model_id=tool_result.model_id,
+            bbox=tool_result.bbox,
+            label=tool_result.bbox_label or tool_result.raw_answer,
+            source=tool_result.bbox_source,
+            timing_seconds=tool_result.timing_seconds,
+        )
+
+    candidate_evidence_list = [candidate_evidence]
+    if bbox_evidence is not None:
+        candidate_evidence_list.append(bbox_evidence)
+
     recorder.record("verification", "verification_started")
     decision = verify(
-        evidence=[candidate_evidence],
+        evidence=candidate_evidence_list,
         raw_query=request.query,
         images=[item.source for item in ingested],
         supporting_observations=tool_result.supporting_observations,
@@ -190,12 +205,13 @@ def run(
         evidence_ids=[item.id for item in decision.verified_evidence],
     )
 
-    salvaged_text = (
-        decision.verified_evidence[0].payload.get("verified_answer")
-        if decision.verified_evidence
-        else None
+    verified_ids = {item.id for item in decision.verified_evidence}
+    text_survived = candidate_evidence.id in verified_ids
+    matched_text = next(
+        (item for item in decision.verified_evidence if item.id == candidate_evidence.id), None
     )
-    verified_text = "" if decision.is_abstained else (salvaged_text or tool_result.raw_answer)
+    salvaged_text = matched_text.payload.get("verified_answer") if matched_text else None
+    verified_text = (salvaged_text or tool_result.raw_answer) if text_survived else ""
     rejected_claims = tuple(d.description for d in decision.disagreements)
     evidence = build_vqa_evidence(
         asset=source.source,
@@ -206,15 +222,21 @@ def run(
         rejected_claims=rejected_claims,
         timing_seconds=tool_result.timing_seconds,
     )
-    if not decision.is_abstained:
+    if text_survived:
         evidence = evidence.model_copy(update={"confidence": decision.effective_confidence})
 
-    evidence_list = [evidence] if not decision.is_abstained else []
+    evidence_list = [evidence] if text_survived else []
+    if bbox_evidence is not None and bbox_evidence.id in verified_ids:
+        evidence_list.append(bbox_evidence)
+
     recorder.record(
         "evidence",
         "evidence_created",
-        params={"evidence_type": evidence.type.value, "source_asset_id": source.source.id},
-        evidence_ids=[evidence.id] if not decision.is_abstained else [],
+        params={
+            "evidence_types": [item.type.value for item in evidence_list],
+            "source_asset_id": source.source.id,
+        },
+        evidence_ids=[item.id for item in evidence_list],
     )
     recorder.record(
         "pipeline",
