@@ -6,7 +6,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 
 class Modality(StrEnum):
@@ -54,6 +55,24 @@ class EvidenceType(StrEnum):
     LAYER = "layer"
 
 
+def _serialize_json_safe(obj: Any) -> Any:
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        if obj.size <= 1024:
+            return obj.tolist()
+        return {
+            "shape": list(obj.shape),
+            "dtype": str(obj.dtype),
+            "present": bool(obj.any()),
+        }
+    if isinstance(obj, dict):
+        return {k: _serialize_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_serialize_json_safe(v) for v in obj]
+    return obj
+
+
 class Evidence(BaseModel):
     """Uniform schema every tool returns, per ARCHITECTURE.md's data-flow section:
     {id, tool, type, payload, confidence, timing}.
@@ -67,6 +86,10 @@ class Evidence(BaseModel):
     payload: dict[str, Any]
     confidence: float = Field(ge=0.0, le=1.0)
     timing: float = Field(ge=0.0, description="Wall-clock seconds the tool took to produce this.")
+
+    @field_serializer("payload", mode="plain", when_used="json")
+    def _serialize_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return _serialize_json_safe(payload)
 
 
 class TraceStep(BaseModel):
@@ -82,6 +105,10 @@ class TraceStep(BaseModel):
     completed_at: datetime | None = None
     evidence_ids: list[str] = Field(default_factory=list)
 
+    @field_serializer("params", mode="plain", when_used="json")
+    def _serialize_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        return _serialize_json_safe(params)
+
 
 class ExecutionTrace(BaseModel):
     """Ordered, auditable record of every module the pipeline invoked for one request."""
@@ -91,6 +118,24 @@ class ExecutionTrace(BaseModel):
     trace_id: str
     steps: list[TraceStep] = Field(default_factory=list)
     created_at: datetime
+
+
+class DegradationNotice(BaseModel):
+    """Structured notice indicating degraded input quality and recommending fallback."""
+
+    model_config = ConfigDict(frozen=True)
+
+    degraded: bool = True
+    metric_name: str = "cloud_cover_fraction"
+    metric_value: float = Field(ge=0.0, le=1.0)
+    threshold: float = Field(ge=0.0, le=1.0)
+    severity: str = "warning"
+    message: str
+    suggested_action: str = (
+        "SAR-only fallback workflow recommended due to heavy cloud cover obscuring optical imagery."
+    )
+    fallback_modality: Modality = Modality.SAR
+    affected_image_ids: list[str] = Field(default_factory=list)
 
 
 class Answer(BaseModel):
@@ -109,6 +154,7 @@ class Answer(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     abstained: bool = False
     abstention_reason: str | None = None
+    degradation_notice: DegradationNotice | None = None
 
     @model_validator(mode="after")
     def _abstention_reason_matches_flag(self) -> Answer:

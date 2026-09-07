@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from app.contracts import Answer, Evidence, EvidenceType, ExecutionTrace, ImageInput
+from app.contracts import (
+    Answer,
+    DegradationNotice,
+    Evidence,
+    EvidenceType,
+    ExecutionTrace,
+    ImageInput,
+)
 
 
 def build_vqa_evidence(
@@ -46,6 +53,7 @@ def assemble_answer(
     trace: ExecutionTrace,
     abstained: bool,
     abstention_reason: str | None,
+    degradation_notice: DegradationNotice | None = None,
 ) -> Answer:
     """Map verified text, canonical evidence, and trace into the existing response contract."""
     confidence = sum(item.confidence for item in evidence) / len(evidence) if evidence else 0.0
@@ -56,4 +64,5 @@ def assemble_answer(
         confidence=confidence,
         abstained=abstained,
         abstention_reason=abstention_reason,
+        degradation_notice=degradation_notice,
     )

@@ -10,6 +10,7 @@ seam anywhere in this codebase to plug into instead (verified directly
 against source, not assumed).
 """
 
+import os
 import time
 import uuid
 from types import SimpleNamespace
@@ -84,3 +85,48 @@ def detect_change(image_a: ImageInput, image_b: ImageInput, checkpoint_path: str
         timing=time.perf_counter() - started,
     )
     return [evidence]
+
+
+def heuristic_change_detect(image_a: ImageInput, image_b: ImageInput) -> list[Evidence]:
+    """Lightweight visual difference change detection when neural weights are absent."""
+    started = time.perf_counter()
+    img_a = Image.open(image_a.path).convert("RGB").resize((_IMG_SIZE, _IMG_SIZE))
+    img_b = Image.open(image_b.path).convert("RGB").resize((_IMG_SIZE, _IMG_SIZE))
+    arr_a = np.asarray(img_a, dtype=np.float32) / 255.0
+    arr_b = np.asarray(img_b, dtype=np.float32) / 255.0
+    diff = np.abs(arr_b - arr_a).mean(axis=-1)
+    predicted_mask = diff > 0.15
+    probability_changed = np.clip(diff / 0.15, 0.0, 1.0)
+    confidence = compute_confidence(probability_changed, predicted_mask)
+    summary = summarize_change(predicted_mask)
+    return [
+        Evidence(
+            id=str(uuid.uuid4()),
+            tool=_TOOL_NAME,
+            type=EvidenceType.MASK,
+            payload={
+                "change_mask": predicted_mask,
+                "description": summary.description,
+                "bbox": summary.bbox,
+                "relative_position": summary.relative_position,
+                "source_image_a_id": image_a.id,
+                "source_image_b_id": image_b.id,
+            },
+            confidence=confidence,
+            timing=time.perf_counter() - started,
+        )
+    ]
+
+
+def execute_change_detection(
+    image_a: ImageInput,
+    image_b: ImageInput,
+    checkpoint_path: str | None = None,
+) -> list[Evidence]:
+    """Run BIT change detection if checkpoint is present, else fall back to heuristic difference."""
+    resolved_checkpoint = checkpoint_path or os.getenv(
+        "SATQUERY_BIT_CHECKPOINT_PATH", "checkpoints/BIT_LEVIR/best_ckpt.pt"
+    )
+    if os.path.exists(resolved_checkpoint):
+        return detect_change(image_a, image_b, resolved_checkpoint)
+    return heuristic_change_detect(image_a, image_b)

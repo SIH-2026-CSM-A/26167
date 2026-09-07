@@ -25,6 +25,13 @@ class CloudDetectionResult:
     probability: np.ndarray
     mask: np.ndarray
 
+    @property
+    def cloud_fraction(self) -> float:
+        """Fraction of pixels classified as cloud in [0.0, 1.0]."""
+        if self.mask.size == 0:
+            return 0.0
+        return float(np.mean(self.mask))
+
 
 def detect_clouds(reflectance: np.ndarray, threshold: float = 0.4) -> CloudDetectionResult:
     """Run S2PixelCloudDetector on a single (H, W, 13) or (H, W, 10) reflectance array.

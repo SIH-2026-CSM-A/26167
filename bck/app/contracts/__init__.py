@@ -1,5 +1,6 @@
 from app.contracts.schemas import (
     Answer,
+    DegradationNotice,
     Evidence,
     EvidenceType,
     ExecutionTrace,
@@ -11,6 +12,7 @@ from app.contracts.schemas import (
 
 __all__ = [
     "Answer",
+    "DegradationNotice",
     "Evidence",
     "EvidenceType",
     "ExecutionTrace",

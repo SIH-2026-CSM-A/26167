@@ -81,7 +81,7 @@ def reconcile_sar_optical(
     water_mask = np.asarray(water_mask).astype(bool)
     cloud_mask = np.asarray(cloud_result.mask).astype(bool)
 
-    cloud_fraction = float(cloud_mask.mean())
+    cloud_fraction = cloud_result.cloud_fraction
     water_fraction = float(water_mask.mean())
 
     if cloud_fraction == 0.0:
