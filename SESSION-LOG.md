@@ -263,4 +263,9 @@ ORDER BY created_at;
 - `uv run lint-imports`: PASS (3 kept, 0 broken).
 - `uv run pytest -q`: PASS (145 passed, 8 skipped). Patched `app.db.session.get_sync_session_maker` with in-memory SQLite sessionmaker in `test_main.py`, `test_vertical_slice.py`, `test_pipeline.py`, and `test_adversarial_abstention.py` so tests pass 100% cleanly locally even without `DATABASE_URL` or `COST_CEILING` environment variables.
 
+**Lead Review Follow-Up (Yashwanth / ybaddam8-png)**
+- Fixed local pytest failure: Added in-memory SQLite `StaticPool` sessionmaker patches to `test_main.py`, `test_vertical_slice.py`, `test_pipeline.py`, and `test_adversarial_abstention.py`. Full pytest suite passes 100% green (145 passed, 8 skipped) with `DATABASE_URL` and `COST_CEILING` completely unset.
+- AC3 Verification: Pasted actual raw PostgreSQL query rows from `docker exec satquery-local-postgres-1 psql` for both E2E requests.
+- Option B Architecture Sign-Off: Confirmed Option B document persistence (`steps` and `payload` as JSONB in `execution_traces` and `evidence`) avoids schema migrations on adding tools, awaiting final lead sign-off.
+
 Agent: Antigravity (handoff from Codex).
