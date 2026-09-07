@@ -1,156 +1,185 @@
-"""AASH-004: explicit GSD-conditioning embedding for the mlp1 vision projector.
-
-Spec confirmed by the team lead (ybaddam8-png) on 2026-09-07 -- quoted here, not
-invented:
-
-1. Embedding form -- "sinusoidal/Fourier encoding of continuous log(GSD), not a
-   binned lookup table -- a lookup collapses to one constant vector when
-   training only ever sees discrete augmented values, giving zero real
-   conditioning signal. Fourier over log-GSD extrapolates smoothly to unseen
-   values (Cartosat 0.5-2m, RISAT) at eval time."
-2. Injection point -- "FiLM-style per-channel scale+shift applied to mlp1's
-   input, derived from the GSD embedding. Do not touch the vision tower (frozen
-   InternViT, out of scope) and do not add a soft LLM token (too invasive this
-   close to deadline). Reuses the same mlp1.1/mlp1.3 layers already
-   LoRA-targeted."
-3. Dimension -- "read mlp1's actual input feature dim live from the loaded
-   InternVL3-2B model at startup (e.g. via the relevant Linear layer's
-   .in_features) -- do not hardcode a number, since none is logged anywhere in
-   this repo."
-4. Sub-10m -- not simulated in training; the fine end (Cartosat/RISAT 0.5-2m) is
-   deferred to real imagery in the separate domain-gap test.
-5. Signal source -- consumes the per-step `sim_gsd_m` already produced by
-   `MultiScaleGSDAugment` in `train_lora_mlp1_vision.py`; not recomputed here.
-
-Formula choices (each cited or read live, nothing invented):
-- Sinusoidal encoding uses the canonical geometric-wavelength schedule of
-  Vaswani et al. 2017 ("Attention Is All You Need", base 10000). Its only free
-  parameter is the encoding width, which is tied to mlp1's input dim (read live
-  per point 3) -- so a single Linear maps encoding -> [scale, shift].
-- `log` is the natural logarithm.
-- Over the natural-log-GSD span the augmentation exercises (log 10 .. log 30
-  ~= 2.30 .. 3.40) every schedule wavelength (>= 2 pi) exceeds the span, so the
-  encoding is a smooth monotonic lift with no aliasing -- the smooth-
-  extrapolation property point 1 asks for, carried down to log 0.5 ~= -0.69.
-- FiLM generator is a single Linear, zero-initialised, with the scale read as
-  `1 + gamma`; training therefore starts at exact identity (scale 1, shift 0),
-  the standard identity-init for FiLM (Perez et al. 2018, "FiLM: Visual
-  Reasoning with a General Conditioning Layer").
-
-Implementation note (NOT part of the quoted spec above -- added by the
-implementer): point 2's "mlp1's input" was refined after inspecting the model
-source. `mlp1[0]` is a `LayerNorm` (confirmed by reading InternVL3-2B's own
-`modeling_internvl_chat.py`, not by loading the model). Applying the FiLM
-scale+shift at the input of the whole `mlp1` Sequential would put it before that
-LayerNorm, which would renormalize the modulation straight back out before
-`mlp1[1]`'s Linear ever saw it -- zero effective conditioning. The FiLM hook is
-therefore attached at `mlp1[1]`'s input (immediately after the LayerNorm) so the
-modulation survives into the projector's first Linear. The choice of submodule
-lives in the caller (`train_lora_mlp1_vision.py`); `attach_gsd_film` itself is
-generic.
-"""
+"""Continuous numeric GSD conditioning for the InternVL vision projector."""
 
 from __future__ import annotations
 
+import json
 import math
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass
+from numbers import Real
+from pathlib import Path
 
 import torch
 from torch import nn
 
-SINUSOIDAL_BASE = 10000.0  # Vaswani et al. 2017
+CONDITIONER_STATE_FILENAME = "gsd_conditioner.pt"
+CONDITIONER_CONFIG_FILENAME = "gsd_conditioner.json"
 
 
-def sinusoidal_encoding(
-    values: torch.Tensor, dim: int, base: float = SINUSOIDAL_BASE
-) -> torch.Tensor:
-    """Vaswani et al. 2017 sinusoidal encoding of a 1-D tensor of scalars.
-
-    `values` is shape (B,); returns (B, dim). `dim` must be even.
-    """
-    if dim % 2 != 0:
-        raise ValueError(f"sinusoidal encoding dim must be even, got {dim}")
-    half = dim // 2
-    exponents = torch.arange(half, device=values.device, dtype=torch.float32) / half
-    inv_freq = torch.exp(-exponents * math.log(base))  # (half,)
-    angles = values.float().unsqueeze(1) * inv_freq.unsqueeze(0)  # (B, half)
-    return torch.cat([torch.sin(angles), torch.cos(angles)], dim=1)  # (B, dim)
+def validate_gsd_m(value: object, field_name: str = "gsd_m") -> float:
+    """Return a positive finite GSD in metres or raise an explicit validation error."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise TypeError(f"{field_name} must be a numeric value in metres")
+    gsd_m = float(value)
+    if not math.isfinite(gsd_m) or gsd_m <= 0:
+        raise ValueError(f"{field_name} must be positive and finite, got {value!r}")
+    return gsd_m
 
 
-def mlp1_input_dim(mlp1: nn.Module) -> int:
-    """The `.in_features` of the first Linear inside `mlp1` -- read live, never hardcoded.
+def _gsd_tensor(values: object, device: torch.device | None = None) -> torch.Tensor:
+    """Convert scalar or one-dimensional GSD metadata into a validated tensor."""
+    if isinstance(values, torch.Tensor):
+        if values.dtype == torch.bool:
+            raise TypeError("gsd_m must be a numeric value in metres, not boolean")
+        tensor = values.detach().to(device=device, dtype=torch.float32)
+    elif isinstance(values, (list, tuple)):
+        tensor = torch.tensor(values, device=device)
+        if tensor.dtype == torch.bool:
+            raise TypeError("gsd_m must be a numeric value in metres, not boolean")
+        tensor = tensor.to(dtype=torch.float32)
+    else:
+        tensor = torch.tensor([validate_gsd_m(values)], device=device, dtype=torch.float32)
+    if tensor.ndim == 0:
+        tensor = tensor.reshape(1)
+    if tensor.ndim != 1 or tensor.numel() == 0:
+        raise ValueError("gsd_m must be a non-empty scalar or one-dimensional sequence")
+    if not torch.isfinite(tensor).all() or (tensor <= 0).any():
+        raise ValueError("gsd_m must contain only positive finite values")
+    return tensor
 
-    Call this on the raw model before any PEFT/LoRA wrapping, while the layer is
-    still a plain `nn.Linear`.
-    """
-    for module in mlp1.modules():
-        if isinstance(module, nn.Linear):
-            return module.in_features
-    raise ValueError("no nn.Linear found inside mlp1 to read an input dimension from")
+
+@dataclass(frozen=True)
+class GSDConditioningConfig:
+    """Configuration for log-space GSD normalization and the learnable encoder."""
+
+    output_dim: int
+    min_gsd_m: float = 0.5
+    max_gsd_m: float = 30.0
+    hidden_dim: int = 64
+
+    def __post_init__(self) -> None:
+        """Validate conditioning bounds and dimensions at configuration creation."""
+        min_gsd_m = validate_gsd_m(self.min_gsd_m, "min_gsd_m")
+        max_gsd_m = validate_gsd_m(self.max_gsd_m, "max_gsd_m")
+        if max_gsd_m <= min_gsd_m:
+            raise ValueError("max_gsd_m must be greater than min_gsd_m")
+        if self.hidden_dim <= 0 or self.output_dim <= 0:
+            raise ValueError("hidden_dim and output_dim must be positive")
 
 
-class GSDFiLMConditioner(nn.Module):
-    """Scalar GSD (metres) -> per-channel FiLM (scale, shift) for an mlp1-input feature vector.
+class GSDConditioner(nn.Module):
+    """Encode validated GSD values into vectors with the configured output width."""
 
-    The current batch's GSD is supplied out-of-band via `set_gsd(...)`: it is not
-    a model input, and InternVL3-2B's forward signature is fixed.
-    """
-
-    def __init__(self, num_channels: int) -> None:
+    def __init__(self, config: GSDConditioningConfig) -> None:
         super().__init__()
-        if num_channels % 2 != 0:
-            raise ValueError(f"num_channels must be even for the encoding, got {num_channels}")
-        self.num_channels = num_channels
-        # encoding (num_channels) -> concat[scale, shift] (2 * num_channels).
-        # Zero-init => identity modulation (scale = 1 + 0, shift = 0) at step 0.
-        self.to_film = nn.Linear(num_channels, 2 * num_channels)
-        nn.init.zeros_(self.to_film.weight)
-        nn.init.zeros_(self.to_film.bias)
-        self._gsd_m: torch.Tensor | None = None
+        self.config = config
+        self._active_gsd: object | None = None
+        self.network = nn.Sequential(
+            nn.Linear(1, config.hidden_dim),
+            nn.GELU(),
+            nn.Linear(config.hidden_dim, config.output_dim),
+        )
 
-    def set_gsd(self, gsd_m: torch.Tensor) -> None:
-        """Register the GSD(s), in metres, for the next forward. Shape (B,) or scalar."""
-        self._gsd_m = gsd_m
+    def normalize(self, values: object) -> torch.Tensor:
+        """Normalize GSD values to approximately [-1, 1] in natural-log space."""
+        tensor = _gsd_tensor(values)
+        minimum = math.log(self.config.min_gsd_m)
+        maximum = math.log(self.config.max_gsd_m)
+        if (tensor < self.config.min_gsd_m).any() or (tensor > self.config.max_gsd_m).any():
+            raise ValueError(
+                f"gsd_m must be within {self.config.min_gsd_m:g}-{self.config.max_gsd_m:g} metres"
+            )
+        return ((tensor.log() - minimum) / (maximum - minimum) * 2.0 - 1.0).unsqueeze(-1)
 
-    def film_params(self, gsd_m: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        encoded = sinusoidal_encoding(torch.log(gsd_m.float()), self.num_channels)
-        scale_shift = self.to_film(encoded.to(self.to_film.weight.dtype))
-        gamma, beta = scale_shift.chunk(2, dim=-1)
-        return 1.0 + gamma, beta
-
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        """Apply FiLM to `features` (shape (B, ..., num_channels)) using the registered GSD."""
-        if self._gsd_m is None:
-            raise RuntimeError("GSDFiLMConditioner.forward() called before set_gsd()")
-        gsd_m = self._gsd_m
-        if gsd_m.dim() == 0:
-            gsd_m = gsd_m.reshape(1)
-        if gsd_m.shape[0] == 1 and features.shape[0] > 1:
-            gsd_m = gsd_m.expand(features.shape[0])
-        scale, shift = self.film_params(gsd_m.to(features.device))
-        while scale.dim() < features.dim():
-            scale = scale.unsqueeze(1)
-            shift = shift.unsqueeze(1)
-        return features.to(scale.dtype) * scale + shift
+    def forward(self, values: object) -> torch.Tensor:
+        """Return one learnable conditioning vector per validated GSD value."""
+        normalized = self.normalize(values).to(self.network[0].weight.device)
+        return self.network(normalized)
 
 
-def attach_gsd_film(
-    target: nn.Module, conditioner: GSDFiLMConditioner
+class GSDConditionedProjector(nn.Module):
+    """Add a GSD embedding to projected visual tokens during an explicit context."""
+
+    def __init__(self, projector: nn.Module, config: GSDConditioningConfig) -> None:
+        super().__init__()
+        self.projector = projector
+        self.conditioner = GSDConditioner(config)
+        self._active_gsd: object | None = None
+
+    @contextmanager
+    def condition_on(self, values: object) -> Iterator[None]:
+        """Set GSD metadata for one forward pass and restore prior state afterward."""
+        previous = self._active_gsd
+        self._active_gsd = values
+        try:
+            yield
+        finally:
+            self._active_gsd = previous
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """Project visual tokens and add one GSD vector to every token in each sample."""
+        if self._active_gsd is None:
+            raise ValueError("GSD conditioning requires gsd_m metadata via condition_on()")
+        projected = self.projector(hidden_states)
+        conditioning = self.conditioner(self._active_gsd).to(
+            device=projected.device, dtype=projected.dtype
+        )
+        if conditioning.shape[0] == 1 and projected.shape[0] > 1:
+            conditioning = conditioning.expand(projected.shape[0], -1)
+        if conditioning.shape[0] != projected.shape[0]:
+            raise ValueError("one gsd_m value is required for each projected image batch item")
+        return projected + conditioning.unsqueeze(1)
+
+
+def attach_gsd_output_conditioning(
+    target: nn.Module, conditioner: GSDConditioner
 ) -> torch.utils.hooks.RemovableHandle:
-    """Install `conditioner` on `target`'s input via a forward pre-hook.
+    """Add conditioning after an existing projector without changing LoRA module names."""
 
-    `target` is whichever submodule the caller wants FiLM applied to the input
-    of -- for the mlp1 vision projector that is `mlp1[1]` (the first Linear,
-    after the `mlp1[0]` LayerNorm), passed by the caller; see the module
-    docstring's implementation note.
+    def _hook(
+        _module: nn.Module, _inputs: tuple[object, ...], output: torch.Tensor
+    ) -> torch.Tensor:
+        if conditioner._active_gsd is None:
+            raise ValueError("GSD conditioning requires gsd_m metadata via condition_on()")
+        conditioning = conditioner(conditioner._active_gsd).to(
+            device=output.device, dtype=output.dtype
+        )
+        if conditioning.shape[0] == 1 and output.shape[0] > 1:
+            conditioning = conditioning.expand(output.shape[0], -1)
+        if conditioning.shape[0] != output.shape[0]:
+            raise ValueError("one gsd_m value is required for each projected image batch item")
+        return output + conditioning.unsqueeze(1)
 
-    A pre-hook (rather than replacing `target`) keeps every LoRA parameter name
-    under it unchanged, so `save_pretrained` on the PEFT model is unaffected.
-    The conditioner's own weights live outside the PEFT model and must be added
-    to the optimizer and checkpointed separately.
-    """
+    return target.register_forward_hook(_hook)
 
-    def _pre_hook(_module: nn.Module, args: tuple[object, ...]) -> tuple[object, ...]:
-        features, *rest = args
-        return (conditioner(features), *rest)
 
-    return target.register_forward_pre_hook(_pre_hook)
+@contextmanager
+def condition_on(conditioner: GSDConditioner, values: object) -> Iterator[None]:
+    """Set GSD metadata for a hook-based model forward and restore prior state afterward."""
+    previous = conditioner._active_gsd
+    conditioner._active_gsd = values
+    try:
+        yield
+    finally:
+        conditioner._active_gsd = previous
+
+
+def save_gsd_conditioner(conditioner: GSDConditioner, output_dir: str | Path) -> None:
+    """Persist conditioner weights and normalization metadata beside the LoRA adapter."""
+    path = Path(output_dir)
+    path.mkdir(parents=True, exist_ok=True)
+    torch.save(conditioner.state_dict(), path / CONDITIONER_STATE_FILENAME)
+    (path / CONDITIONER_CONFIG_FILENAME).write_text(
+        json.dumps(asdict(conditioner.config), indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def load_gsd_conditioner(output_dir: str | Path) -> GSDConditioner:
+    """Restore a conditioner from the state and configuration saved beside an adapter."""
+    path = Path(output_dir)
+    config_data = json.loads((path / CONDITIONER_CONFIG_FILENAME).read_text(encoding="utf-8"))
+    conditioner = GSDConditioner(GSDConditioningConfig(**config_data))
+    state = torch.load(path / CONDITIONER_STATE_FILENAME, map_location="cpu", weights_only=True)
+    conditioner.load_state_dict(state)
+    return conditioner

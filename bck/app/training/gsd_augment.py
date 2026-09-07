@@ -1,114 +1,104 @@
-"""AASH-004: multi-scale ground-sample-distance (GSD) crop/degrade augmentation.
-
-Simulates viewing the same real scene at a coarser ground resolution than the
-source imagery by low-pass degradation -- downsample to fewer real pixels, then
-resample back up to the model input size. The vision projector (mlp1) then sees
-each real Sentinel-2 scene across a range of effective GSDs during LoRA
-fine-tuning, widening the resolution distribution it is adapted to.
-
-Scope (AASH-004 -- GSD-conditioning + augmentation half; augmentation part only):
-- This module is the augmentation mechanism only. The explicit GSD *conditioning
-  embedding* at training time, and any §3.3-specified random-crop scale
-  schedule, are held for 03-SatQuery-AI-Technical-Implementation.md §3.3, which
-  is not available to this ticket. Nothing here encodes a resolution boundary,
-  bin edge, or sampling rule from that section.
-- Coarsening only. The wired Sentinel-2 training imagery (EuroSAT,
-  `Honaker/eurosat_dataset`) is 10 m GSD for its RGB bands; degrading toward a
-  coarser GSD is a physically faithful low-pass. Simulating a *finer* GSD than
-  the source (the 0.5 m end of the range named in the ticket) cannot be produced
-  by resampling and is left to the real Cartosat/RISAT imagery follow-up.
-- `max_gsd_m` defaults to 30.0 -- the resolution-range upper bound named in the
-  AASH-004 ticket. `min_gsd_m` defaults to the source GSD; no finer bound is
-  invented here.
-"""
+"""Configurable multi-scale crop and resolution degradation for training images."""
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass
 
 from PIL import Image
 
-# EuroSAT is Sentinel-2 L2A surface reflectance; its RGB bands (B04/B03/B02) are
-# 10 m GSD. Documented property of the sensor/dataset, not a project-chosen value.
 EUROSAT_NATIVE_GSD_M = 10.0
-
-# Upper bound of the simulated resolution range, per the AASH-004 ticket.
 DEFAULT_MAX_SIM_GSD_M = 30.0
+DEFAULT_MIN_SIM_GSD_M = 0.5
 
 
 @dataclass(frozen=True)
 class GSDAugmentConfig:
-    """Bounds and output size for one augmentation pass.
-
-    `min_gsd_m` left as None means "start from the source GSD" -- the finest
-    resolution that can be simulated without inventing detail.
-    """
+    """Physical source/target GSD bounds and model output settings."""
 
     source_gsd_m: float = EUROSAT_NATIVE_GSD_M
     max_gsd_m: float = DEFAULT_MAX_SIM_GSD_M
-    min_gsd_m: float | None = None
+    min_gsd_m: float = DEFAULT_MIN_SIM_GSD_M
     output_size: int = 448
+    min_crop_pixels: int = 2
+    sampling: str = "log_uniform"
 
     def resolved_min_gsd_m(self) -> float:
-        return self.source_gsd_m if self.min_gsd_m is None else self.min_gsd_m
+        """Return the configured lower target-GSD bound."""
+        return self.min_gsd_m
 
     def __post_init__(self) -> None:
-        if self.source_gsd_m <= 0:
-            raise ValueError(f"source_gsd_m must be > 0, got {self.source_gsd_m}")
-        if self.output_size <= 0:
-            raise ValueError(f"output_size must be > 0, got {self.output_size}")
-        low = self.resolved_min_gsd_m()
-        if low < self.source_gsd_m:
-            raise ValueError(
-                f"min_gsd_m ({low}) is finer than source_gsd_m ({self.source_gsd_m}); "
-                "resampling cannot synthesise detail the source does not contain"
-            )
-        if self.max_gsd_m < low:
-            raise ValueError(
-                f"max_gsd_m ({self.max_gsd_m}) is coarser-bound below min_gsd_m ({low})"
-            )
+        """Validate augmentation bounds and output dimensions."""
+        for name, value in (
+            ("source_gsd_m", self.source_gsd_m),
+            ("min_gsd_m", self.min_gsd_m),
+            ("max_gsd_m", self.max_gsd_m),
+        ):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be positive and finite, got {value}")
+        if self.max_gsd_m < self.min_gsd_m:
+            raise ValueError("max_gsd_m must be greater than or equal to min_gsd_m")
+        if self.output_size <= 0 or self.min_crop_pixels <= 0:
+            raise ValueError("output_size and min_crop_pixels must be positive")
+        if self.sampling != "log_uniform":
+            raise ValueError("sampling must be 'log_uniform'")
 
 
 class MultiScaleGSDAugment:
-    """Callable: a source PIL image -> (degraded image at `output_size`, GSD in metres).
-
-    The returned GSD is the effective ground-sample-distance the degraded image
-    now represents -- the value a GSD-conditioning embedding would consume once
-    §3.3 defines it.
-    """
+    """Apply a seeded scale proxy for fine targets and low-pass degradation for coarse targets."""
 
     def __init__(self, config: GSDAugmentConfig | None = None) -> None:
         self.config = config or GSDAugmentConfig()
 
     def sample_gsd_m(self, rng: random.Random) -> float:
-        """Draw a target GSD uniformly across the configured range.
+        """Sample a target GSD uniformly in log space across configured bounds."""
+        low = math.log(self.config.resolved_min_gsd_m())
+        high = math.log(self.config.max_gsd_m)
+        return math.exp(rng.uniform(low, high))
 
-        Uniform-in-metres is this module's default over the narrow 10-30 m span;
-        §3.3 may specify a different distribution once available.
-        """
-        return rng.uniform(self.config.resolved_min_gsd_m(), self.config.max_gsd_m)
+    def _crop_for_finer_scale(
+        self, image: Image.Image, target_gsd_m: float, rng: random.Random
+    ) -> Image.Image:
+        """Crop a source-proportional window to proxy finer apparent spatial scale."""
+        source = image if image.mode == "RGB" else image.convert("RGB")
+        width, height = source.size
+        fraction = min(1.0, target_gsd_m / self.config.source_gsd_m)
+        crop_width = max(self.config.min_crop_pixels, round(width * fraction))
+        crop_height = max(self.config.min_crop_pixels, round(height * fraction))
+        crop_width = min(width, crop_width)
+        crop_height = min(height, crop_height)
+        left = rng.randint(0, width - crop_width)
+        top = rng.randint(0, height - crop_height)
+        return source.crop((left, top, left + crop_width, top + crop_height)).resize(
+            (self.config.output_size, self.config.output_size), Image.Resampling.BICUBIC
+        )
 
-    def degrade_to_gsd(self, image: Image.Image, target_gsd_m: float) -> Image.Image:
-        """Low-pass `image` so it represents `target_gsd_m`, sized to `output_size`."""
+    def degrade_to_gsd(
+        self, image: Image.Image, target_gsd_m: float, rng: random.Random | None = None
+    ) -> Image.Image:
+        """Transform an image to the target GSD proxy and configured model dimensions."""
+        if not math.isfinite(target_gsd_m) or target_gsd_m <= 0:
+            raise ValueError("target_gsd_m must be positive and finite")
         cfg = self.config
+        if target_gsd_m < cfg.min_gsd_m or target_gsd_m > cfg.max_gsd_m:
+            raise ValueError("target_gsd_m is outside the configured GSD range")
+        active_rng = rng if rng is not None else random.Random(0)
         if target_gsd_m < cfg.source_gsd_m:
-            raise ValueError(
-                f"target_gsd_m ({target_gsd_m}) is finer than source_gsd_m "
-                f"({cfg.source_gsd_m}); nothing to simulate in that direction"
-            )
-        src = image if image.mode == "RGB" else image.convert("RGB")
-        width, height = src.size
-        # Fraction of native detail retained: <= 1, smaller = coarser GSD.
+            return self._crop_for_finer_scale(image, target_gsd_m, active_rng)
+
+        source = image if image.mode == "RGB" else image.convert("RGB")
+        width, height = source.size
         retained = cfg.source_gsd_m / target_gsd_m
         low_width = max(1, round(width * retained))
         low_height = max(1, round(height * retained))
-        low = src.resize((low_width, low_height), Image.Resampling.BILINEAR)
+        low = source.resize((low_width, low_height), Image.Resampling.BILINEAR)
         return low.resize((cfg.output_size, cfg.output_size), Image.Resampling.BICUBIC)
 
     def __call__(
         self, image: Image.Image, rng: random.Random | None = None
     ) -> tuple[Image.Image, float]:
+        """Return a transformed image and the derived effective GSD used for conditioning."""
         active_rng = rng if rng is not None else random.Random()
         target_gsd_m = self.sample_gsd_m(active_rng)
-        return self.degrade_to_gsd(image, target_gsd_m), target_gsd_m
+        return self.degrade_to_gsd(image, target_gsd_m, active_rng), target_gsd_m

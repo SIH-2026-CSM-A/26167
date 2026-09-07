@@ -1,129 +1,94 @@
-"""AASH-004 verification: GSD-conditioning embedding (Fourier over log-GSD + FiLM).
-
-Standalone check, not the training loop. The structural checks are model-free and
-run anywhere; the final section additionally loads InternVL3-2B to print the live
-`mlp1` input dimension the training script reads.
-
-Run: `python -m app.training.verify_gsd_conditioning`.
-"""
+"""Standalone structural verification for the AASH-004 GSD conditioning path."""
 
 from __future__ import annotations
 
 import torch
 
 from app.training.gsd_conditioning import (
-    GSDFiLMConditioner,
-    attach_gsd_film,
-    mlp1_input_dim,
-    sinusoidal_encoding,
+    GSDConditionedProjector,
+    GSDConditioningConfig,
+    attach_gsd_output_conditioning,
+    condition_on,
 )
 
 DEMO_DIM = 64
-# Metres. 0.5-2 m is the Cartosat/RISAT range never seen in training (the
-# extrapolation case); 12-28 m is inside the augmentation's 10-30 m band.
-IN_RANGE_GSDS = [12.0, 18.0, 24.0, 28.0]
-EXTRAPOLATION_GSDS = [0.5, 1.0, 2.0]
+GSD_VALUES = (0.5, 10.0, 30.0)
 
 
-def check_encoding_is_not_collapsing() -> None:
-    print("=== encoding: distinct per GSD (vs. a lookup that would collapse) ===")
-    gsds = torch.tensor(IN_RANGE_GSDS + EXTRAPOLATION_GSDS)
-    enc = sinusoidal_encoding(torch.log(gsds), DEMO_DIM)
-    assert enc.shape == (len(gsds), DEMO_DIM), enc.shape
-    assert torch.isfinite(enc).all(), "non-finite encoding values"
-    pdist = torch.cdist(enc, enc)
-    off_diag_min = pdist[~torch.eye(len(gsds), dtype=torch.bool)].min().item()
-    print(f"encoding shape           : {tuple(enc.shape)}")
-    print(f"min pairwise L2 distance : {off_diag_min:.4f}  (must be > 0)")
-    assert off_diag_min > 1e-6, "two GSDs produced the same encoding"
-
-
-def check_identity_at_init() -> None:
-    print("\n=== FiLM: exact identity at initialisation ===")
-    conditioner = GSDFiLMConditioner(DEMO_DIM)
-    for gsd in IN_RANGE_GSDS + EXTRAPOLATION_GSDS:
-        scale, shift = conditioner.film_params(torch.tensor([gsd]))
-        assert torch.allclose(scale, torch.ones_like(scale)), (gsd, scale)
-        assert torch.allclose(shift, torch.zeros_like(shift)), (gsd, shift)
-    conditioner.set_gsd(torch.tensor([15.0]))
-    features = torch.randn(1, 8, DEMO_DIM)
-    out = conditioner(features)
-    assert out.shape == features.shape, out.shape
-    assert torch.allclose(out, features, atol=1e-6), "not identity at init"
-    print("scale == 1, shift == 0, output == input for every tested GSD")
-
-
-def check_conditioning_signal_after_a_step() -> None:
-    print("\n=== FiLM: a single optimiser step makes it GSD-dependent ===")
-    torch.manual_seed(0)
-    conditioner = GSDFiLMConditioner(DEMO_DIM)
-    opt = torch.optim.SGD(conditioner.parameters(), lr=0.1)
-    target = torch.randn(1, 8, DEMO_DIM)
-    conditioner.set_gsd(torch.tensor([20.0]))
-    features = torch.randn(1, 8, DEMO_DIM)
-    loss = ((conditioner(features) - target) ** 2).mean()
-    opt.zero_grad()
-    loss.backward()
-    grad_norm = torch.cat([p.grad.flatten() for p in conditioner.parameters()]).norm().item()
-    opt.step()
-    print(f"gradient norm through FiLM generator : {grad_norm:.4f}  (must be > 0)")
-    assert grad_norm > 0.0, "no gradient reached the FiLM generator"
-
-    s_lo, _ = conditioner.film_params(torch.tensor([IN_RANGE_GSDS[0]]))
-    s_hi, _ = conditioner.film_params(torch.tensor([EXTRAPOLATION_GSDS[0]]))
-    spread = (s_lo - s_hi).abs().max().item()
-    print(f"max |scale(12 m) - scale(0.5 m)|    : {spread:.4f}  (must be > 0)")
-    assert spread > 1e-6, "scale does not vary with GSD after training"
-
-
-def check_pre_hook_wiring() -> None:
-    print("\n=== pre-hook: modifies mlp1 input, leaves child param names intact ===")
-    mlp1 = torch.nn.Sequential(
+def build_demo_projector() -> GSDConditionedProjector:
+    """Build a small projector that exercises the same additive conditioning interface."""
+    projector = torch.nn.Sequential(
         torch.nn.LayerNorm(DEMO_DIM),
         torch.nn.Linear(DEMO_DIM, DEMO_DIM),
         torch.nn.GELU(),
         torch.nn.Linear(DEMO_DIM, DEMO_DIM),
     )
-    names_before = [n for n, _ in mlp1.named_parameters()]
-    assert mlp1_input_dim(mlp1) == DEMO_DIM
-    conditioner = GSDFiLMConditioner(DEMO_DIM)
-    # Attach at mlp1[1] (first Linear, after the mlp1[0] LayerNorm) to match
-    # real production usage in train_lora_mlp1_vision.py.
-    handle = attach_gsd_film(mlp1[1], conditioner)
-    conditioner.set_gsd(torch.tensor([25.0]))
-    x = torch.randn(2, 8, DEMO_DIM)
-    _ = mlp1(x)  # runs without error through the hook
-    names_after = [n for n, _ in mlp1.named_parameters()]
+    return GSDConditionedProjector(
+        projector,
+        GSDConditioningConfig(output_dim=DEMO_DIM, hidden_dim=16),
+    )
+
+
+def check_distinct_embeddings() -> None:
+    """Verify different physical GSD values produce different vectors."""
+    torch.manual_seed(0)
+    conditioned = build_demo_projector()
+    embeddings = conditioned.conditioner(torch.tensor(GSD_VALUES))
+    assert embeddings.shape == (len(GSD_VALUES), DEMO_DIM)
+    assert not torch.allclose(embeddings[0], embeddings[-1])
+    print(f"embedding shape: {tuple(embeddings.shape)}")
+
+
+def check_forward_and_gradient() -> None:
+    """Verify GSD changes projected tokens and receives training gradients."""
+    torch.manual_seed(1)
+    conditioned = build_demo_projector()
+    hidden_states = torch.randn(1, 4, DEMO_DIM)
+    with conditioned.condition_on([10.0]):
+        first = conditioned(hidden_states)
+    with conditioned.condition_on([20.0]):
+        second = conditioned(hidden_states)
+    loss = second.square().mean()
+    loss.backward()
+    assert not torch.allclose(first, second)
+    assert conditioned.conditioner.network[0].weight.grad is not None
+    print("forward path changes with GSD and conditioner gradients are non-zero")
+
+
+def check_hook_preserves_parameter_names() -> None:
+    """Verify the production hook leaves existing projector names unchanged."""
+    projector = torch.nn.Sequential(torch.nn.Linear(DEMO_DIM, DEMO_DIM))
+    names_before = [name for name, _ in projector.named_parameters()]
+    conditioned = build_demo_projector()
+    handle = attach_gsd_output_conditioning(projector, conditioned.conditioner)
+    with condition_on(conditioned.conditioner, [10.0]):
+        projector(torch.zeros(1, 2, DEMO_DIM))
     handle.remove()
-    print(f"param names unchanged by hook : {names_before == names_after}")
-    assert names_before == names_after, (names_before, names_after)
+    assert names_before == [name for name, _ in projector.named_parameters()]
+    print("projector parameter names remain unchanged")
 
 
 def inspect_live_model() -> None:
-    print("\n=== live InternVL3-2B mlp1 input dimension ===")
+    """Print the actual InternVL3 language hidden dimension when weights are available."""
     try:
         from transformers import AutoModel
 
         model = AutoModel.from_pretrained(
             "OpenGVLab/InternVL3-2B", trust_remote_code=True, torch_dtype=torch.float32
         )
-    except Exception as exc:  # noqa: BLE001 - report why, do not fail the check run
-        print(f"model not loaded here ({type(exc).__name__}: {exc}); run on the training box")
+    except Exception as error:  # noqa: BLE001 - standalone diagnostic reports environment state
+        print(f"live model not loaded ({type(error).__name__}: {error})")
         return
-    dim = mlp1_input_dim(model.mlp1)
-    conditioner = GSDFiLMConditioner(dim)
-    n_params = sum(p.numel() for p in conditioner.parameters())
-    print(f"mlp1 input dim (live)      : {dim}")
-    print(f"conditioner params at dim  : {n_params}")
+    print(f"live mlp1 output dimension: {model.config.llm_config.hidden_size}")
 
 
 def main() -> None:
-    check_encoding_is_not_collapsing()
-    check_identity_at_init()
-    check_conditioning_signal_after_a_step()
-    check_pre_hook_wiring()
+    """Run model-free conditioning checks and an optional live-model inspection."""
+    check_distinct_embeddings()
+    check_forward_and_gradient()
+    check_hook_preserves_parameter_names()
     inspect_live_model()
-    print("\nAll structural checks passed.")
+    print("All GSD conditioning checks passed.")
 
 
 if __name__ == "__main__":
