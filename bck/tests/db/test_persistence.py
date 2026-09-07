@@ -189,6 +189,45 @@ def test_pipeline_persists_every_evidence_id_referenced_by_trace(
     assert referenced_evidence_ids <= persisted_evidence_ids
 
 
+def test_pipeline_persists_rejected_claims_audit_trail_on_verification_disagreement(
+    sqlite_session: Session,
+) -> None:
+    """When verification rejects claims, persisted Evidence retains the audit trail."""
+    model = DeterministicVqaModel(
+        answer="A lake is visible and industrial pollution is contaminating the water.",
+        grounding="A lake is visible in the scene.",
+    )
+    upload = PipelineUpload(
+        id="asset-hallucination-audit",
+        filename="test.tif",
+        content_type="image/tiff",
+        content=make_geotiff_bytes(),
+        modality=Modality.OPTICAL,
+    )
+    session_maker = sessionmaker(bind=sqlite_session.get_bind(), expire_on_commit=False)
+
+    with patch("app.db.session.get_sync_session_maker", return_value=session_maker):
+        answer = run(
+            query="What geographic feature is visible?",
+            uploads=[upload],
+            model=model,
+        )
+
+    assert answer.abstained is False
+    assert len(answer.evidence) == 1
+    assert len(answer.evidence[0].payload["rejected_claims"]) > 0
+
+    persisted_evidence = sqlite_session.scalar(
+        select(EvidenceModel).where(EvidenceModel.trace_id == answer.trace.trace_id)
+    )
+    assert persisted_evidence is not None
+    assert persisted_evidence.id == answer.evidence[0].id
+    persisted_rejected = persisted_evidence.payload.get("rejected_claims")
+    assert persisted_rejected is not None
+    assert len(persisted_rejected) == len(answer.evidence[0].payload["rejected_claims"])
+    assert any("pollution" in str(claim).lower() for claim in persisted_rejected)
+
+
 def test_answer_assembly_failure_does_not_persist_completed_trace(
     sqlite_session: Session,
 ) -> None:

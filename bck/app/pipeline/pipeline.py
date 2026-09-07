@@ -214,10 +214,22 @@ def run(
     )
     salvaged_text = matched_text.payload.get("verified_answer") if matched_text else None
     verified_text = (salvaged_text or tool_result.raw_answer) if text_survived else ""
-    evidence_list = []
-    if text_survived and matched_text is not None:
-        evidence = matched_text.model_copy(update={"confidence": decision.effective_confidence})
-        evidence_list.append(evidence)
+    rejected_claims = tuple(d.description for d in decision.disagreements)
+    evidence = build_vqa_evidence(
+        asset=source.source,
+        model_id=tool_result.model_id,
+        raw_answer=tool_result.raw_answer,
+        verified_answer=verified_text,
+        supporting_observations=tool_result.supporting_observations,
+        rejected_claims=rejected_claims,
+        timing_seconds=tool_result.timing_seconds,
+    )
+    if text_survived:
+        evidence = evidence.model_copy(
+            update={"id": candidate_evidence.id, "confidence": decision.effective_confidence}
+        )
+
+    evidence_list = [evidence] if text_survived else []
     if bbox_evidence is not None and bbox_evidence.id in verified_ids:
         evidence_list.append(bbox_evidence)
     recorder.record(
