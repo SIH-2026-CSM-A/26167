@@ -36,6 +36,17 @@ const EvidenceMetrics: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
           {formatDuration(evidence.timing)}
         </span>
       </div>
+      {bboxPayload?.label && (
+        <div className="flex justify-between items-center text-slate-300">
+          <span className="text-slate-400">Label:</span>
+          <span className="text-cyan-300 font-medium">{bboxPayload.label}</span>
+        </div>
+      )}
+      {bboxPayload?.description && (
+        <div className="text-slate-300 pt-1 text-[11px] leading-relaxed italic">
+          {bboxPayload.description}
+        </div>
+      )}
       {bboxCoords && (
         <div className="pt-2 border-t border-slate-800/80">
           <div className="flex items-center gap-1 text-slate-400 mb-1">

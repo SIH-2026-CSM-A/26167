@@ -269,3 +269,19 @@ ORDER BY created_at;
 - Option B Architecture Sign-Off: Confirmed Option B document persistence (`steps` and `payload` as JSONB in `execution_traces` and `evidence`) avoids schema migrations on adding tools, awaiting final lead sign-off.
 
 Agent: Antigravity (handoff from Codex).
+
+### 2026-09-07 — Render BBOX evidence on map (LIKI-005) — Antigravity
+
+**Done**
+- Converted BBoxPayload [minLon, minLat, maxLon, maxLat] tuples into closed 5-point GeoJSON Polygon rings.
+- Integrated BBOX rendering into satquery-evidence across evidence-mask-fill, evidence-boundary-line, and evidence-selected-halo layers.
+- Wired highlight selection to useFeatureHighlight to keep CitationChip interaction unified without parallel state logic.
+- Implemented camera fitBounds with padding when selected bounding boxes fall outside the active viewport.
+- Added 22 unit and component tests across evidenceGeoJson.test.ts and EvidenceMap.test.tsx.
+
+**Decided**
+- Reused existing MapLibre layers and selection filter instead of creating separate BBOX layers to avoid pipeline divergence.
+- Guarded zero-area/point degenerate bounding boxes with an epsilon offset to prevent MapLibre camera crashes.
+
+**Incomplete**
+- None. Ready for backend integration with ticket AASH-005.

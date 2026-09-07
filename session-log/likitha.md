@@ -80,3 +80,35 @@ Built via Antigravity (single-agent, Windows).
 
 **Incomplete**
 - None.
+
+## 2026-09-07 — LIKI-005: Render BBOX evidence on map (FS grounding)
+
+Built via Antigravity (single-agent, Windows).
+
+**Did:**
+- Implemented BBOX evidence rendering and synchronization for ClickUp ticket 26167 - LIKI-005.
+- Extended `fnt/src/utils/evidenceGeoJson.ts`:
+  - Handled `EvidenceType = 'bbox'` and evidence carrying `payload.bbox: [minLon, minLat, maxLon, maxLat]`.
+  - Implemented 5-point closed GeoJSON Polygon conversion in `bboxToPolygonCoordinates`.
+  - Added robust payload extraction from `payload.geojson` supporting `Feature`, `FeatureCollection`, and raw `Geometry`.
+  - Enhanced `getFeatureBounds` and `getCollectionBounds` with finite-coordinate guards for `Polygon`, `MultiPolygon`, and `Point` geometries to prevent runtime errors.
+  - Added `isOutsideViewport` helper to detect when a feature bounding box is outside or partially outside the current viewport.
+  - Added `normalizeBoundsForFit` helper to expand zero-area or point bounding boxes with an epsilon offset to prevent MapLibre camera fit crashes.
+- Updated `fnt/src/components/Map/EvidenceMap.tsx`:
+  - Rendered BBOX evidence through existing `satquery-evidence` source and layers (`evidence-mask-fill`, `evidence-boundary-line`, `evidence-selected-halo`).
+  - Synced selection highlighting via the existing `['==', ['get', 'id'], selectedId ?? '']` halo filter.
+  - Safely framed bounding boxes via `map.fitBounds` with padding when the selected feature is out of view or partially outside the viewport.
+  - Preserved file size strictly under the 300-line hard limit (270 lines total) and kept all functions under 50 lines.
+- Enhanced `fnt/src/components/Map/EvidenceDetailCard.tsx`:
+  - Displayed label and description for BBOX evidence alongside coordinates, confidence, timing, and tool.
+- Added test suites:
+  - `fnt/src/utils/__tests__/evidenceGeoJson.test.ts` (17 tests covering conversion, geojson payloads, selection filtering, bounds calculation, out-of-view viewport detection, and bounds normalization).
+  - `fnt/src/components/Map/__tests__/EvidenceMap.test.tsx` (5 tests covering layer initialization, BBOX feature loading, selection halo filter, fitBounds viewport framing, and detail card display).
+- Verified full suite:
+  - Frontend: `npm test` (all 26 tests passed), `npm run lint` (0 errors), `npm run build` (clean production build).
+  - Backend: `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run pytest` (136 passed).
+
+**Rejected along the way:**
+- Rejected creating separate layer pipelines or parallel selection state for BBOX vs Mask evidence; both feed the unified `satquery-evidence` GeoJSON layer stack.
+- Rejected unconditional `map.fitBounds` calls when a feature is already completely visible within the viewport, preventing disorienting camera jumps on click.
+- Rejected modifying contracts (`fnt/src/types/contracts.ts` and `bck/app/contracts/`), strictly respecting module ownership rules.
