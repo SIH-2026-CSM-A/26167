@@ -197,20 +197,13 @@ def run(
         else None
     )
     verified_text = "" if decision.is_abstained else (salvaged_text or tool_result.raw_answer)
-    rejected_claims = tuple(d.description for d in decision.disagreements)
-    evidence = build_vqa_evidence(
-        asset=source.source,
-        model_id=tool_result.model_id,
-        raw_answer=tool_result.raw_answer,
-        verified_answer=verified_text,
-        supporting_observations=tool_result.supporting_observations,
-        rejected_claims=rejected_claims,
-        timing_seconds=tool_result.timing_seconds,
-    )
+    evidence = candidate_evidence
+    evidence_list = []
     if not decision.is_abstained:
-        evidence = evidence.model_copy(update={"confidence": decision.effective_confidence})
-
-    evidence_list = [evidence] if not decision.is_abstained else []
+        evidence = decision.verified_evidence[0].model_copy(
+            update={"confidence": decision.effective_confidence}
+        )
+        evidence_list = [evidence]
     recorder.record(
         "evidence",
         "evidence_created",
@@ -227,18 +220,19 @@ def run(
         evidence_ids=[item.id for item in evidence_list],
     )
     trace = recorder.build()
-    try:
-        persist_trace(trace, evidence_list)
-    except Exception as error:
-        _fail(recorder, stage="persistence", message=str(error), status_code=500)
-
-    return assemble_answer(
+    answer = assemble_answer(
         text=verified_text,
         evidence=evidence_list,
         trace=trace,
         abstained=decision.is_abstained,
         abstention_reason=decision.abstention_reason,
     )
+    try:
+        persist_trace(trace, evidence_list)
+    except Exception as error:
+        _fail(recorder, stage="persistence", message=str(error), status_code=500)
+
+    return answer
 
 
 def _fail(

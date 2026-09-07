@@ -45,10 +45,10 @@ class EvidenceModel(Base):
     __tablename__ = "evidence"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    trace_id: Mapped[str | None] = mapped_column(
+    trace_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey("execution_traces.trace_id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
     tool: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -63,6 +63,6 @@ class EvidenceModel(Base):
         nullable=False,
     )
 
-    trace: Mapped[ExecutionTraceModel | None] = relationship(
+    trace: Mapped[ExecutionTraceModel] = relationship(
         "ExecutionTraceModel", back_populates="evidence"
     )

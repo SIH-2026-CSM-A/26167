@@ -35,7 +35,7 @@ def upgrade() -> None:
     op.create_table(
         "evidence",
         sa.Column("id", sa.String(length=64), nullable=False),
-        sa.Column("trace_id", sa.String(length=64), nullable=True),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
         sa.Column("tool", sa.String(length=64), nullable=False),
         sa.Column("type", sa.String(length=32), nullable=False),
         sa.Column(

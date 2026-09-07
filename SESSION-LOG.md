@@ -181,3 +181,53 @@ Agent: Codex (continuation after Antigravity handoff).
   unchanged, so the two expensive real InternVL acceptance requests were preserved.
 - Post-rebase gates: Ruff pass; format pass (109 files already formatted); import-linter 3 kept,
   0 broken; pytest 138 passed, 3 skipped.
+
+## 2026-09-07 — JASH-004 review fixes and E2E acceptance after Codex handoff — Antigravity
+
+**Handoff & Review-Fix Summary**
+- Handoff from Codex to Antigravity recovered seamlessly from the isolated worktree `SIH26167-jash004-reviewfix`.
+- Resolved all three review blockers:
+  1. Blocker 1 (Trace/Evidence UUID integrity): Fixed pipeline evidence creation so persisted evidence identity exactly preserves candidate evidence identity (`decision.verified_evidence[0]`). Verified referenced trace Evidence ID == persisted Evidence ID.
+  2. Blocker 2 (`evidence.trace_id` non-null FK): Updated Alembic migration `c9c6d725a002` and SQLAlchemy model `EvidenceModel` to enforce `nullable=False` on `trace_id` with foreign key referencing `execution_traces.trace_id` (`ondelete="CASCADE"`). Verified on disposable DB migration and unit test `test_evidence_model_rejects_missing_trace_id`.
+  3. Blocker 3 (`response_completed` completion boundary): Refactored `run()` to invoke `assemble_answer()` before `persist_trace()`, guaranteeing that an answer assembly failure cannot persist a premature `response_completed` trace. Verified by `test_answer_assembly_failure_does_not_persist_completed_trace`.
+- Rebased cleanly onto current `origin/main` (`12bbf2ca68b699d0ddd0c85f2b94a29ffc75eb08`), preserving all teammate entries and commits.
+
+**Runtime Environment & Failed float32 Attempt Distinction**
+- Initial attempt on current main failed due to an environment/memory constraint, not a persistence defect: current main had updated default CPU dtype to `float32`, roughly doubling memory footprint and exhausting the ~7.1 GB free host RAM, causing a native process crash (curl exit 56, connection reset after 72.39s) during model loading without producing any database trace.
+- Real model server was run on CPU with `torch.bfloat16` (`adapter._dtype = torch.bfloat16`) using offline cached `OpenGVLab/InternVL2-2B` (`D:\huggingface`, `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`), which fit reliably within available system memory.
+
+**Genuine Fixed-Code Real E2E Acceptance**
+- Real server running at `127.0.0.1:8010` with offline `OpenGVLab/InternVL2-2B` on CPU (`torch.bfloat16`). Raster: `C:\Users\JASHWANTH\yash003-acceptance\RGB.byte.tif`. Zero mocks, fixtures, or monkeypatches.
+- Request #1 (`Describe the visible features in this satellite imagery.`):
+  - HTTP Status: 200 OK (recovered from active Codex run)
+  - Duration: 453.47s (model timing: 452.87s)
+  - Trace ID: `d87a63fc-c095-4ed9-a507-2ea8ecf9a673`
+  - Evidence ID: `081fb1fe-ec01-4109-8bd5-57dfb938e6b3`
+  - Step Count: 13
+  - Final Action: `response_completed`
+  - Model ID: `OpenGVLab/InternVL2-2B`
+  - Abstained: False
+  - Answer: `**Landmasses. The landmass is irregular in shape, with some areas appearing more densely populated. Surrounding the central landmass are smaller islands and.`
+  - DB Verification: Trace and Evidence matched exactly. `evidence.trace_id == trace_id`, trace Evidence ID == persisted Evidence ID.
+- Request #2 (`What terrain or land-cover features are visible in this satellite image?`):
+  - HTTP Status: 200 OK
+  - Duration: 473.72s (model timing: 473.47s)
+  - Trace ID: `733b6875-c395-4af0-873f-c78c5387e45a`
+  - Evidence ID: `29dfa47e-37b3-4e40-8e55-2ea3f2f778ef`
+  - Step Count: 13
+  - Final Action: `response_completed`
+  - Model ID: `OpenGVLab/InternVL2-2B`
+  - Abstained: False
+  - Answer: `The satellite image shows a variety of terrain. Land-cover features. The landmasses are irregular in shape, with some areas appearing more densely populated with clusters of white clouds, suggesting a higher concentration of cloud cover or possibly a region with a higher level of cloud formation. The darker areas on the right side of the image are likely to be bodies of water, possibly oceans or large lakes, given their size. The lack of visible land features. The green areas on the left side of the image are indicative of land, possibly forests or agricultural areas, given their uniform color. The presence of what appears to be a network of.`
+  - DB Verification: Trace and Evidence matched exactly. `evidence.trace_id == trace_id`, trace Evidence ID == persisted Evidence ID.
+- Distinct Traces: Request #1 and Request #2 trace IDs are verified distinct (`d87a63fc-c095-4ed9-a507-2ea8ecf9a673` != `733b6875-c395-4af0-873f-c78c5387e45a`).
+
+**Migration & Gate Verification**
+- Clean disposable migration test: PASS (migrated `satquery_disp_test` to head `c9c6d725a002`, verified `execution_traces.steps` is JSONB, `evidence.payload` is JSONB, `evidence.trace_id` is `NOT NULL` with cascading FK, and dropped cleanly).
+- Alembic head: `c9c6d725a002 (head)`.
+- `uv run ruff check .`: PASS.
+- `uv run ruff format --check .`: PASS (111 files already formatted).
+- `uv run lint-imports`: PASS (3 kept, 0 broken).
+- `uv run pytest -q`: PASS (145 passed, 8 skipped).
+
+Agent: Antigravity (handoff from Codex).

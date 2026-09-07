@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.contracts import Evidence, EvidenceType, ExecutionTrace, Modality, TraceStep
@@ -68,6 +69,25 @@ def test_models_cascade_delete(sqlite_session: Session) -> None:
     assert saved_evidence is None
 
 
+def test_evidence_model_rejects_missing_trace_id(sqlite_session: Session) -> None:
+    """An Evidence persistence row cannot exist without an ExecutionTrace reference."""
+    sqlite_session.add(
+        EvidenceModel(
+            id=str(uuid.uuid4()),
+            tool="test_tool",
+            type="text",
+            payload={"result": "orphan"},
+            confidence=0.9,
+            timing=0.1,
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        sqlite_session.commit()
+
+    sqlite_session.rollback()
+
+
 def test_persist_trace_roundtrip(sqlite_session: Session) -> None:
     """Persisted execution trace and evidence deserialize faithfully to original contract data."""
     now = datetime.now(UTC)
@@ -126,6 +146,82 @@ def test_persist_trace_roundtrip(sqlite_session: Session) -> None:
     assert persisted_ev.payload == {"answer": "detected water body", "metadata": {"band": "B8"}}
     assert persisted_ev.confidence == 0.88
     assert persisted_ev.timing == 0.045
+
+
+def test_pipeline_persists_every_evidence_id_referenced_by_trace(
+    sqlite_session: Session,
+) -> None:
+    """Every Evidence ID referenced by a pipeline trace resolves to its persisted row."""
+    model = DeterministicVqaModel(
+        answer="A lake is visible.",
+        grounding="A lake is visible in the scene.",
+    )
+    upload = PipelineUpload(
+        id="asset-evidence-identity",
+        filename="test.tif",
+        content_type="image/tiff",
+        content=make_geotiff_bytes(),
+        modality=Modality.OPTICAL,
+    )
+    session_maker = sessionmaker(bind=sqlite_session.get_bind(), expire_on_commit=False)
+
+    with patch("app.db.session.get_sync_session_maker", return_value=session_maker):
+        answer = run(
+            query="What geographic feature is visible?",
+            uploads=[upload],
+            model=model,
+        )
+
+    persisted_trace = sqlite_session.scalar(
+        select(ExecutionTraceModel).where(ExecutionTraceModel.trace_id == answer.trace.trace_id)
+    )
+    assert persisted_trace is not None
+    referenced_evidence_ids = {
+        evidence_id for step in persisted_trace.steps for evidence_id in step["evidence_ids"]
+    }
+    persisted_evidence_ids = set(
+        sqlite_session.scalars(
+            select(EvidenceModel.id).where(EvidenceModel.trace_id == answer.trace.trace_id)
+        ).all()
+    )
+
+    assert referenced_evidence_ids
+    assert referenced_evidence_ids <= persisted_evidence_ids
+
+
+def test_answer_assembly_failure_does_not_persist_completed_trace(
+    sqlite_session: Session,
+) -> None:
+    """Answer assembly failure cannot leave a persisted response_completed trace."""
+    model = DeterministicVqaModel(
+        answer="A lake is visible.",
+        grounding="A lake is visible in the scene.",
+    )
+    upload = PipelineUpload(
+        id="asset-answer-failure",
+        filename="test.tif",
+        content_type="image/tiff",
+        content=make_geotiff_bytes(),
+        modality=Modality.OPTICAL,
+    )
+    session_maker = sessionmaker(bind=sqlite_session.get_bind(), expire_on_commit=False)
+
+    with (
+        patch("app.db.session.get_sync_session_maker", return_value=session_maker),
+        patch(
+            "app.pipeline.pipeline.assemble_answer",
+            side_effect=ValueError("answer validation failed"),
+        ),
+        pytest.raises(ValueError, match="answer validation failed"),
+    ):
+        run(
+            query="What geographic feature is visible?",
+            uploads=[upload],
+            model=model,
+        )
+
+    persisted_traces = sqlite_session.scalars(select(ExecutionTraceModel)).all()
+    assert persisted_traces == []
 
 
 def test_persist_trace_abstained_empty_evidence(sqlite_session: Session) -> None:
