@@ -14,10 +14,18 @@ SCOPE NOTE (say this in the PR, do not bury it):
   synthetic data -- but it is a thinner training signal than a genuine caption
   would be. Say so plainly, don't oversell it.
 - Does NOT touch decoder layers 26-27 (AASH-002 Path C, already done, separate file).
+
+AASH-004 (GSD augmentation half): each real EuroSAT scene is passed through
+`MultiScaleGSDAugment` before normalization, simulating an effective GSD in
+[10 m, 30 m] -- coarsening only, since EuroSAT is 10 m native and resampling
+cannot invent finer detail (see `gsd_augment.py`). The sampled GSD is recorded
+per step in the loss log as `sim_gsd_m`. The GSD *conditioning embedding* is not
+wired here -- it waits on Technical-Implementation §3.3.
 """
 
 import json
 import os
+import random
 import time
 
 import torch
@@ -28,6 +36,13 @@ from PIL import Image
 from torchvision.transforms.functional import InterpolationMode
 from transformers import AutoModel, AutoTokenizer
 
+from app.training.gsd_augment import (
+    DEFAULT_MAX_SIM_GSD_M,
+    EUROSAT_NATIVE_GSD_M,
+    GSDAugmentConfig,
+    MultiScaleGSDAugment,
+)
+
 MODEL_ID = "OpenGVLab/InternVL3-2B"
 DATASET_ID = "Honaker/eurosat_dataset"
 N_SAMPLES = 500
@@ -36,6 +51,13 @@ CHECKPOINT_EVERY = 50
 IMAGE_SIZE = 448
 OUTPUT_DIR = "app/training/checkpoints/yash004_mlp1_vision_lora"
 LOG_PATH = "app/training/logs/mlp1_vision_loss_log.jsonl"
+
+# AASH-004: simulated GSD range for the multi-scale augmentation. Lower bound is
+# EuroSAT's 10 m native GSD (finest that can be simulated without inventing
+# detail); upper bound is the 30 m named in the AASH-004 ticket.
+GSD_SIM_MIN_M = EUROSAT_NATIVE_GSD_M
+GSD_SIM_MAX_M = DEFAULT_MAX_SIM_GSD_M
+GSD_AUGMENT_SEED = 42
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
@@ -106,6 +128,19 @@ if len(seen_classes) < 2:
 
 transform = build_transform(IMAGE_SIZE)
 
+gsd_augment = MultiScaleGSDAugment(
+    GSDAugmentConfig(
+        source_gsd_m=GSD_SIM_MIN_M,
+        max_gsd_m=GSD_SIM_MAX_M,
+        output_size=IMAGE_SIZE,
+    )
+)
+gsd_rng = random.Random(GSD_AUGMENT_SEED)
+print(
+    f"GSD augmentation active: simulating {GSD_SIM_MIN_M:.1f}-{GSD_SIM_MAX_M:.1f} m "
+    f"effective GSD (coarsening only) on real EuroSAT scenes"
+)
+
 optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-4)
 
 log_entries = []
@@ -122,7 +157,10 @@ for epoch in range(N_EPOCHS):
         image = ex["image"]
         class_name = class_names[ex["label"]]
 
-        pixel_values = image_to_pixel_values(image, transform).to("cuda", dtype=torch.float32)
+        degraded_image, sim_gsd_m = gsd_augment(image, gsd_rng)
+        pixel_values = image_to_pixel_values(degraded_image, transform).to(
+            "cuda", dtype=torch.float32
+        )
 
         question = "<image>\nWhat does this satellite image show?"
         answer = f" This satellite image shows: {class_name}."
@@ -159,12 +197,14 @@ for epoch in range(N_EPOCHS):
             "epoch": epoch,
             "loss": loss.item(),
             "class": class_name,
+            "sim_gsd_m": round(sim_gsd_m, 2),
             "step_seconds": round(step_time, 2),
         }
         log_entries.append(entry)
         print(
             f"epoch {epoch} | step {global_step:04d}/{total_steps} | "
-            f"loss {loss.item():.4f} | class={class_name} | {step_time:.2f}s"
+            f"loss {loss.item():.4f} | class={class_name} | "
+            f"gsd={sim_gsd_m:.1f}m | {step_time:.2f}s"
         )
 
         if global_step == 19:
