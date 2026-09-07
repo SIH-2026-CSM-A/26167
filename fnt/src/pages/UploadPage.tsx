@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { ConfigSelector, PipelineConfigMode } from '../components/Upload/ConfigSelector';
+import { DemoPresetSelector } from '../components/DemoPresetSelector';
 import { SlotUploader } from '../components/Upload/SlotUploader';
 import { QueryResultCard } from '../components/Upload/QueryResultCard';
 import { submitImageQuery } from '@/services/query';
 import type { Answer, Modality } from '../types/contracts';
+import type { PresetApplyPayload, PresetSlotData } from '../types/manifest';
 
-interface SlotData {
+export type UploadSourceMode = 'manual' | 'preset';
+
+export interface SlotData {
   label: string;
   file: File | null;
   modality: Modality;
@@ -13,6 +17,8 @@ interface SlotData {
 }
 
 export const UploadPage: React.FC = () => {
+  const [sourceMode, setSourceMode] = useState<UploadSourceMode>('manual');
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [mode, setMode] = useState<PipelineConfigMode>('single');
   const [query, setQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
@@ -23,10 +29,17 @@ export const UploadPage: React.FC = () => {
     { label: 'Primary Imagery', file: null, modality: 'optical', isLocked: false },
   ]);
 
+  const handleSourceChange = (newSource: UploadSourceMode) => {
+    setSourceMode(newSource);
+    setError(null);
+    setResult(null);
+  };
+
   const handleModeChange = (newMode: PipelineConfigMode) => {
     setMode(newMode);
     setResult(null);
     setError(null);
+    setSelectedPresetId(null);
     if (newMode === 'single') {
       setSlots([{ label: 'Primary Imagery', file: null, modality: 'optical', isLocked: false }]);
     } else if (newMode === 'cross-modal') {
@@ -40,6 +53,15 @@ export const UploadPage: React.FC = () => {
         { label: 'Slot 2 (T2 Pass)', file: null, modality: 'optical', isLocked: false },
       ]);
     }
+  };
+
+  const handleSelectPreset = (payload: PresetApplyPayload) => {
+    setMode(payload.mode);
+    setSlots(payload.slots as PresetSlotData[]);
+    setQuery(payload.query);
+    setSelectedPresetId(payload.preset.id);
+    setError(null);
+    setResult(null);
   };
 
   const updateSlotFile = (index: number, file: File | null) => {
@@ -85,12 +107,49 @@ export const UploadPage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-100">Satellite Imagery Query</h1>
-        <p className="text-xs text-slate-400 mt-1">Multi-modal earth observation query and analysis pipeline</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100">Satellite Imagery Query</h1>
+          <p className="text-xs text-slate-400 mt-1">Multi-modal earth observation query and analysis pipeline</p>
+        </div>
+
+        <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-lg shrink-0">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => handleSourceChange('manual')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              sourceMode === 'manual'
+                ? 'bg-cyan-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Manual Upload
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => handleSourceChange('preset')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              sourceMode === 'preset'
+                ? 'bg-cyan-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Demo Presets
+          </button>
+        </div>
       </div>
 
-      <ConfigSelector selectedMode={mode} onSelectMode={handleModeChange} disabled={loading} />
+      {sourceMode === 'manual' ? (
+        <ConfigSelector selectedMode={mode} onSelectMode={handleModeChange} disabled={loading} />
+      ) : (
+        <DemoPresetSelector
+          onSelectPreset={handleSelectPreset}
+          selectedPresetId={selectedPresetId}
+          disabled={loading}
+        />
+      )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className={`grid gap-4 ${slots.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
