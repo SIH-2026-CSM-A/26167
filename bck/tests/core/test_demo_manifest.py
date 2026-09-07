@@ -6,14 +6,18 @@ import copy
 import json
 import os
 import socket
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 import rasterio
 from rasterio.transform import from_origin
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.contracts import ImageInput, Modality, QueryRequest
 from app.core.demo_manifest import (
@@ -24,9 +28,27 @@ from app.core.demo_manifest import (
     DemoPreset,
     load_demo_manifest,
 )
+from app.db.models import Base
 from app.pipeline import PipelineUpload, run
 from app.router import route
 from tests.helpers import DeterministicVqaModel
+
+
+@pytest.fixture(autouse=True)
+def sqlite_db() -> Iterator[None]:
+    """Provide an in-memory SQLite database sessionmaker for pipeline persistence."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_maker = sessionmaker(bind=engine, expire_on_commit=False)
+    with patch("app.db.session.get_sync_session_maker", return_value=session_maker):
+        yield
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+
 
 PS_QUERIES = (
     "Describe the land-cover and major objects visible in this image.",
