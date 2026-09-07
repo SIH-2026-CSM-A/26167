@@ -23,11 +23,22 @@ const EmptyChatNotice: React.FC = () => (
 const ChatConversationPane: React.FC<{
   messages: ChatMessage[];
   selectedEvidenceId: string | null;
+  hoveredEvidenceId: string | null;
   onSelectEvidence: (id: string) => void;
+  onHoverEvidence: (id: string | null) => void;
   onSubmit: (query: string, files: File[], modalities: Modality[]) => void;
   isLoading: boolean;
   isMapVisible: boolean;
-}> = ({ messages, selectedEvidenceId, onSelectEvidence, onSubmit, isLoading, isMapVisible }) => (
+}> = ({
+  messages,
+  selectedEvidenceId,
+  hoveredEvidenceId,
+  onSelectEvidence,
+  onHoverEvidence,
+  onSubmit,
+  isLoading,
+  isMapVisible,
+}) => (
   <div
     className={`flex flex-col h-[640px] rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden ${
       isMapVisible ? 'lg:col-span-6 xl:col-span-5' : 'lg:col-span-12'
@@ -42,7 +53,9 @@ const ChatConversationPane: React.FC<{
             key={msg.id}
             message={msg}
             selectedEvidenceId={selectedEvidenceId}
+            hoveredEvidenceId={hoveredEvidenceId}
             onSelectEvidence={onSelectEvidence}
+            onHoverEvidence={onHoverEvidence}
           />
         ))
       )}
@@ -97,7 +110,9 @@ export const ChatPage: React.FC = () => {
     messages,
     evidenceList,
     selectedEvidenceId,
+    hoveredEvidenceId,
     selectEvidence,
+    hoverEvidence,
     submitUserQuery,
     isLoading,
     error,
@@ -112,10 +127,12 @@ export const ChatPage: React.FC = () => {
         <ChatConversationPane
           messages={messages}
           selectedEvidenceId={selectedEvidenceId}
+          hoveredEvidenceId={hoveredEvidenceId}
           onSelectEvidence={(id) => {
             selectEvidence(id);
             if (!isMapVisible) setIsMapVisible(true);
           }}
+          onHoverEvidence={hoverEvidence}
           onSubmit={submitUserQuery}
           isLoading={isLoading}
           isMapVisible={isMapVisible}
@@ -125,7 +142,9 @@ export const ChatPage: React.FC = () => {
             <EvidenceMap
               evidenceList={evidenceList}
               selectedEvidenceId={selectedEvidenceId}
+              hoveredEvidenceId={hoveredEvidenceId}
               onSelectEvidence={selectEvidence}
+              onHoverEvidence={hoverEvidence}
               className="h-full w-full"
             />
           </div>

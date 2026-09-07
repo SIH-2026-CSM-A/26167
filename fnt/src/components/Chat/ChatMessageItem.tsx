@@ -10,6 +10,8 @@ export interface ChatMessageItemProps {
   message: ChatMessage;
   selectedEvidenceId: string | null;
   onSelectEvidence: (id: string) => void;
+  hoveredEvidenceId?: string | null;
+  onHoverEvidence?: (id: string | null) => void;
 }
 
 const UserBubble: React.FC<{ content: string }> = ({ content }) => (
@@ -26,8 +28,10 @@ const UserBubble: React.FC<{ content: string }> = ({ content }) => (
 const GroundedEvidenceRibbon: React.FC<{
   answer: Answer;
   selectedId: string | null;
+  hoveredId: string | null;
   onSelect: (id: string) => void;
-}> = ({ answer, selectedId, onSelect }) => {
+  onHover?: (id: string | null) => void;
+}> = ({ answer, selectedId, hoveredId, onSelect, onHover }) => {
   if (!answer.evidence.length) return null;
   return (
     <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2 flex-wrap text-xs">
@@ -41,7 +45,9 @@ const GroundedEvidenceRibbon: React.FC<{
           evidenceId={ev.id}
           evidence={ev}
           isSelected={selectedId === ev.id}
+          isHovered={hoveredId === ev.id}
           onClick={onSelect}
+          onHover={onHover}
         />
       ))}
     </div>
@@ -52,8 +58,10 @@ const AssistantBubble: React.FC<{
   content: string;
   answer?: Answer;
   selectedId: string | null;
+  hoveredId: string | null;
   onSelect: (id: string) => void;
-}> = ({ content, answer, selectedId, onSelect }) => (
+  onHover?: (id: string | null) => void;
+}> = ({ content, answer, selectedId, hoveredId, onSelect, onHover }) => (
   <div className="flex items-start gap-3">
     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-600/20 text-cyan-400 border border-cyan-500/30 shadow">
       <Bot className="h-4 w-4" />
@@ -75,11 +83,19 @@ const AssistantBubble: React.FC<{
             text={content}
             evidenceList={answer?.evidence ?? []}
             selectedEvidenceId={selectedId}
+            hoveredEvidenceId={hoveredId}
             onSelectEvidence={onSelect}
+            onHoverEvidence={onHover}
           />
         </div>
         {answer && (
-          <GroundedEvidenceRibbon answer={answer} selectedId={selectedId} onSelect={onSelect} />
+          <GroundedEvidenceRibbon
+            answer={answer}
+            selectedId={selectedId}
+            hoveredId={hoveredId}
+            onSelect={onSelect}
+            onHover={onHover}
+          />
         )}
       </div>
       {answer?.trace && <ExecutionTracePanel trace={answer.trace} onSelectEvidence={onSelect} />}
@@ -91,6 +107,8 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   message,
   selectedEvidenceId,
   onSelectEvidence,
+  hoveredEvidenceId = null,
+  onHoverEvidence,
 }) => {
   if (message.role === 'user') {
     return <UserBubble content={message.content} />;
@@ -100,7 +118,9 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
       content={message.content}
       answer={message.answer}
       selectedId={selectedEvidenceId}
+      hoveredId={hoveredEvidenceId}
       onSelect={onSelectEvidence}
+      onHover={onHoverEvidence}
     />
   );
 };

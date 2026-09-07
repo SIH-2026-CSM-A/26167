@@ -12,12 +12,17 @@ Verifies ticket acceptance criteria:
 """
 
 import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 import rasterio
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.contracts import (
     Answer,
@@ -27,6 +32,7 @@ from app.contracts import (
     ImageInput,
     Modality,
 )
+from app.db.models import Base
 from app.pipeline import PipelineUpload, run
 from app.tools.fusion.cloud_detector import detect_clouds
 from app.tools.fusion.despeckle import lee_filter
@@ -42,6 +48,23 @@ from app.verification import (
     verify,
 )
 from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
+
+
+@pytest.fixture(autouse=True)
+def sqlite_db() -> Iterator[None]:
+    """Provide an in-memory SQLite database sessionmaker for pipeline persistence."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_maker = sessionmaker(bind=engine, expire_on_commit=False)
+    with patch("app.db.session.get_sync_session_maker", return_value=session_maker):
+        yield
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 S1_PATH = FIXTURES_DIR / "Bolivia_103757_S1Hand.tif"

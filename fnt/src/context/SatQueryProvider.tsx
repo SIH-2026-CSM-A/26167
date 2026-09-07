@@ -48,7 +48,9 @@ function useSatQueryState() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentAnswer, setCurrentAnswer] = useState<Answer | null>(null);
   const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
+  const [hoveredEvidenceId, setHoveredEvidenceId] = useState<string | null>(null);
   const selectEvidence = useCallback((id: string | null) => setSelectedEvidenceId(id), []);
+  const hoverEvidence = useCallback((id: string | null) => setHoveredEvidenceId(id), []);
 
   const { isLoading, error, setError, submit } = useQueryExecution(
     setMessages,
@@ -72,6 +74,7 @@ function useSatQueryState() {
     setMessages([]);
     setCurrentAnswer(null);
     setSelectedEvidenceId(null);
+    setHoveredEvidenceId(null);
     setError(null);
   }, [setError]);
 
@@ -81,9 +84,11 @@ function useSatQueryState() {
     evidenceList,
     selectedEvidenceId,
     selectedEvidence,
+    hoveredEvidenceId,
     isLoading,
     error,
     selectEvidence,
+    hoverEvidence,
     submitUserQuery: submit,
     loadAnswer,
     clearSession,

@@ -80,3 +80,108 @@ Built via Antigravity (single-agent, Windows).
 
 **Incomplete**
 - None.
+
+## 2026-09-07 — LIKI-005: Render BBOX evidence on map (FS grounding)
+
+Built via Antigravity (single-agent, Windows).
+
+**Did:**
+- Implemented BBOX evidence rendering and synchronization for ClickUp ticket 26167 - LIKI-005.
+- Extended `fnt/src/utils/evidenceGeoJson.ts`:
+  - Handled `EvidenceType = 'bbox'` and evidence carrying `payload.bbox: [minLon, minLat, maxLon, maxLat]`.
+  - Implemented 5-point closed GeoJSON Polygon conversion in `bboxToPolygonCoordinates`.
+  - Added robust payload extraction from `payload.geojson` supporting `Feature`, `FeatureCollection`, and raw `Geometry`.
+  - Enhanced `getFeatureBounds` and `getCollectionBounds` with finite-coordinate guards for `Polygon`, `MultiPolygon`, and `Point` geometries to prevent runtime errors.
+  - Added `isOutsideViewport` helper to detect when a feature bounding box is outside or partially outside the current viewport.
+  - Added `normalizeBoundsForFit` helper to expand zero-area or point bounding boxes with an epsilon offset to prevent MapLibre camera fit crashes.
+- Updated `fnt/src/components/Map/EvidenceMap.tsx`:
+  - Rendered BBOX evidence through existing `satquery-evidence` source and layers (`evidence-mask-fill`, `evidence-boundary-line`, `evidence-selected-halo`).
+  - Synced selection highlighting via the existing `['==', ['get', 'id'], selectedId ?? '']` halo filter.
+  - Safely framed bounding boxes via `map.fitBounds` with padding when the selected feature is out of view or partially outside the viewport.
+  - Preserved file size strictly under the 300-line hard limit (270 lines total) and kept all functions under 50 lines.
+- Enhanced `fnt/src/components/Map/EvidenceDetailCard.tsx`:
+  - Displayed label and description for BBOX evidence alongside coordinates, confidence, timing, and tool.
+- Added test suites:
+  - `fnt/src/utils/__tests__/evidenceGeoJson.test.ts` (17 tests covering conversion, geojson payloads, selection filtering, bounds calculation, out-of-view viewport detection, and bounds normalization).
+  - `fnt/src/components/Map/__tests__/EvidenceMap.test.tsx` (5 tests covering layer initialization, BBOX feature loading, selection halo filter, fitBounds viewport framing, and detail card display).
+- Verified full suite:
+  - Frontend: `npm test` (all 26 tests passed), `npm run lint` (0 errors), `npm run build` (clean production build).
+  - Backend: `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run pytest` (136 passed).
+
+**Rejected along the way:**
+- Rejected creating separate layer pipelines or parallel selection state for BBOX vs Mask evidence; both feed the unified `satquery-evidence` GeoJSON layer stack.
+- Rejected unconditional `map.fitBounds` calls when a feature is already completely visible within the viewport, preventing disorienting camera jumps on click.
+- Rejected modifying contracts (`fnt/src/types/contracts.ts` and `bck/app/contracts/`), strictly respecting module ownership rules.
+
+## 2026-09-07 — LIKI-006: One-click demo preset selector wired to manifest (F24)
+
+Built via Antigravity (single-agent, Windows).
+
+**Did:**
+- Grounded frontend manifest models in `fnt/src/types/manifest.ts` matching `data/demo/manifest.json` schema v1.0 (`DemoManifest`, `DemoPreset`, `DemoAsset`, `DemoAssetRole`, `PresetSlotData`, `PresetApplyPayload`). Zero fake data.
+- Built reusable preset loading and mapping utilities in `fnt/src/utils/demoPresets.ts`:
+  - `resolveAssetUrl`: Deterministically joins relative POSIX asset paths to manifest base directory.
+  - `fetchManifestData`: Retrieves and validates manifest preset array.
+  - `loadPresetAssetFiles`: Asynchronously retrieves preset assets as live browser `File` objects with extension-appropriate MIME types.
+  - `mapPresetToSlotsAndMode`: Explicitly binds role-tagged imagery into target upload slots:
+    - `"image"` -> Single image slot (`Primary Imagery`, optical, unlocked).
+    - `"pre_image"` & `"post_image"` -> Bi-temporal slots (`Slot 1 (T1 Pass)` and `Slot 2 (T2 Pass)`).
+    - `"optical_image"` & `"sar_image"` -> Cross-modal slots (`Slot 1 (Optical)` and `Slot 2 (SAR)` locked to optical and sar).
+- Implemented `DemoPresetSelector.tsx` (`fnt/src/components/DemoPresetSelector.tsx`):
+  - Renders curated preset cards with scenario tags, natural language query preview, and asset count telemetry.
+  - Handles one-click preset activation, loading assets and triggering slot population.
+  - Implements resilient error handling: displays honest inline banner `"Demo preset unavailable. Please use manual upload or verify dataset path."` if manifest fetch fails or asset fetch returns 404, preventing blank screen or unhandled exceptions.
+  - Strictly adheres to React Refresh guidelines by keeping component exports pure.
+- Updated `UploadPage.tsx` (`fnt/src/pages/UploadPage.tsx`):
+  - Added opt-in segmented toggle (`Manual Upload` vs `Demo Presets`), keeping default manual upload intact.
+  - When demo preset chip is selected, automatically sets pipeline configuration mode, fills query text box, and populates upload slots with authentic raster files.
+- Configured Vite dev/preview server middleware in `fnt/vite.config.ts` to serve real `data/demo/` rasters and manifest without copying or mock layers.
+- Added comprehensive unit test suite in `fnt/src/components/__tests__/DemoPresetSelector.test.tsx` (6 tests):
+  - Renders available presets from manifest data.
+  - Selecting a preset updates query and slot states.
+  - Displays honest fallback banner if manifest fetch fails.
+  - Displays honest fallback banner if an asset path returns a 404.
+  - Manual upload remains untouched when toggle is off.
+  - Selecting preset in `UploadPage` populates query, mode, and slots.
+- Maintained file limits: all files under 225 lines (< 300 lines limit), all functions under 45 lines, max parameters <= 2.
+- Verified test & quality gates:
+  - Frontend: `npm test` (all 32 tests passed), `npm run lint` (0 errors, 0 warnings), `npm run build` (clean exit 0).
+  - Backend: `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run pytest` (210 passed, 10 skipped).
+
+**Important Decisions & Rationale:**
+- Extracted utility functions into `fnt/src/utils/demoPresets.ts` and types into `fnt/src/types/manifest.ts` to satisfy ESLint's `react-refresh/only-export-components` rule.
+- Added Vite dev server middleware to stream genuine `data/demo` rasters directly, guaranteeing offline demonstration fidelity without duplicated asset storage.
+- Kept manual upload active by default with explicit toggle to prevent disruption to existing manual workflows.
+
+**Rejected along the way:**
+- Rejected hardcoded/mocked manifest payloads in frontend source — directly wired to manifest JSON fetch and offline dev proxy.
+- Rejected altering backend contract files (`bck/app/contracts/`), strictly respecting module ownership boundaries.
+
+## 2026-09-07 — LIKI-007: Map <-> Chat evidence interactivity (F20)
+
+Built via Antigravity (single-agent, Windows).
+
+**Did:**
+- Implemented bidirectional Map <-> Chat interactivity according to ClickUp Ticket 26167 / LIKI-007 (F20):
+  - Shared context state: Added `hoveredEvidenceId: string | null` and `hoverEvidence: (id: string | null) => void` in `SatQueryContext.ts` and `SatQueryProvider.tsx`.
+  - Citation chip hover highlight: Updated `CitationChip.tsx` with `isHovered` styling (`bg-amber-500`, amber ring, dark font) and mouseenter/mouseleave/focus/blur events triggering hover state dispatch.
+  - Map geometry hover highlighting: Added `evidence-hover-halo` line layer (`#f59e0b` amber/gold, line-width 5.5) in `EvidenceMap.tsx` and reactive `useHoverHighlight` hook updating layer filter `['==', ['get', 'id'], hoveredId ?? '']`. Hover exit cleanly resets the filter to `['==', ['get', 'id'], '']`.
+  - Bidirectional map click -> chat paragraph scroll & highlight: Updated `CitationText.tsx` to decompose chat responses into paragraph blocks via `CitingParagraph`. When a map geometry feature is clicked, `selectedEvidenceId` syncs into the citing paragraph, triggering an active visual highlight (`border-l-4 border-cyan-400`, `ring-2 ring-cyan-400/80`, `bg-cyan-950/70`) and smooth scroll-into-view (`scrollIntoView({ behavior: 'smooth', block: 'nearest' })`).
+  - Wired hover and selection props across `ChatMessageItem.tsx`, `ChatPage.tsx`, and `MapPage.tsx`.
+  - Added unit test suite in `fnt/src/components/Chat/__tests__/ChatMapInteractivity.test.tsx` verifying:
+    - Citation hover dispatches geometry highlight state to EvidenceMap.
+    - Hover exit properly cleans up highlight state.
+    - EvidenceMap geometry click triggers scroll-into-view and highlight style on the corresponding chat paragraph.
+  - Maintained code standards: all files under 270 lines (< 300 line limit), all functions under 50 lines, max parameters <= 5, 1 primary export per file, zero mock/fake data in production components.
+  - Verified test & quality gates:
+    - Frontend: `npm test` (all 35 tests passed, 0 failures), `npm run lint` (0 errors, 0 warnings), `npm run build` (clean exit 0).
+    - Backend: `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run pytest` (210 passed, 10 skipped).
+
+**Important Decisions & Rationale:**
+- Chose an amber/gold halo (`#f59e0b`) for hover geometry feedback on the map to provide high visual contrast distinct from cyan (`#22d3ee`) selection halos across both satellite and dark basemaps.
+- Decomposed paragraphs inside `CitationText.tsx` using a lightweight `CitingParagraph` component with `useMemo` tag extraction and `useEffect` smooth scrolling to isolate DOM side effects per paragraph without re-rendering the whole message list.
+
+**Rejected along the way:**
+- Rejected creating synthetic or separate layers for hover fill that could intercept pointer events over `evidence-mask-fill`.
+- Rejected altering backend contract files (`bck/app/contracts/`), keeping changes strictly within frontend scope.
+
