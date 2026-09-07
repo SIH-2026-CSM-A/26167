@@ -112,3 +112,48 @@ Built via Antigravity (single-agent, Windows).
 - Rejected creating separate layer pipelines or parallel selection state for BBOX vs Mask evidence; both feed the unified `satquery-evidence` GeoJSON layer stack.
 - Rejected unconditional `map.fitBounds` calls when a feature is already completely visible within the viewport, preventing disorienting camera jumps on click.
 - Rejected modifying contracts (`fnt/src/types/contracts.ts` and `bck/app/contracts/`), strictly respecting module ownership rules.
+
+## 2026-09-07 — LIKI-006: One-click demo preset selector wired to manifest (F24)
+
+Built via Antigravity (single-agent, Windows).
+
+**Did:**
+- Grounded frontend manifest models in `fnt/src/types/manifest.ts` matching `data/demo/manifest.json` schema v1.0 (`DemoManifest`, `DemoPreset`, `DemoAsset`, `DemoAssetRole`, `PresetSlotData`, `PresetApplyPayload`). Zero fake data.
+- Built reusable preset loading and mapping utilities in `fnt/src/utils/demoPresets.ts`:
+  - `resolveAssetUrl`: Deterministically joins relative POSIX asset paths to manifest base directory.
+  - `fetchManifestData`: Retrieves and validates manifest preset array.
+  - `loadPresetAssetFiles`: Asynchronously retrieves preset assets as live browser `File` objects with extension-appropriate MIME types.
+  - `mapPresetToSlotsAndMode`: Explicitly binds role-tagged imagery into target upload slots:
+    - `"image"` -> Single image slot (`Primary Imagery`, optical, unlocked).
+    - `"pre_image"` & `"post_image"` -> Bi-temporal slots (`Slot 1 (T1 Pass)` and `Slot 2 (T2 Pass)`).
+    - `"optical_image"` & `"sar_image"` -> Cross-modal slots (`Slot 1 (Optical)` and `Slot 2 (SAR)` locked to optical and sar).
+- Implemented `DemoPresetSelector.tsx` (`fnt/src/components/DemoPresetSelector.tsx`):
+  - Renders curated preset cards with scenario tags, natural language query preview, and asset count telemetry.
+  - Handles one-click preset activation, loading assets and triggering slot population.
+  - Implements resilient error handling: displays honest inline banner `"Demo preset unavailable. Please use manual upload or verify dataset path."` if manifest fetch fails or asset fetch returns 404, preventing blank screen or unhandled exceptions.
+  - Strictly adheres to React Refresh guidelines by keeping component exports pure.
+- Updated `UploadPage.tsx` (`fnt/src/pages/UploadPage.tsx`):
+  - Added opt-in segmented toggle (`Manual Upload` vs `Demo Presets`), keeping default manual upload intact.
+  - When demo preset chip is selected, automatically sets pipeline configuration mode, fills query text box, and populates upload slots with authentic raster files.
+- Configured Vite dev/preview server middleware in `fnt/vite.config.ts` to serve real `data/demo/` rasters and manifest without copying or mock layers.
+- Added comprehensive unit test suite in `fnt/src/components/__tests__/DemoPresetSelector.test.tsx` (6 tests):
+  - Renders available presets from manifest data.
+  - Selecting a preset updates query and slot states.
+  - Displays honest fallback banner if manifest fetch fails.
+  - Displays honest fallback banner if an asset path returns a 404.
+  - Manual upload remains untouched when toggle is off.
+  - Selecting preset in `UploadPage` populates query, mode, and slots.
+- Maintained file limits: all files under 225 lines (< 300 lines limit), all functions under 45 lines, max parameters <= 2.
+- Verified test & quality gates:
+  - Frontend: `npm test` (all 32 tests passed), `npm run lint` (0 errors, 0 warnings), `npm run build` (clean exit 0).
+  - Backend: `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run pytest` (210 passed, 10 skipped).
+
+**Important Decisions & Rationale:**
+- Extracted utility functions into `fnt/src/utils/demoPresets.ts` and types into `fnt/src/types/manifest.ts` to satisfy ESLint's `react-refresh/only-export-components` rule.
+- Added Vite dev server middleware to stream genuine `data/demo` rasters directly, guaranteeing offline demonstration fidelity without duplicated asset storage.
+- Kept manual upload active by default with explicit toggle to prevent disruption to existing manual workflows.
+
+**Rejected along the way:**
+- Rejected hardcoded/mocked manifest payloads in frontend source — directly wired to manifest JSON fetch and offline dev proxy.
+- Rejected altering backend contract files (`bck/app/contracts/`), strictly respecting module ownership boundaries.
+
