@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.contracts import Answer, Evidence, QueryRequest
+from app.db import persist_trace
 from app.evidence import assemble_answer, build_bbox_evidence, build_vqa_evidence
 from app.ingestion import (
     InvalidRasterError,
@@ -224,12 +225,13 @@ def run(
         timing_seconds=tool_result.timing_seconds,
     )
     if text_survived:
-        evidence = evidence.model_copy(update={"confidence": decision.effective_confidence})
+        evidence = evidence.model_copy(
+            update={"id": candidate_evidence.id, "confidence": decision.effective_confidence}
+        )
 
     evidence_list = [evidence] if text_survived else []
     if bbox_evidence is not None and bbox_evidence.id in verified_ids:
         evidence_list.append(bbox_evidence)
-
     recorder.record(
         "evidence",
         "evidence_created",
@@ -248,13 +250,20 @@ def run(
         },
         evidence_ids=[item.id for item in evidence_list],
     )
-    return assemble_answer(
+    trace = recorder.build()
+    answer = assemble_answer(
         text=verified_text,
         evidence=evidence_list,
-        trace=recorder.build(),
+        trace=trace,
         abstained=decision.is_abstained,
         abstention_reason=decision.abstention_reason,
     )
+    try:
+        persist_trace(trace, evidence_list)
+    except Exception as error:
+        _fail(recorder, stage="persistence", message=str(error), status_code=500)
+
+    return answer
 
 
 def _fail(
