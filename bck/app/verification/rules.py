@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from app.contracts import Evidence, EvidenceType, ImageInput, Modality
+from app.contracts import DegradationNotice, Evidence, EvidenceType, ImageInput, Modality
 from app.verification.schemas import (
     AbstentionReasonCode,
     CrossModalRelationship,
@@ -689,3 +689,49 @@ def _as_sentence(claim: str) -> str:
     """Normalize one accepted claim for user-facing sentence assembly."""
     sentence = claim[0].upper() + claim[1:] if claim else claim
     return sentence if sentence.endswith((".", "!", "?")) else f"{sentence}."
+
+
+def evaluate_optical_degradation(
+    images: list[ImageInput] | None,
+    threshold: float = 0.20,
+) -> DegradationNotice | None:
+    """Evaluate optical input images for cloud degradation and emit DegradationNotice if exceeded.
+
+    Inspects each optical ImageInput's metadata for `cloud_fraction`. If any optical input's
+    cloud fraction meets or exceeds the configured degradation threshold (default 0.20,
+    calibrated against the clean 1.87% Bolivia_103757_S2Hand.tif baseline), constructs a
+    structured DegradationNotice recommending SAR fallback per SHIVA-006 / F22.
+    """
+    if not images:
+        return None
+
+    degraded_inputs: list[tuple[str, float]] = []
+    for img in images:
+        if img.modality == Modality.OPTICAL:
+            cf = img.metadata.get("cloud_fraction")
+            if cf is not None and float(cf) >= threshold:
+                degraded_inputs.append((img.id, float(cf)))
+
+    if not degraded_inputs:
+        return None
+
+    max_fraction = max(fraction for _, fraction in degraded_inputs)
+    affected_ids = [img_id for img_id, _ in degraded_inputs]
+
+    return DegradationNotice(
+        degraded=True,
+        metric_name="cloud_cover_fraction",
+        metric_value=round(max_fraction, 4),
+        threshold=round(threshold, 4),
+        severity="warning",
+        message=(
+            f"Optical input '{affected_ids[0]}' exhibits {max_fraction * 100:.1f}% "
+            f"cloud cover, exceeding the quality threshold of {threshold * 100:.1f}%."
+        ),
+        suggested_action=(
+            "SAR-only fallback workflow recommended due to heavy cloud cover "
+            "obscuring optical imagery."
+        ),
+        fallback_modality=Modality.SAR,
+        affected_image_ids=affected_ids,
+    )

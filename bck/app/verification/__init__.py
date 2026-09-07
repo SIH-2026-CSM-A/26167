@@ -2,6 +2,7 @@
 
 from app.verification.rules import (
     classify_cross_modal_relationship,
+    evaluate_optical_degradation,
 )
 from app.verification.schemas import (
     AbstentionReasonCode,
@@ -28,6 +29,7 @@ __all__ = [
     "VerificationStatus",
     "classify_cross_modal_relationship",
     "create_verification_trace_step",
+    "evaluate_optical_degradation",
     "verification_trace_params",
     "verify",
 ]

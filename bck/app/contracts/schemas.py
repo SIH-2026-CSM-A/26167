@@ -93,6 +93,24 @@ class ExecutionTrace(BaseModel):
     created_at: datetime
 
 
+class DegradationNotice(BaseModel):
+    """Structured notice indicating degraded input quality and recommending fallback."""
+
+    model_config = ConfigDict(frozen=True)
+
+    degraded: bool = True
+    metric_name: str = "cloud_cover_fraction"
+    metric_value: float = Field(ge=0.0, le=1.0)
+    threshold: float = Field(ge=0.0, le=1.0)
+    severity: str = "warning"
+    message: str
+    suggested_action: str = (
+        "SAR-only fallback workflow recommended due to heavy cloud cover obscuring optical imagery."
+    )
+    fallback_modality: Modality = Modality.SAR
+    affected_image_ids: list[str] = Field(default_factory=list)
+
+
 class Answer(BaseModel):
     """Final response shape returned to the API layer.
 
@@ -109,6 +127,7 @@ class Answer(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     abstained: bool = False
     abstention_reason: str | None = None
+    degradation_notice: DegradationNotice | None = None
 
     @model_validator(mode="after")
     def _abstention_reason_matches_flag(self) -> Answer:

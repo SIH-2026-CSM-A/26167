@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.contracts import Evidence
+from app.contracts import DegradationNotice, Evidence
 
 
 class VerificationStatus(StrEnum):
@@ -61,6 +62,18 @@ class DisagreementRecord(BaseModel):
     conflicting_evidence_ids: list[str] = Field(default_factory=list)
 
 
+def _default_cloud_threshold() -> float:
+    raw = os.getenv("SATQUERY_CLOUD_DEGRADATION_THRESHOLD")
+    if raw is not None:
+        try:
+            value = float(raw)
+            if 0.0 <= value <= 1.0:
+                return value
+        except ValueError:
+            pass
+    return 0.20
+
+
 class VerificationPolicy(BaseModel):
     """Configurable thresholds and penalties for verification.
 
@@ -75,6 +88,20 @@ class VerificationPolicy(BaseModel):
     extent_divergence_penalty: float = 0.20
     severe_conflict_penalty: float = 0.40
     max_total_penalty: float = 0.50
+    cloud_degradation_threshold: float = Field(
+        default_factory=_default_cloud_threshold,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Optical cloud fraction threshold above which a DegradationNotice is issued and "
+            "SAR fallback is recommended. Grounded empirically in fixture testing: "
+            "Bolivia_103757_S2Hand.tif measures cloud_fraction=0.018711 (~1.87%) under "
+            "s2cloudless and represents a clean baseline scene. The 0.20 (20%) cutoff "
+            "separates clean/minor-cloud acquisitions from materially cloud-degraded "
+            "scenes where optical analysis may be less reliable and SAR-only fallback "
+            "is recommended."
+        ),
+    )
 
 
 class VerificationDecision(BaseModel):
@@ -89,6 +116,7 @@ class VerificationDecision(BaseModel):
     disagreements: list[DisagreementRecord] = Field(default_factory=list)
     confidence_penalty: float = Field(default=0.0, ge=0.0, le=1.0)
     filtered_evidence_ids: list[str] = Field(default_factory=list)
+    degradation_notice: DegradationNotice | None = None
 
     @property
     def is_abstained(self) -> bool:
