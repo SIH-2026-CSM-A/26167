@@ -181,6 +181,7 @@ def run(
             asset=source.source,
             model_id=tool_result.model_id,
             bbox=tool_result.bbox,
+            visual_size=source.visual.size,
             label=tool_result.bbox_label or tool_result.raw_answer,
             source=tool_result.bbox_source,
             timing_seconds=tool_result.timing_seconds,
