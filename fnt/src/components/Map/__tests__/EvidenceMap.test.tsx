@@ -39,7 +39,7 @@ vi.mock('maplibre-gl', () => {
           mockSources[id] = { setData: mockSetData };
         }),
         addLayer: mockAddLayer,
-        getLayer: vi.fn((id: string) => (id === 'evidence-selected-halo' ? {} : undefined)),
+        getLayer: vi.fn((id: string) => (id === 'evidence-selected-halo' || id === 'evidence-hover-halo' ? {} : undefined)),
         setFilter: mockSetFilter,
         fitBounds: mockFitBounds,
         getBounds: mockGetBounds,
