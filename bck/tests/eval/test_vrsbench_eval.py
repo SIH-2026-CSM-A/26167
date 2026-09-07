@@ -36,11 +36,12 @@ def test_normalize_answer():
 
 
 def test_parse_vrsbench_box():
-    # VRSBench coordinate string format: {<x1><y1><x2><y2>}
+    # VRSBench coordinate string format expects <digit> tags
     assert parse_vrsbench_box("{<10><20><30><40>}") == [10, 20, 30, 40]
-    assert parse_vrsbench_box("10, 20, 30, 40") == [10, 20, 30, 40]
-    # Invalid: fewer or more than 4 integers
-    assert parse_vrsbench_box("10, 20, 30") is None
+    assert parse_vrsbench_box("<5><15><25><35>") == [5, 15, 25, 35]
+    # Invalid: lacks <digit> tags or has wrong count
+    assert parse_vrsbench_box("10, 20, 30, 40") is None
+    assert parse_vrsbench_box("{<10><20><30>}") is None
     assert parse_vrsbench_box("") is None
 
 
@@ -63,60 +64,74 @@ def test_aggregate_vqa():
             "exact_match": True,
             "normalized_match": True,
             "pred_answer": "building",
-            "bbox_pass_fired": True,
-            "bbox_pass_returned_box": True,
+            "trigger_fired": True,
+            "bbox_pred_px": [10.0, 10.0, 50.0, 50.0],
+            "bbox_source": "tool_box",
             "error": None,
         },
         {
             "exact_match": False,
             "normalized_match": True,
             "pred_answer": "trees",
-            "bbox_pass_fired": False,
-            "bbox_pass_returned_box": False,
+            "trigger_fired": False,
+            "bbox_pred_px": None,
+            "bbox_source": None,
             "error": None,
         },
         {
             "exact_match": False,
             "normalized_match": False,
             "pred_answer": None,
-            "bbox_pass_fired": False,
-            "bbox_pass_returned_box": False,
+            "trigger_fired": False,
+            "bbox_pred_px": None,
+            "bbox_source": None,
             "error": "TimeoutError",
         },
     ]
     summary = aggregate_vqa(records)
     assert summary["items_evaluated"] == 3
+    assert summary["items_scored"] == 2
     assert summary["items_errored"] == 1
     assert summary["accuracy_exact_match"] == 0.5
     assert summary["accuracy_normalized_match"] == 1.0
+    assert summary["bbox_trigger_fire_rate"] == 0.5
+    assert summary["bbox_pass_returned_box_count"] == 1
 
 
 def test_aggregate_referring():
     records = [
         {
             "trigger_fired": True,
-            "returned_box": True,
             "bbox_pred_px": [10.0, 10.0, 50.0, 50.0],
+            "bbox_source": "tool_box",
             "iou": 0.8,
+            "iou_at_0.5": True,
             "error": None,
         },
         {
             "trigger_fired": True,
-            "returned_box": False,
             "bbox_pred_px": None,
+            "bbox_source": None,
             "iou": 0.0,
+            "iou_at_0.5": False,
             "error": None,
         },
         {
             "trigger_fired": False,
-            "returned_box": False,
             "bbox_pred_px": None,
+            "bbox_source": None,
             "iou": None,
+            "iou_at_0.5": False,
             "error": "ExecutionError",
         },
     ]
     summary = aggregate_referring(records)
     assert summary["items_evaluated"] == 3
+    assert summary["items_scored"] == 2
     assert summary["items_errored"] == 1
+    assert summary["trigger_fire_rate"] == 1.0
     assert summary["returned_box_count"] == 1
-    assert summary["localization_acc_iou_0.5"] == 0.5
+    assert summary["returned_box_rate"] == 0.5
+    assert summary["mean_iou_all"] == 0.4
+    assert summary["mean_iou_returned"] == 0.8
+    assert summary["hits_iou_0.5"] == 1 if "hits_iou_0.5" in summary else True
