@@ -101,7 +101,13 @@ const MapSidebar: React.FC<{
 );
 
 export const MapPage: React.FC = () => {
-  const { evidenceList, selectedEvidenceId, selectEvidence } = useSatQuery();
+  const {
+    evidenceList,
+    selectedEvidenceId,
+    hoveredEvidenceId,
+    selectEvidence,
+    hoverEvidence,
+  } = useSatQuery();
   const [filterType, setFilterType] = useState<EvidenceType | 'all'>('all');
 
   const filteredEvidence = evidenceList.filter((e) => filterType === 'all' || e.type === filterType);
@@ -131,7 +137,9 @@ export const MapPage: React.FC = () => {
           <EvidenceMap
             evidenceList={evidenceList}
             selectedEvidenceId={selectedEvidenceId}
+            hoveredEvidenceId={hoveredEvidenceId}
             onSelectEvidence={selectEvidence}
+            onHoverEvidence={hoverEvidence}
             className="h-full w-full"
           />
         </div>

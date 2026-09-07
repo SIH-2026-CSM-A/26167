@@ -22,22 +22,15 @@ export interface EvidenceMapProps {
   evidenceList: Evidence[];
   selectedEvidenceId: string | null;
   onSelectEvidence: (id: string | null) => void;
+  hoveredEvidenceId?: string | null;
+  onHoverEvidence?: (id: string | null) => void;
   className?: string;
 }
 
 const BASEMAP_TILES: Record<BasemapMode, { tiles: string[]; attribution: string }> = {
-  satellite: {
-    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-    attribution: '© Esri, Maxar, Earthstar Geographics',
-  },
-  dark: {
-    tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],
-    attribution: '© CARTO, © OpenStreetMap contributors',
-  },
-  street: {
-    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-    attribution: '© OpenStreetMap contributors',
-  },
+  satellite: { tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], attribution: '© Esri, Maxar, Earthstar Geographics' },
+  dark: { tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'], attribution: '© CARTO, © OpenStreetMap contributors' },
+  street: { tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], attribution: '© OpenStreetMap contributors' },
 };
 
 function createMapStyle(mode: BasemapMode): StyleSpecification {
@@ -45,20 +38,17 @@ function createMapStyle(mode: BasemapMode): StyleSpecification {
   return {
     version: 8,
     sources: {
-      'basemap-tiles': {
-        type: 'raster',
-        tiles: config.tiles,
-        tileSize: 256,
-        attribution: config.attribution,
-      },
+      'basemap-tiles': { type: 'raster', tiles: config.tiles, tileSize: 256, attribution: config.attribution },
     },
-    layers: [
-      { id: 'basemap-layer', type: 'raster', source: 'basemap-tiles', minzoom: 0, maxzoom: 20 },
-    ],
+    layers: [{ id: 'basemap-layer', type: 'raster', source: 'basemap-tiles', minzoom: 0, maxzoom: 20 }],
   };
 }
 
-function addEvidenceLayers(map: MapLibreMap, onSelect: (id: string) => void): void {
+function addEvidenceLayers(
+  map: MapLibreMap,
+  onSelect: (id: string) => void,
+  onHover?: (id: string | null) => void
+): void {
   if (map.getSource('satquery-evidence')) return;
   map.addSource('satquery-evidence', { type: 'geojson', data: buildFeatureCollection([]) });
 
@@ -77,6 +67,14 @@ function addEvidenceLayers(map: MapLibreMap, onSelect: (id: string) => void): vo
   });
 
   map.addLayer({
+    id: 'evidence-hover-halo',
+    type: 'line',
+    source: 'satquery-evidence',
+    filter: ['==', ['get', 'id'], ''],
+    paint: { 'line-color': '#f59e0b', 'line-width': 5.5, 'line-opacity': 0.95, 'line-blur': 1 },
+  });
+
+  map.addLayer({
     id: 'evidence-selected-halo',
     type: 'line',
     source: 'satquery-evidence',
@@ -88,6 +86,20 @@ function addEvidenceLayers(map: MapLibreMap, onSelect: (id: string) => void): vo
     const id = e.features?.[0]?.properties?.id as string | undefined;
     if (id) onSelect(id);
   });
+
+  if (onHover) {
+    map.on('mouseenter', 'evidence-mask-fill', (e) => {
+      const canvas = map.getCanvas?.();
+      if (canvas?.style) canvas.style.cursor = 'pointer';
+      const id = e.features?.[0]?.properties?.id as string | undefined;
+      if (id) onHover(id);
+    });
+    map.on('mouseleave', 'evidence-mask-fill', () => {
+      const canvas = map.getCanvas?.();
+      if (canvas?.style) canvas.style.cursor = '';
+      onHover(null);
+    });
+  }
 }
 
 function useEvidenceSource(
@@ -141,12 +153,7 @@ function useFeatureHighlight(
       try {
         const vp = map.getBounds?.();
         if (vp) {
-          const vpBounds: [number, number, number, number] = [
-            vp.getWest(),
-            vp.getSouth(),
-            vp.getEast(),
-            vp.getNorth(),
-          ];
+          const vpBounds: [number, number, number, number] = [vp.getWest(), vp.getSouth(), vp.getEast(), vp.getNorth()];
           shouldFit = isOutsideViewport(bounds, vpBounds);
         }
       } catch {
@@ -166,9 +173,19 @@ function useFeatureHighlight(
   }, [map, isLoaded, selectedId, evidenceList]);
 }
 
+function useHoverHighlight(map: MapLibreMap | null, isLoaded: boolean, hoveredId: string | null): void {
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+    if (map.getLayer?.('evidence-hover-halo')) {
+      map.setFilter('evidence-hover-halo', ['==', ['get', 'id'], hoveredId ?? '']);
+    }
+  }, [map, isLoaded, hoveredId]);
+}
+
 function useMapInstance(
   containerRef: React.RefObject<HTMLDivElement>,
-  onSelect: (id: string | null) => void
+  onSelect: (id: string | null) => void,
+  onHover?: (id: string | null) => void
 ): { mapRef: React.MutableRefObject<MapLibreMap | null>; isLoaded: boolean } {
   const mapRef = useRef<MapLibreMap | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -182,7 +199,7 @@ function useMapInstance(
       zoom: 4,
     });
     map.on('load', () => {
-      addEvidenceLayers(map, (id) => onSelect(id));
+      addEvidenceLayers(map, (id) => onSelect(id), onHover);
       setIsLoaded(true);
     });
     mapRef.current = map;
@@ -193,7 +210,7 @@ function useMapInstance(
       map.remove();
       mapRef.current = null;
     };
-  }, [containerRef, onSelect]);
+  }, [containerRef, onSelect, onHover]);
 
   return { mapRef, isLoaded };
 }
@@ -202,18 +219,19 @@ function useMapActions(
   map: MapLibreMap | null,
   evidenceList: Evidence[],
   onSelect: (id: string | null) => void,
-  setBasemap: (m: BasemapMode) => void
+  setBasemap: (m: BasemapMode) => void,
+  onHover?: (id: string | null) => void
 ) {
   const handleBasemapChange = useCallback((mode: BasemapMode) => {
     setBasemap(mode);
     if (!map) return;
     map.setStyle(createMapStyle(mode));
     map.once('style.load', () => {
-      addEvidenceLayers(map, (id) => onSelect(id));
+      addEvidenceLayers(map, (id) => onSelect(id), onHover);
       const source = map.getSource('satquery-evidence') as GeoJSONSource | undefined;
       if (source) source.setData(buildFeatureCollection(evidenceToFeatures(evidenceList)));
     });
-  }, [map, evidenceList, onSelect, setBasemap]);
+  }, [map, evidenceList, onSelect, setBasemap, onHover]);
 
   const handleFitAll = useCallback(() => {
     if (!map || !map.fitBounds) return;
@@ -235,21 +253,25 @@ export const EvidenceMap: React.FC<EvidenceMapProps> = ({
   evidenceList,
   selectedEvidenceId,
   onSelectEvidence,
+  hoveredEvidenceId = null,
+  onHoverEvidence,
   className = 'h-[560px] w-full',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [basemap, setBasemap] = useState<BasemapMode>('satellite');
-  const { mapRef, isLoaded } = useMapInstance(containerRef, onSelectEvidence);
+  const { mapRef, isLoaded } = useMapInstance(containerRef, onSelectEvidence, onHoverEvidence);
   const { handleBasemapChange, handleFitAll } = useMapActions(
     mapRef.current,
     evidenceList,
     onSelectEvidence,
-    setBasemap
+    setBasemap,
+    onHoverEvidence
   );
 
   const selectedEvidence = evidenceList.find((e) => e.id === selectedEvidenceId) ?? null;
   useEvidenceSource(mapRef.current, isLoaded, evidenceList, selectedEvidenceId);
   useFeatureHighlight(mapRef.current, isLoaded, selectedEvidenceId, evidenceList);
+  useHoverHighlight(mapRef.current, isLoaded, hoveredEvidenceId);
 
   return (
     <div className={`relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950 ${className}`}>

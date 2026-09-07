@@ -7,9 +7,11 @@ export interface SatQueryContextValue {
   evidenceList: Evidence[];
   selectedEvidenceId: string | null;
   selectedEvidence: Evidence | null;
+  hoveredEvidenceId: string | null;
   isLoading: boolean;
   error: string | null;
   selectEvidence: (id: string | null) => void;
+  hoverEvidence: (id: string | null) => void;
   submitUserQuery: (
     query: string,
     images: File[],

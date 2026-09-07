@@ -157,3 +157,31 @@ Built via Antigravity (single-agent, Windows).
 - Rejected hardcoded/mocked manifest payloads in frontend source — directly wired to manifest JSON fetch and offline dev proxy.
 - Rejected altering backend contract files (`bck/app/contracts/`), strictly respecting module ownership boundaries.
 
+## 2026-09-07 — LIKI-007: Map <-> Chat evidence interactivity (F20)
+
+Built via Antigravity (single-agent, Windows).
+
+**Did:**
+- Implemented bidirectional Map <-> Chat interactivity according to ClickUp Ticket 26167 / LIKI-007 (F20):
+  - Shared context state: Added `hoveredEvidenceId: string | null` and `hoverEvidence: (id: string | null) => void` in `SatQueryContext.ts` and `SatQueryProvider.tsx`.
+  - Citation chip hover highlight: Updated `CitationChip.tsx` with `isHovered` styling (`bg-amber-500`, amber ring, dark font) and mouseenter/mouseleave/focus/blur events triggering hover state dispatch.
+  - Map geometry hover highlighting: Added `evidence-hover-halo` line layer (`#f59e0b` amber/gold, line-width 5.5) in `EvidenceMap.tsx` and reactive `useHoverHighlight` hook updating layer filter `['==', ['get', 'id'], hoveredId ?? '']`. Hover exit cleanly resets the filter to `['==', ['get', 'id'], '']`.
+  - Bidirectional map click -> chat paragraph scroll & highlight: Updated `CitationText.tsx` to decompose chat responses into paragraph blocks via `CitingParagraph`. When a map geometry feature is clicked, `selectedEvidenceId` syncs into the citing paragraph, triggering an active visual highlight (`border-l-4 border-cyan-400`, `ring-2 ring-cyan-400/80`, `bg-cyan-950/70`) and smooth scroll-into-view (`scrollIntoView({ behavior: 'smooth', block: 'nearest' })`).
+  - Wired hover and selection props across `ChatMessageItem.tsx`, `ChatPage.tsx`, and `MapPage.tsx`.
+  - Added unit test suite in `fnt/src/components/Chat/__tests__/ChatMapInteractivity.test.tsx` verifying:
+    - Citation hover dispatches geometry highlight state to EvidenceMap.
+    - Hover exit properly cleans up highlight state.
+    - EvidenceMap geometry click triggers scroll-into-view and highlight style on the corresponding chat paragraph.
+  - Maintained code standards: all files under 270 lines (< 300 line limit), all functions under 50 lines, max parameters <= 5, 1 primary export per file, zero mock/fake data in production components.
+  - Verified test & quality gates:
+    - Frontend: `npm test` (all 35 tests passed, 0 failures), `npm run lint` (0 errors, 0 warnings), `npm run build` (clean exit 0).
+    - Backend: `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run pytest` (210 passed, 10 skipped).
+
+**Important Decisions & Rationale:**
+- Chose an amber/gold halo (`#f59e0b`) for hover geometry feedback on the map to provide high visual contrast distinct from cyan (`#22d3ee`) selection halos across both satellite and dark basemaps.
+- Decomposed paragraphs inside `CitationText.tsx` using a lightweight `CitingParagraph` component with `useMemo` tag extraction and `useEffect` smooth scrolling to isolate DOM side effects per paragraph without re-rendering the whole message list.
+
+**Rejected along the way:**
+- Rejected creating synthetic or separate layers for hover fill that could intercept pointer events over `evidence-mask-fill`.
+- Rejected altering backend contract files (`bck/app/contracts/`), keeping changes strictly within frontend scope.
+
