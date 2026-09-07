@@ -87,7 +87,9 @@ def check_pre_hook_wiring() -> None:
     names_before = [n for n, _ in mlp1.named_parameters()]
     assert mlp1_input_dim(mlp1) == DEMO_DIM
     conditioner = GSDFiLMConditioner(DEMO_DIM)
-    handle = attach_gsd_film(mlp1, conditioner)
+    # Attach at mlp1[1] (first Linear, after the mlp1[0] LayerNorm) to match
+    # real production usage in train_lora_mlp1_vision.py.
+    handle = attach_gsd_film(mlp1[1], conditioner)
     conditioner.set_gsd(torch.tensor([25.0]))
     x = torch.randn(2, 8, DEMO_DIM)
     _ = mlp1(x)  # runs without error through the hook

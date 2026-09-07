@@ -311,3 +311,90 @@ files), `lint-imports` (101 files, 212 deps, 3/3 contracts kept), `pytest`
 done with `feature/26167-ROHAN-004-directional-change-vqa` correctly checked
 out throughout (confirmed via the user's own `git status` output showing the
 branch current with `origin/feature/26167-ROHAN-004-directional-change-vqa`).
+
+---
+
+# AASH-004 — GSD-conditioning FiLM: LayerNorm attach-point fix (handover from Aashritha)
+
+### 2026-09-07 — Claude Code
+
+## Taken over from Aashritha's handover
+
+Commit `e61afd3` ("wip(AASH-004): GSD-conditioning embedding, handing off to
+Rohan") landed the Fourier/log-GSD encoding + FiLM conditioner
+(`gsd_conditioning.py`), its standalone verifier (`verify_gsd_conditioning.py`),
+and the wiring into `train_lora_mlp1_vision.py`. Her commit message flagged one
+thing as unverified: *"whether mlp1[0] is a LayerNorm that would attenuate the
+FiLM signal before it reaches mlp1.1's Linear"*. That was the open question this
+session resolved.
+
+## LayerNorm finding — and how it was verified
+
+`mlp1[0]` **is** an `nn.LayerNorm`. Confirmed by reading InternVL3-2B's own
+`modeling_internvl_chat.py` source (the `mlp1 = nn.Sequential(nn.LayerNorm(...),
+nn.Linear(...), nn.GELU(), nn.Linear(...))` construction), **not** by loading
+the model — see the OOM note below.
+
+Consequence: the WIP hook attached to the whole `mlp1` Sequential, i.e. FiLM
+scale+shift applied *before* `mlp1[0]`. LayerNorm re-centres and re-scales its
+input, so a per-channel affine modulation placed in front of it is substantially
+renormalized back out before `mlp1[1]`'s Linear ever sees it — near-zero
+effective conditioning, which is exactly the failure mode the team lead's spec
+point 1 warns about for lookup tables.
+
+## Fix applied
+
+- `train_lora_mlp1_vision.py`: attach point moved
+  `attach_gsd_film(model.get_base_model().mlp1, ...)` →
+  `...mlp1[1], ...` (the first Linear, immediately after the LayerNorm), so FiLM
+  is applied post-normalization. Comment above the call rewritten to state the
+  LayerNorm reason.
+- `gsd_conditioning.py`: team lead's quoted spec text left byte-for-byte intact
+  for provenance. Added a clearly-marked *implementation note* paragraph after
+  the quoted section recording the LayerNorm finding and the `mlp1[1]` choice.
+  `attach_gsd_film` param renamed `mlp1` → `target` and its docstring made
+  accurate to the fact that the caller now passes the specific submodule; the
+  function is generic, the `mlp1[1]` decision lives in the caller.
+- `verify_gsd_conditioning.py`: `check_pre_hook_wiring()` now attaches at
+  `mlp1[1]` of its synthetic `Sequential(LayerNorm, Linear, GELU, Linear)`,
+  matching production. Assertions unchanged.
+- Incidental: fixed one pre-existing `E501` and one `ruff format` diff in the
+  handed-over WIP files so the gates pass (the WIP commit was explicitly "not
+  gate-checked in this state").
+
+## Verification
+
+Ran the four model-free structural checks directly (imported the four functions,
+called them inline) — **did not** run `verify_gsd_conditioning.py`'s `main()`,
+because it calls `inspect_live_model()` which does
+`AutoModel.from_pretrained("OpenGVLab/InternVL3-2B", ...)` and that has
+previously exhausted this WSL VM's memory and crashed it. `inspect_live_model()`
+must be run on the training box, not here.
+
+Output:
+
+```
+=== encoding: distinct per GSD (vs. a lookup that would collapse) ===
+encoding shape           : (7, 64)
+min pairwise L2 distance : 0.2329  (must be > 0)
+
+=== FiLM: exact identity at initialisation ===
+scale == 1, shift == 0, output == input for every tested GSD
+
+=== FiLM: a single optimiser step makes it GSD-dependent ===
+gradient norm through FiLM generator : 1.8151  (must be > 0)
+max |scale(12 m) - scale(0.5 m)|    : 0.0642  (must be > 0)
+
+=== pre-hook: modifies mlp1 input, leaves child param names intact ===
+param names unchanged by hook : True
+```
+
+## Gates
+
+All four green: `ruff check` clean, `ruff format --check` (108 files),
+`lint-imports` (108 files, 232 deps, 3/3 contracts kept), `pytest` 144 passed.
+
+## Out of scope / untouched
+
+- The Bhoonidhi / domain-gap-test half of AASH-004 — not touched.
+- Nothing committed. `inspect_live_model()` not run locally.

@@ -125,12 +125,17 @@ print("Wrapping mlp1.1/mlp1.3 with LoRA...")
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()
 
-# AASH-004 point 2: FiLM per-channel scale+shift on mlp1's input, derived from
-# the GSD embedding. Installed as a forward pre-hook so no LoRA parameter name
-# under mlp1 changes (save_pretrained stays valid). The conditioner's own
-# weights are NOT peft params -- see the optimizer and checkpoint blocks below.
+# AASH-004 point 2: FiLM per-channel scale+shift derived from the GSD embedding.
+# Attached at mlp1[1]'s input (the first Linear, immediately AFTER the LayerNorm
+# at mlp1[0]) -- NOT at mlp1's input as a whole. mlp1[0] is a LayerNorm
+# (confirmed against InternVL3-2B's modeling_internvl_chat.py); hooking the whole
+# Sequential would let that LayerNorm renormalize the FiLM scale+shift straight
+# back out before the first Linear ever sees it. Installed as a forward pre-hook
+# so no LoRA parameter name under mlp1 changes (save_pretrained stays valid). The
+# conditioner's own weights are NOT peft params -- see the optimizer and
+# checkpoint blocks below.
 gsd_conditioner = GSDFiLMConditioner(mlp1_in_features).cuda()
-attach_gsd_film(model.get_base_model().mlp1, gsd_conditioner)
+attach_gsd_film(model.get_base_model().mlp1[1], gsd_conditioner)
 n_cond_params = sum(p.numel() for p in gsd_conditioner.parameters())
 print(
     f"GSD-conditioning FiLM attached to mlp1 input: {mlp1_in_features} channels, "
@@ -196,9 +201,7 @@ for epoch in range(N_EPOCHS):
         # AASH-004 point 5: condition on the SAME GSD the augmentation applied to
         # this image -- registered out-of-band because InternVL3-2B's forward
         # signature is fixed.
-        gsd_conditioner.set_gsd(
-            torch.tensor([sim_gsd_m], device="cuda", dtype=torch.float32)
-        )
+        gsd_conditioner.set_gsd(torch.tensor([sim_gsd_m], device="cuda", dtype=torch.float32))
 
         question = "<image>\nWhat does this satellite image show?"
         answer = f" This satellite image shows: {class_name}."

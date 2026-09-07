@@ -36,6 +36,18 @@ Formula choices (each cited or read live, nothing invented):
   `1 + gamma`; training therefore starts at exact identity (scale 1, shift 0),
   the standard identity-init for FiLM (Perez et al. 2018, "FiLM: Visual
   Reasoning with a General Conditioning Layer").
+
+Implementation note (NOT part of the quoted spec above -- added by the
+implementer): point 2's "mlp1's input" was refined after inspecting the model
+source. `mlp1[0]` is a `LayerNorm` (confirmed by reading InternVL3-2B's own
+`modeling_internvl_chat.py`, not by loading the model). Applying the FiLM
+scale+shift at the input of the whole `mlp1` Sequential would put it before that
+LayerNorm, which would renormalize the modulation straight back out before
+`mlp1[1]`'s Linear ever saw it -- zero effective conditioning. The FiLM hook is
+therefore attached at `mlp1[1]`'s input (immediately after the LayerNorm) so the
+modulation survives into the projector's first Linear. The choice of submodule
+lives in the caller (`train_lora_mlp1_vision.py`); `attach_gsd_film` itself is
+generic.
 """
 
 from __future__ import annotations
@@ -48,7 +60,9 @@ from torch import nn
 SINUSOIDAL_BASE = 10000.0  # Vaswani et al. 2017
 
 
-def sinusoidal_encoding(values: torch.Tensor, dim: int, base: float = SINUSOIDAL_BASE) -> torch.Tensor:
+def sinusoidal_encoding(
+    values: torch.Tensor, dim: int, base: float = SINUSOIDAL_BASE
+) -> torch.Tensor:
     """Vaswani et al. 2017 sinusoidal encoding of a 1-D tensor of scalars.
 
     `values` is shape (B,); returns (B, dim). `dim` must be even.
@@ -120,12 +134,17 @@ class GSDFiLMConditioner(nn.Module):
 
 
 def attach_gsd_film(
-    mlp1: nn.Module, conditioner: GSDFiLMConditioner
+    target: nn.Module, conditioner: GSDFiLMConditioner
 ) -> torch.utils.hooks.RemovableHandle:
-    """Install `conditioner` on `mlp1`'s input via a forward pre-hook.
+    """Install `conditioner` on `target`'s input via a forward pre-hook.
 
-    A pre-hook (rather than replacing `mlp1`) keeps every LoRA parameter name
-    under `mlp1` unchanged, so `save_pretrained` on the PEFT model is unaffected.
+    `target` is whichever submodule the caller wants FiLM applied to the input
+    of -- for the mlp1 vision projector that is `mlp1[1]` (the first Linear,
+    after the `mlp1[0]` LayerNorm), passed by the caller; see the module
+    docstring's implementation note.
+
+    A pre-hook (rather than replacing `target`) keeps every LoRA parameter name
+    under it unchanged, so `save_pretrained` on the PEFT model is unaffected.
     The conditioner's own weights live outside the PEFT model and must be added
     to the optimizer and checkpointed separately.
     """
@@ -134,4 +153,4 @@ def attach_gsd_film(
         features, *rest = args
         return (conditioner(features), *rest)
 
-    return mlp1.register_forward_pre_hook(_pre_hook)
+    return target.register_forward_pre_hook(_pre_hook)
