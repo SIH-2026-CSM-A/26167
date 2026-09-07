@@ -283,32 +283,42 @@ def _find_annotation_file(data_dir: Path, split: str, entity: str) -> Path:
     candidates: list[str] = []
     norm_split = split.lower()
     if norm_split in ("test1", "test"):
-        candidates.extend([
-            f"Test_{entity}.json",
-            f"Test1_{entity}.json",
-            f"test1_{entity}.json",
-            f"test_{entity}.json",
-        ])
+        candidates.extend(
+            [
+                f"Test_{entity}.json",
+                f"Test1_{entity}.json",
+                f"test1_{entity}.json",
+                f"test_{entity}.json",
+            ]
+        )
     elif norm_split in ("test2",):
-        candidates.extend([
-            f"Test2_{entity}.json",
-            f"test2_{entity}.json",
-        ])
+        candidates.extend(
+            [
+                f"Test2_{entity}.json",
+                f"test2_{entity}.json",
+            ]
+        )
     elif norm_split in ("train",):
-        candidates.extend([
-            f"Train_{entity}.json",
-            f"train_{entity}.json",
-        ])
+        candidates.extend(
+            [
+                f"Train_{entity}.json",
+                f"train_{entity}.json",
+            ]
+        )
     elif norm_split in ("val", "validation"):
-        candidates.extend([
-            f"Val_{entity}.json",
-            f"val_{entity}.json",
-        ])
+        candidates.extend(
+            [
+                f"Val_{entity}.json",
+                f"val_{entity}.json",
+            ]
+        )
     else:
-        candidates.extend([
-            f"{split}_{entity}.json",
-            f"{split.capitalize()}_{entity}.json",
-        ])
+        candidates.extend(
+            [
+                f"{split}_{entity}.json",
+                f"{split.capitalize()}_{entity}.json",
+            ]
+        )
 
     search_dirs = [data_dir, data_dir / split]
     for s_dir in search_dirs:
@@ -558,15 +568,17 @@ def compute_cdvqa_metrics(
                 category_counts[item.category]["correct"] += 1
 
         if detailed:
-            detailed_records.append({
-                "question_id": item.question_id,
-                "question": item.question,
-                "type": item.question_type,
-                "category": item.category,
-                "ground_truth": item.ground_truth,
-                "predicted": pred,
-                "correct": is_correct,
-            })
+            detailed_records.append(
+                {
+                    "question_id": item.question_id,
+                    "question": item.question,
+                    "type": item.question_type,
+                    "category": item.category,
+                    "ground_truth": item.ground_truth,
+                    "predicted": pred,
+                    "correct": is_correct,
+                }
+            )
 
     overall_accuracy = (total_correct / total_questions * 100.0) if total_questions > 0 else 0.0
 
@@ -584,9 +596,7 @@ def compute_cdvqa_metrics(
             category_accuracies.append(c_acc)
 
     average_category_accuracy = (
-        sum(category_accuracies) / len(category_accuracies)
-        if category_accuracies
-        else 0.0
+        sum(category_accuracies) / len(category_accuracies) if category_accuracies else 0.0
     )
 
     per_type_metrics: dict[str, TypeMetric] = {}
