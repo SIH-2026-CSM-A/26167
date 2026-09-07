@@ -66,7 +66,7 @@ def test_aggregate_vqa():
             "pred_answer": "building",
             "trigger_fired": True,
             "bbox_pred_px": [10.0, 10.0, 50.0, 50.0],
-            "bbox_source": "tool_box",
+            "bbox_source": "internvl_native",
             "error": None,
         },
         {
@@ -96,6 +96,8 @@ def test_aggregate_vqa():
     assert summary["accuracy_normalized_match"] == 1.0
     assert summary["bbox_trigger_fire_rate"] == 0.5
     assert summary["bbox_pass_returned_box_count"] == 1
+    assert summary["bbox_source_breakdown"]["internvl_native"] == 1
+    assert summary["bbox_source_breakdown"]["none"] == 1
 
 
 def test_aggregate_referring():
@@ -103,7 +105,7 @@ def test_aggregate_referring():
         {
             "trigger_fired": True,
             "bbox_pred_px": [10.0, 10.0, 50.0, 50.0],
-            "bbox_source": "tool_box",
+            "bbox_source": "internvl_native",
             "iou": 0.8,
             "iou_at_0.5": True,
             "error": None,
@@ -134,4 +136,5 @@ def test_aggregate_referring():
     assert summary["returned_box_rate"] == 0.5
     assert summary["mean_iou_all"] == 0.4
     assert summary["mean_iou_returned"] == 0.8
-    assert summary["hits_iou_0.5"] == 1 if "hits_iou_0.5" in summary else True
+    assert summary["localization_acc_iou_0.5"] == 0.5
+    assert summary["localization_acc_iou_0.5_over_returned"] == 1.0
