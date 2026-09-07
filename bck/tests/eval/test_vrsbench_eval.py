@@ -135,6 +135,6 @@ def test_aggregate_referring():
     assert summary["returned_box_count"] == 1
     assert summary["returned_box_rate"] == 0.5
     assert summary["mean_iou_all"] == 0.4
-    assert summary["mean_iou_returned"] == 0.8
+    assert summary["mean_iou_over_returned"] == 0.8
     assert summary["localization_acc_iou_0.5"] == 0.5
     assert summary["localization_acc_iou_0.5_over_returned"] == 1.0
