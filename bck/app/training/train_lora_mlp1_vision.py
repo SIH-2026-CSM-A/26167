@@ -15,12 +15,15 @@ SCOPE NOTE (say this in the PR, do not bury it):
   would be. Say so plainly, don't oversell it.
 - Does NOT touch decoder layers 26-27 (AASH-002 Path C, already done, separate file).
 
-AASH-004 (GSD augmentation half): each real EuroSAT scene is passed through
+AASH-004 (both halves): each real EuroSAT scene is passed through
 `MultiScaleGSDAugment` before normalization, simulating an effective GSD in
 [10 m, 30 m] -- coarsening only, since EuroSAT is 10 m native and resampling
-cannot invent finer detail (see `gsd_augment.py`). The sampled GSD is recorded
-per step in the loss log as `sim_gsd_m`. The GSD *conditioning embedding* is not
-wired here -- it waits on Technical-Implementation §3.3.
+cannot invent finer detail (see `gsd_augment.py`). The per-step `sim_gsd_m` is
+then fed to `GSDFiLMConditioner` (see `gsd_conditioning.py`): a sinusoidal
+encoding of log(GSD) drives a FiLM per-channel scale+shift on mlp1's input,
+identity-initialised so step 0 is unchanged. Conditioner weights are not PEFT
+params -- they are optimised alongside the LoRA params and checkpointed to
+`gsd_conditioner.pt` separately.
 """
 
 import json
@@ -42,6 +45,11 @@ from app.training.gsd_augment import (
     GSDAugmentConfig,
     MultiScaleGSDAugment,
 )
+from app.training.gsd_conditioning import (
+    GSDFiLMConditioner,
+    attach_gsd_film,
+    mlp1_input_dim,
+)
 
 MODEL_ID = "OpenGVLab/InternVL3-2B"
 DATASET_ID = "Honaker/eurosat_dataset"
@@ -51,6 +59,7 @@ CHECKPOINT_EVERY = 50
 IMAGE_SIZE = 448
 OUTPUT_DIR = "app/training/checkpoints/yash004_mlp1_vision_lora"
 LOG_PATH = "app/training/logs/mlp1_vision_loss_log.jsonl"
+CONDITIONER_PATH = f"{OUTPUT_DIR}/gsd_conditioner.pt"
 
 # AASH-004: simulated GSD range for the multi-scale augmentation. Lower bound is
 # EuroSAT's 10 m native GSD (finest that can be simulated without inventing
@@ -98,6 +107,11 @@ model.img_context_token_id = img_context_token_id
 num_image_token = model.num_image_token if hasattr(model, "num_image_token") else 256
 print(f"num_image_token per tile (live from model): {num_image_token}")
 
+# AASH-004 point 3: read mlp1's input channel count off the live model, before
+# any LoRA wrapping turns that Linear into a peft layer. Never hardcoded.
+mlp1_in_features = mlp1_input_dim(model.mlp1)
+print(f"mlp1 input feature dim (live from model): {mlp1_in_features}")
+
 lora_config = LoraConfig(
     r=16,
     lora_alpha=32,
@@ -110,6 +124,18 @@ lora_config = LoraConfig(
 print("Wrapping mlp1.1/mlp1.3 with LoRA...")
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()
+
+# AASH-004 point 2: FiLM per-channel scale+shift on mlp1's input, derived from
+# the GSD embedding. Installed as a forward pre-hook so no LoRA parameter name
+# under mlp1 changes (save_pretrained stays valid). The conditioner's own
+# weights are NOT peft params -- see the optimizer and checkpoint blocks below.
+gsd_conditioner = GSDFiLMConditioner(mlp1_in_features).cuda()
+attach_gsd_film(model.get_base_model().mlp1, gsd_conditioner)
+n_cond_params = sum(p.numel() for p in gsd_conditioner.parameters())
+print(
+    f"GSD-conditioning FiLM attached to mlp1 input: {mlp1_in_features} channels, "
+    f"{n_cond_params} params, identity-initialised"
+)
 
 print(f"Streaming {DATASET_ID} (real Sentinel-2 EuroSAT imagery)...")
 ds = load_dataset(DATASET_ID, split="train", streaming=True)
@@ -141,10 +167,15 @@ print(
     f"effective GSD (coarsening only) on real EuroSAT scenes"
 )
 
-optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-4)
+# LoRA adapters (requires_grad on the peft model) + the standalone FiLM
+# conditioner, trained together under the existing single AdamW / lr=1e-4.
+trainable_params = [p for p in model.parameters() if p.requires_grad]
+trainable_params += list(gsd_conditioner.parameters())
+optimizer = torch.optim.AdamW(trainable_params, lr=1e-4)
 
 log_entries = []
 model.train()
+gsd_conditioner.train()
 
 total_steps = N_SAMPLES * N_EPOCHS
 step_times = []
@@ -160,6 +191,13 @@ for epoch in range(N_EPOCHS):
         degraded_image, sim_gsd_m = gsd_augment(image, gsd_rng)
         pixel_values = image_to_pixel_values(degraded_image, transform).to(
             "cuda", dtype=torch.float32
+        )
+
+        # AASH-004 point 5: condition on the SAME GSD the augmentation applied to
+        # this image -- registered out-of-band because InternVL3-2B's forward
+        # signature is fixed.
+        gsd_conditioner.set_gsd(
+            torch.tensor([sim_gsd_m], device="cuda", dtype=torch.float32)
         )
 
         question = "<image>\nWhat does this satellite image show?"
@@ -218,6 +256,7 @@ for epoch in range(N_EPOCHS):
 
         if global_step > 0 and global_step % CHECKPOINT_EVERY == 0:
             model.save_pretrained(OUTPUT_DIR)
+            torch.save(gsd_conditioner.state_dict(), CONDITIONER_PATH)
             with open(LOG_PATH, "w") as f:
                 for e in log_entries:
                     f.write(json.dumps(e) + "\n")
@@ -231,5 +270,7 @@ with open(LOG_PATH, "w") as f:
 print(f"Loss log written: {LOG_PATH} ({len(log_entries)} entries)")
 
 model.save_pretrained(OUTPUT_DIR)
+torch.save(gsd_conditioner.state_dict(), CONDITIONER_PATH)
+print(f"GSD conditioner checkpoint saved: {CONDITIONER_PATH}")
 print(f"Adapter checkpoint saved: {OUTPUT_DIR}")
 print(f"Checkpoint dir contents: {os.listdir(OUTPUT_DIR)}")
