@@ -10,6 +10,7 @@ import numpy as np
 import rasterio
 
 from app.contracts import Answer, Evidence, Modality, QueryRequest
+from app.core.raster_artifacts import write_mask_artifact
 from app.db import persist_trace
 from app.evidence import assemble_answer, build_bbox_evidence, build_vqa_evidence
 from app.ingestion import (
@@ -237,9 +238,16 @@ def run(
     elif dispatch_plan.tool_name == "change_detection":
         candidate_evidence_list = _run_change_detection_tool(recorder, ingested, dispatch_plan)
         supporting_observations = ()
+        source = _find_ingested(
+            ingested, dispatch_plan.image_bindings["pre_image"], role="pre_image"
+        )
+        candidate_evidence_list = _enrich_mask_evidence(candidate_evidence_list, source.source)
     else:
         candidate_evidence_list = _run_fusion_tool(recorder, ingested, dispatch_plan)
         supporting_observations = ()
+        source_id = dispatch_plan.image_bindings.get("optical_image")
+        source = _find_ingested(ingested, source_id, role="optical_image")
+        candidate_evidence_list = _enrich_mask_evidence(candidate_evidence_list, source.source)
 
     recorder.record("verification", "verification_started")
     decision = verify(
@@ -332,6 +340,27 @@ def run(
         _fail(recorder, stage="persistence", message=str(error), status_code=500)
 
     return answer
+
+
+def _enrich_mask_evidence(evidence_list: list[Evidence], source) -> list[Evidence]:
+    """Attach shared TiTiler URLs to BIT and fusion mask evidence."""
+    enriched: list[Evidence] = []
+    for evidence in evidence_list:
+        mask = next(
+            (
+                evidence.payload[key]
+                for key in ("change_mask", "water_mask")
+                if isinstance(evidence.payload.get(key), np.ndarray)
+            ),
+            None,
+        )
+        raster_url = write_mask_artifact(mask, source) if mask is not None else None
+        if raster_url is not None:
+            evidence = evidence.model_copy(
+                update={"payload": {**evidence.payload, "raster_url": raster_url}}
+            )
+        enriched.append(evidence)
+    return enriched
 
 
 def _run_vqa_tool(
