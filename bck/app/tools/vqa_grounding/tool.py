@@ -49,6 +49,7 @@ class VqaModel(Protocol):
 
     model_id: str
     device: str
+    active_model_identity: str | None
 
     def generate(self, image: Image.Image, prompt: str) -> str:
         """Generate model text for one image and prompt."""
@@ -120,7 +121,7 @@ def execute_vqa(
         raw_answer=raw_answer,
         supporting_observations=observations,
         raw_grounding_output=raw_grounding_output,
-        model_id=model.model_id,
+        model_id=model.active_model_identity or model.model_id,
         device=model.device,
         timing_seconds=time.perf_counter() - started,
         bbox=bbox,

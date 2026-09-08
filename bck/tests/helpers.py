@@ -37,6 +37,7 @@ class DeterministicVqaModel:
 
     model_id = "test/deterministic-vqa"
     device = "test"
+    active_model_identity = None
 
     def __init__(self, answer: str, grounding: str) -> None:
         """Store deterministic outputs for answer and grounding passes."""
