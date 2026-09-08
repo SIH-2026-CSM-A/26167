@@ -306,6 +306,10 @@ def run(
         evidence_list = [item for item in candidate_evidence_list if item.id in verified_ids]
         verified_text = _narrative_text(evidence_list)
 
+        # Tool payloads may contain NumPy masks for in-process verification;
+        # the HTTP response must contain only JSON-native values.
+        evidence_list = _json_safe_evidence(evidence_list)
+
     recorder.record(
         "evidence",
         "evidence_created",
