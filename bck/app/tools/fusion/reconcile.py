@@ -35,6 +35,7 @@ import numpy as np
 
 from app.contracts import Evidence, EvidenceType
 from app.tools.fusion.cloud_detector import CloudDetectionResult
+from app.tools.fusion.guards import MIN_VALID_PIXELS, InsufficientValidSupportError
 
 _TOOL_NAME = "fusion.reconcile"
 
@@ -60,6 +61,7 @@ def reconcile_sar_optical(
     despeckled_sigma0_db: np.ndarray,
     water_mask: np.ndarray,
     cloud_result: CloudDetectionResult,
+    valid_mask: np.ndarray | None = None,
 ) -> list[Evidence]:
     """Combine an Otsu SAR water mask with an optical cloud-detection result.
 
@@ -68,6 +70,23 @@ def reconcile_sar_optical(
     than one scene-wide average, so confidence reflects each pixel's actual
     cross-modal agreement instead of a scene-level dilution — see module
     docstring.
+
+    `valid_mask` (co-registered boolean array, True = valid data) scopes
+    every fraction this function computes — cloud_fraction, water_fraction,
+    and each region's area_fraction — to the valid support instead of the
+    raw full-scene pixel count, so a large nodata footprint (irregular SAR
+    swath edges, sensor gaps) never dilutes these numbers with pixels that
+    were never observed. Defaults to "everything is valid" when omitted,
+    which reproduces the original full-scene behavior exactly. Every
+    returned Evidence payload also carries `valid_mask`,
+    `valid_pixel_count`, `invalid_pixel_count`, and `support_fraction`, so
+    a nodata pixel is never collapsed into "not water" by omission — its
+    invalidity is always explicit and separate from the water classification.
+
+    Raises `InsufficientValidSupportError` if `valid_mask` has fewer than
+    `MIN_VALID_PIXELS` True entries — there is nothing meaningful to
+    reconcile from an (almost) empty footprint, and computing fractions
+    over it would silently divide by near-zero support.
     """
     started = time.perf_counter()
 
@@ -81,8 +100,34 @@ def reconcile_sar_optical(
     water_mask = np.asarray(water_mask).astype(bool)
     cloud_mask = np.asarray(cloud_result.mask).astype(bool)
 
-    cloud_fraction = float(cloud_mask.mean())
-    water_fraction = float(water_mask.mean())
+    if valid_mask is None:
+        valid_mask = np.ones(water_mask.shape, dtype=bool)
+    else:
+        valid_mask = np.asarray(valid_mask, dtype=bool)
+        if valid_mask.shape != water_mask.shape:
+            raise ValueError(
+                f"valid_mask must share the shape {water_mask.shape}; got {valid_mask.shape}"
+            )
+
+    valid_pixel_count = int(valid_mask.sum())
+    total_pixel_count = int(valid_mask.size)
+    if valid_pixel_count < MIN_VALID_PIXELS:
+        raise InsufficientValidSupportError(
+            f"valid support has {valid_pixel_count} pixel(s); at least "
+            f"{MIN_VALID_PIXELS} required to reconcile SAR and optical evidence"
+        )
+    support_fraction = valid_pixel_count / total_pixel_count
+    invalid_pixel_count = total_pixel_count - valid_pixel_count
+
+    common_support_payload = {
+        "valid_mask": valid_mask,
+        "valid_pixel_count": valid_pixel_count,
+        "invalid_pixel_count": invalid_pixel_count,
+        "support_fraction": support_fraction,
+    }
+
+    cloud_fraction = float(cloud_mask[valid_mask].mean())
+    water_fraction = float(water_mask[valid_mask].mean())
 
     if cloud_fraction == 0.0:
         # No disagreement anywhere — single evidence object, full confidence,
@@ -96,28 +141,31 @@ def reconcile_sar_optical(
             tool=_TOOL_NAME,
             type=EvidenceType.MASK,
             payload={
-                "water_mask": water_mask,
+                "water_mask": water_mask & valid_mask,
                 "water_fraction": water_fraction,
                 "cloud_fraction": 0.0,
                 "optical_inconclusive": False,
                 "region": "full_scene",
                 "note": note,
+                **common_support_payload,
             },
             confidence=1.0,
             timing=time.perf_counter() - started,
         )
         return [evidence]
 
-    clear_mask = ~cloud_mask
+    clear_mask = valid_mask & ~cloud_mask
+    cloud_affected_mask = valid_mask & cloud_mask
     clear_water_fraction = _region_water_fraction(water_mask, clear_mask)
-    cloud_water_fraction = _region_water_fraction(water_mask, cloud_mask)
+    cloud_water_fraction = _region_water_fraction(water_mask, cloud_affected_mask)
 
     evidence_list: list[Evidence] = []
 
     if clear_mask.any():
+        clear_area_fraction = clear_mask.sum() / valid_pixel_count
         clear_note = (
             f"SAR indicates {clear_water_fraction * 100:.1f}% water coverage in the "
-            f"{(1 - cloud_fraction) * 100:.1f}% of the scene with no cloud cover; "
+            f"{clear_area_fraction * 100:.1f}% of the valid area with no cloud cover; "
             "optical confirms no disagreement in this region."
         )
         evidence_list.append(
@@ -132,25 +180,27 @@ def reconcile_sar_optical(
                     "cloud_fraction": 0.0,
                     "optical_inconclusive": False,
                     "region": "clear",
-                    "region_area_fraction": 1.0 - cloud_fraction,
+                    "region_area_fraction": clear_area_fraction,
                     "note": clear_note,
+                    **common_support_payload,
                 },
                 confidence=1.0,
                 timing=time.perf_counter() - started,
             )
         )
 
-    if cloud_mask.any():
+    if cloud_affected_mask.any():
         # Fixed baseline, not scaled by this region's size — see
         # _SAR_ONLY_CONFIDENCE docstring above. The SAR answer for this
         # region is still reported, never silently dropped, just at a
         # discounted confidence reflecting the missing optical corroboration.
         cloud_region_confidence = _SAR_ONLY_CONFIDENCE
+        cloud_area_fraction = cloud_affected_mask.sum() / valid_pixel_count
         cloud_note = (
             f"SAR indicates {cloud_water_fraction * 100:.1f}% water coverage in the "
-            f"{cloud_fraction * 100:.1f}% of the scene under cloud cover; optical could "
-            "not confirm this region, so the SAR-derived assessment is reported at "
-            "reduced confidence."
+            f"{cloud_area_fraction * 100:.1f}% of the valid area under cloud cover; "
+            "optical could not confirm this region, so the SAR-derived assessment is "
+            "reported at reduced confidence."
         )
         evidence_list.append(
             Evidence(
@@ -158,14 +208,15 @@ def reconcile_sar_optical(
                 tool=_TOOL_NAME,
                 type=EvidenceType.MASK,
                 payload={
-                    "water_mask": water_mask & cloud_mask,
-                    "region_mask": cloud_mask,
+                    "water_mask": water_mask & cloud_affected_mask,
+                    "region_mask": cloud_affected_mask,
                     "water_fraction": cloud_water_fraction,
                     "cloud_fraction": cloud_fraction,
                     "optical_inconclusive": True,
                     "region": "cloud_affected",
-                    "region_area_fraction": cloud_fraction,
+                    "region_area_fraction": cloud_area_fraction,
                     "note": cloud_note,
+                    **common_support_payload,
                 },
                 confidence=cloud_region_confidence,
                 timing=time.perf_counter() - started,
