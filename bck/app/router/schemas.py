@@ -53,6 +53,7 @@ class InputInventory(BaseModel):
     has_sar: bool
     optical_ids: list[str] = Field(default_factory=list)
     sar_ids: list[str] = Field(default_factory=list)
+    unknown_ids: list[str] = Field(default_factory=list)
 
 
 class VetoReasonCode(StrEnum):
@@ -63,6 +64,7 @@ class VetoReasonCode(StrEnum):
     EXCESS_IMAGES = "EXCESS_IMAGES"
     CROSS_MODAL_PAIR_MISSING = "CROSS_MODAL_PAIR_MISSING"
     CAPABILITY_UNAVAILABLE = "CAPABILITY_UNAVAILABLE"
+    MODALITY_UNKNOWN = "MODALITY_UNKNOWN"
 
 
 class VetoDecision(BaseModel):

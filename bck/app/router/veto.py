@@ -39,6 +39,29 @@ def evaluate_veto(
             suggested_action="Provide a specific geospatial question or command.",
         )
 
+    # 1b. Unclassifiable modality gate (B4, VETO-01B) — cannot evaluate any
+    # task-specific pairing rule below when we don't even know what an input
+    # actually is. Ask the client to clarify rather than guessing.
+    if inventory.unknown_ids:
+        count_str = (
+            "1 image was"
+            if len(inventory.unknown_ids) == 1
+            else f"{len(inventory.unknown_ids)} images were"
+        )
+        return VetoDecision(
+            reason_code=VetoReasonCode.MODALITY_UNKNOWN,
+            message=(
+                f"{count_str} unable to be classified as Optical or SAR from raster "
+                "metadata alone (no recognizable band description, polarization tag, "
+                "or color interpretation)."
+            ),
+            suggested_action=(
+                "Re-upload with standard band descriptions (e.g. VV/VH for SAR, "
+                "B1-B12/B8A for Sentinel-2 optical), or specify the modality explicitly "
+                "in the request."
+            ),
+        )
+
     # 2. Tool registry capability availability gate (VETO-02)
     capabilities = DEFAULT_REGISTRY_CAPABILITIES.copy()
     if registry_capabilities is not None:

@@ -29,7 +29,10 @@ async def submit_query(
     if not images:
         raise HTTPException(status_code=422, detail="at least one image is required")
 
-    modalities = modality or [Modality.OPTICAL for _ in images]
+    # B4: no modality default. A client-supplied `modality` form field is an
+    # explicit override, used as-is; omitting it means "classify from raster
+    # metadata" (app.ingestion.raster.classify_modality), not "assume Optical".
+    modalities: list[Modality | None] = modality if modality is not None else [None] * len(images)
     if len(images) != len(modalities):
         raise HTTPException(status_code=422, detail="images and modality must have the same length")
 

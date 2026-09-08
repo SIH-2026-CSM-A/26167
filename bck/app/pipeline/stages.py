@@ -18,7 +18,10 @@ class PipelineUpload:
     filename: str
     content_type: str
     content: bytes
-    modality: Modality
+    modality: Modality | None
+    """None means the client did not supply one: ingestion classifies it from
+    raster metadata (B4) instead of defaulting to Optical.
+    """
 
 
 class PipelineError(RuntimeError):

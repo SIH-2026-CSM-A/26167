@@ -180,6 +180,25 @@ def test_veto_fusion_missing_modalities():
     assert dec_sar.veto.reason_code is VetoReasonCode.CROSS_MODAL_PAIR_MISSING
 
 
+def test_veto_unknown_modality_before_any_task_specific_check():
+    """B4/VETO-01B: an unclassified image is vetoed before pairing/count rules even run.
+
+    Uses PS_QUERY_4 (FUSION) deliberately: a well-formed optical+SAR pair
+    would normally dispatch fine, so this proves the modality gate runs
+    ahead of (and independently from) the FUSION-specific pairing check.
+    """
+    unknown_img = ImageInput(
+        id="amb-1", modality=Modality.UNKNOWN, format="GeoTIFF", path="amb-1.tif"
+    )
+    req = QueryRequest(query=PS_QUERY_4, images=[_opt("opt-1"), unknown_img])
+    decision = route(req)
+
+    assert decision.is_vetoed
+    assert decision.veto is not None
+    assert decision.veto.reason_code is VetoReasonCode.MODALITY_UNKNOWN
+    assert decision.dispatch_plan is None
+
+
 def test_veto_capability_unavailable_bonus_archive():
     """VETO-02: Bonus archive search is disabled by default in registry capabilities."""
     req = QueryRequest(query="Search archive for Cartosat imagery of Hyderabad", images=[])

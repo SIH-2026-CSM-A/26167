@@ -6,6 +6,7 @@ from app.ingestion.raster import (
     RasterIngestionError,
     RasterUpload,
     UnsupportedRasterError,
+    classify_modality,
     ingest_raster,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "RasterIngestionError",
     "RasterUpload",
     "UnsupportedRasterError",
+    "classify_modality",
     "ingest_raster",
 ]

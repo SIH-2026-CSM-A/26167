@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import atexit
+import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,17 @@ SUPPORTED_TIFF_SUFFIXES = frozenset({".tif", ".tiff"})
 PREVIEW_MAX_DIMENSION = 1024
 LOWER_VISUAL_PERCENTILE = 2.0
 UPPER_VISUAL_PERCENTILE = 98.0
+
+# B4: metadata-only modality classification. Real-fixture-verified, not guessed —
+# tests/fixtures/Bolivia_103757_S1Hand.tif carries band descriptions exactly
+# ("VV", "VH"); Bolivia_103757_S2Hand.tif carries exactly ("B1", ..., "B8A", ...,
+# "B12"). Band count alone is not used as a signal: a single-band optical
+# panchromatic scene and a single-pol SAR scene are structurally indistinguishable
+# by count, so trusting count here would be exactly the kind of guessed rule this
+# ticket exists to avoid.
+_SAR_POLARIZATION_PATTERN = re.compile(r"\b(VV|VH|HH|HV)\b", re.IGNORECASE)
+_OPTICAL_BAND_NAME_PATTERN = re.compile(r"\bB(?:[0-9]|1[0-2]|8A)\b", re.IGNORECASE)
+_OPTICAL_COLORS = frozenset({ColorInterp.red, ColorInterp.green, ColorInterp.blue})
 
 
 class RasterIngestionError(ValueError):
@@ -42,7 +54,11 @@ class RasterUpload:
     filename: str
     content_type: str
     content: bytes
-    modality: Modality
+    modality: Modality | None
+    """None means the client did not supply a modality: ingestion classifies it
+    from raster metadata (see `classify_modality`). A concrete value is a
+    client-supplied override, used as-is without re-classification.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +69,32 @@ class IngestedRaster:
     visual: Image.Image
 
 
+def classify_modality(dataset: rasterio.io.DatasetReader) -> Modality:
+    """Classify sensor modality from raster metadata alone — no pixel values, no LLM call.
+
+    Checks band descriptions and tags for SAR polarization tokens (VV/VH/HH/HV) or
+    Sentinel-2-style optical band-name tokens (B1-B12/B8A) first, since those are
+    unambiguous when present; falls back to GDAL color interpretation (declared
+    Red/Green/Blue) for natural-color rasters that carry neither. Returns
+    `Modality.UNKNOWN` rather than guessing when none of these signals are present.
+    """
+    band_texts: list[str] = []
+    for index in range(1, dataset.count + 1):
+        description = dataset.descriptions[index - 1]
+        if description:
+            band_texts.append(description)
+        band_texts.extend(str(value) for value in dataset.tags(index).values())
+    combined_text = " ".join(band_texts)
+
+    if _SAR_POLARIZATION_PATTERN.search(combined_text):
+        return Modality.SAR
+    if _OPTICAL_BAND_NAME_PATTERN.search(combined_text):
+        return Modality.OPTICAL
+    if _OPTICAL_COLORS & set(dataset.colorinterp):
+        return Modality.OPTICAL
+    return Modality.UNKNOWN
+
+
 def ingest_raster(upload: RasterUpload) -> IngestedRaster:
     """Decode a TIFF upload, preserve source metadata, and create an RGB overview."""
     _validate_upload(upload)
@@ -60,6 +102,12 @@ def ingest_raster(upload: RasterUpload) -> IngestedRaster:
         with MemoryFile(upload.content) as memory_file, memory_file.open() as dataset:
             if dataset.driver != "GTiff":
                 raise UnsupportedRasterError("uploaded asset is not a GeoTIFF/TIFF raster")
+            if upload.modality is not None:
+                modality = upload.modality
+                modality_source = "client_override"
+            else:
+                modality = classify_modality(dataset)
+                modality_source = "metadata_classifier"
             visual, band_indexes, visualization_method = _build_visual(dataset)
             metadata = _extract_metadata(
                 dataset,
@@ -67,9 +115,10 @@ def ingest_raster(upload: RasterUpload) -> IngestedRaster:
                 band_indexes=band_indexes,
                 visualization_method=visualization_method,
             )
+            metadata["modality_source"] = modality_source
             source = ImageInput(
                 id=upload.id,
-                modality=upload.modality,
+                modality=modality,
                 format=dataset.driver,
                 path=_persist_temp(upload),
                 metadata=metadata,
