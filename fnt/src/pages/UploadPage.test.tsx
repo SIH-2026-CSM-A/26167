@@ -120,8 +120,13 @@ test('renders backend error when query fails', async () => {
   expect(screen.getByText(/TIFF could not be read/i)).toBeInTheDocument();
 });
 
-test('prevents unsupported multi-slot submission with a clear notice', async () => {
-  const fetchSpy = vi.fn();
+test('submits cross-modal optical and SAR imagery with both modalities', async () => {
+  const fetchSpy = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify(successfulAnswer), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
   vi.stubGlobal('fetch', fetchSpy);
   const user = userEvent.setup();
   const { container } = render(<UploadPage />);
@@ -143,9 +148,11 @@ test('prevents unsupported multi-slot submission with a clear notice', async () 
   expect(submitButton).toBeEnabled();
   await user.click(submitButton);
 
-  expect(await screen.findByRole('alert')).toBeInTheDocument();
-  expect(
-    screen.getByText(/Multi-slot pipeline execution is not supported in the YASH-003 single-image VQA slice/i),
-  ).toBeInTheDocument();
-  expect(fetchSpy).not.toHaveBeenCalled();
+  expect(await screen.findByText('Pipeline Result')).toBeInTheDocument();
+  expect(fetchSpy).toHaveBeenCalledOnce();
+  const requestBody = fetchSpy.mock.calls[0][1]?.body as FormData;
+  expect(requestBody.get('query')).toBe('Detect changes');
+  expect((requestBody.getAll('images')[0] as File).name).toBe('s1.tif');
+  expect((requestBody.getAll('images')[1] as File).name).toBe('s2.tif');
+  expect(requestBody.getAll('modality')).toEqual(['optical', 'sar']);
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   Map as MapLibreMap,
   type GeoJSONSource,
@@ -15,6 +15,17 @@ import {
   isOutsideViewport,
   normalizeBoundsForFit,
 } from '@/utils/evidenceGeoJson';
+import {
+  buildRasterLayerSpecification,
+  buildRasterSourceSpecification,
+  createRasterSourceStatus,
+  createVectorSourceStatus,
+  evidenceToRasterOverlays,
+  loadRasterBounds,
+  getRasterOverlayBounds,
+  type EvidenceSourceStatus,
+  type RasterEvidenceOverlay,
+} from '@/utils/evidenceRaster';
 import { MapControls, BasemapMode } from './MapControls';
 import { EvidenceDetailCard } from './EvidenceDetailCard';
 
@@ -102,12 +113,24 @@ function addEvidenceLayers(
   }
 }
 
+function syncRasterLayers(map: MapLibreMap, overlays: RasterEvidenceOverlay[]): void {
+  for (const overlay of overlays) {
+    if (!map.getSource(overlay.sourceId)) {
+      map.addSource(overlay.sourceId, buildRasterSourceSpecification(overlay));
+    }
+    if (!map.getLayer(overlay.layerId)) {
+      map.addLayer(buildRasterLayerSpecification(overlay), 'evidence-mask-fill');
+    }
+  }
+}
+
 function useEvidenceSource(
   map: MapLibreMap | null,
   isLoaded: boolean,
   evidenceList: Evidence[],
   selectedId: string | null
-): void {
+): RasterEvidenceOverlay[] {
+  const overlays = useMemo(() => evidenceToRasterOverlays(evidenceList), [evidenceList]);
   useEffect(() => {
     if (!map || !isLoaded) return;
     const source = map.getSource('satquery-evidence') as GeoJSONSource | undefined;
@@ -127,7 +150,86 @@ function useEvidenceSource(
         });
       }
     }
-  }, [map, isLoaded, evidenceList, selectedId]);
+  }, [map, isLoaded, evidenceList, selectedId, overlays]);
+  useEffect(() => {
+    if (!map || !isLoaded || overlays.length === 0) return;
+    const controller = new AbortController();
+    let resolved: RasterEvidenceOverlay[] = [];
+    const restore = () => syncRasterLayers(map, resolved);
+    map.on('style.load', restore);
+    void Promise.all(overlays.map(async (overlay) => {
+      try {
+        return { ...overlay, bounds: await loadRasterBounds(overlay, controller.signal) };
+      } catch (error) {
+        if (!controller.signal.aborted) map.fire('error', {
+          sourceId: overlay.sourceId,
+          error: error instanceof Error ? error : new Error('Raster metadata failed'),
+        });
+        return null;
+      }
+    })).then((items) => {
+      if (controller.signal.aborted) return;
+      resolved = items.filter((item) => item !== null);
+      restore();
+      const selected = resolved.filter((overlay) => overlay.evidenceId === selectedId);
+      const bounds = getRasterOverlayBounds(selected.length ? selected : resolved);
+      if (bounds) map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], {
+        padding: 60, maxZoom: 16, duration: 1200,
+      });
+    });
+    return () => {
+      controller.abort();
+      map.off('style.load', restore);
+      for (const overlay of resolved) {
+        if (map.getLayer(overlay.layerId)) map.removeLayer(overlay.layerId);
+        if (map.getSource(overlay.sourceId)) map.removeSource(overlay.sourceId);
+      }
+    };
+  }, [map, isLoaded, overlays, selectedId]);
+  return overlays;
+}
+
+function useEvidenceStatuses(
+  map: MapLibreMap | null,
+  isLoaded: boolean,
+  overlays: RasterEvidenceOverlay[],
+  featureCount: number
+): EvidenceSourceStatus[] {
+  const [statuses, setStatuses] = useState<EvidenceSourceStatus[]>([]);
+
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+    setStatuses([
+      createVectorSourceStatus(featureCount),
+      ...overlays.map((overlay) => createRasterSourceStatus(overlay, 'loading')),
+    ]);
+
+    const listeners = overlays.map((overlay) => {
+      const handleData = (event: Parameters<Parameters<MapLibreMap['on']>[1]>[0]) => {
+        if (!('sourceId' in event) || event.sourceId !== overlay.sourceId || !('isSourceLoaded' in event) || !event.isSourceLoaded) return;
+        setStatuses((current) => current.map((status) => status.id === overlay.sourceId
+          ? createRasterSourceStatus(overlay, 'ready')
+          : status));
+      };
+      const handleError = (event: Parameters<Parameters<MapLibreMap['on']>[1]>[0]) => {
+        if (!('sourceId' in event) || event.sourceId !== overlay.sourceId) return;
+        setStatuses((current) => current.map((status) => status.id === overlay.sourceId
+          ? createRasterSourceStatus(overlay, 'error', 'Raster source failed to load')
+          : status));
+      };
+      map.on('data', handleData);
+      map.on('error', handleError);
+      return { handleData, handleError };
+    });
+    return () => {
+      listeners.forEach(({ handleData, handleError }) => {
+        map.off('data', handleData);
+        map.off('error', handleError);
+      });
+    };
+  }, [map, isLoaded, overlays, featureCount]);
+
+  return statuses;
 }
 
 function useFeatureHighlight(
@@ -269,13 +371,26 @@ export const EvidenceMap: React.FC<EvidenceMapProps> = ({
   );
 
   const selectedEvidence = evidenceList.find((e) => e.id === selectedEvidenceId) ?? null;
-  useEvidenceSource(mapRef.current, isLoaded, evidenceList, selectedEvidenceId);
+  const rasterOverlays = useEvidenceSource(mapRef.current, isLoaded, evidenceList, selectedEvidenceId);
+  const sourceStatuses = useEvidenceStatuses(mapRef.current, isLoaded, rasterOverlays, evidenceToFeatures(evidenceList).length);
   useFeatureHighlight(mapRef.current, isLoaded, selectedEvidenceId, evidenceList);
   useHoverHighlight(mapRef.current, isLoaded, hoveredEvidenceId);
 
   return (
     <div className={`relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950 ${className}`}>
       <div ref={containerRef} className="h-full w-full" />
+      {sourceStatuses.length > 0 && (
+        <div className="absolute left-3 top-3 z-10 max-w-xs rounded-lg border border-slate-700/80 bg-slate-950/90 px-3 py-2 text-xs text-slate-200 shadow-lg">
+          <div className="mb-1 font-semibold text-slate-100">Evidence layers</div>
+          {sourceStatuses.map((status) => (
+            <div key={status.id} className="flex items-center gap-2">
+              <span className={`h-2 w-2 rounded-full ${status.state === 'error' ? 'bg-rose-400' : status.state === 'ready' ? 'bg-emerald-400' : status.state === 'loading' ? 'bg-amber-400' : 'bg-slate-500'}`} />
+              <span className="truncate">{status.label}: {status.state}</span>
+              {status.state === 'error' && <span className="text-rose-300">failed</span>}
+            </div>
+          ))}
+        </div>
+      )}
       <EvidenceDetailCard evidence={selectedEvidence} onClose={() => onSelectEvidence(null)} />
       <MapControls
         onFitAll={handleFitAll}

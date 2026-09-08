@@ -78,15 +78,8 @@ export const UploadPage: React.FC = () => {
     e.preventDefault();
     if (!canSubmit) return;
 
-    if (mode !== 'single') {
-      setError(
-        'Multi-slot pipeline execution is not supported in the YASH-003 single-image VQA slice. Please select "Single Image" configuration.'
-      );
-      return;
-    }
-
-    const primaryFile = slots[0]?.file;
-    if (!primaryFile) {
+    const selectedFiles = slots.map((slot) => slot.file).filter((file): file is File => file !== null);
+    if (selectedFiles.length !== slots.length) {
       setError('Select a GeoTIFF or TIFF image.');
       return;
     }
@@ -96,7 +89,11 @@ export const UploadPage: React.FC = () => {
     setResult(null);
 
     try {
-      const response = await submitImageQuery(primaryFile, query.trim());
+      const response = await submitImageQuery(
+        selectedFiles,
+        query.trim(),
+        slots.map((slot) => slot.modality)
+      );
       setResult(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error or backend failed.');

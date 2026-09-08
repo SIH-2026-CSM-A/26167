@@ -23,8 +23,7 @@ function useUploadedFiles() {
   const addFiles = (newFiles: File[]) => {
     setFiles((prev) => [...prev, ...newFiles.map((f) => ({ file: f, modality: 'optical' as Modality }))]);
   };
-  const clearFiles = () => setFiles([]);
-  return { files, toggleModality, removeFile, addFiles, clearFiles };
+  return { files, toggleModality, removeFile, addFiles };
 }
 
 const UploadedFilesPreview: React.FC<{
@@ -96,15 +95,13 @@ const InputFormRow: React.FC<{
 
 export const ChatInput: React.FC<ChatInputProps> = ({ onSubmit, isLoading }) => {
   const [query, setQuery] = useState('');
-  const { files, toggleModality, removeFile, addFiles, clearFiles } = useUploadedFiles();
+  const { files, toggleModality, removeFile, addFiles } = useUploadedFiles();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || isLoading) return;
     onSubmit(query.trim(), files.map((f) => f.file), files.map((f) => f.modality));
-    setQuery('');
-    clearFiles();
   };
 
   return (

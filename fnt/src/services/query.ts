@@ -10,20 +10,27 @@ export class QueryApiError extends Error {
   }
 }
 
-/** Upload one TIFF plus its actual question to the backend query endpoint. */
-export async function submitImageQuery(file: File, query: string): Promise<Answer> {
+/** Upload one or more TIFFs plus their actual question to the backend query endpoint. */
+export async function submitImageQuery(
+  files: File | File[],
+  query: string,
+  modalities?: string[]
+): Promise<Answer> {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {
     throw new QueryApiError('Enter a question about the image.');
   }
-  if (!/\.tiff?$/i.test(file.name)) {
-    throw new QueryApiError('Select a .tif or .tiff raster.');
+  const selectedFiles = Array.isArray(files) ? files : [files];
+  if (selectedFiles.some((file) => !/\.tiff?$/i.test(file.name))) {
+    throw new QueryApiError('Select .tif or .tiff rasters.');
   }
 
   const form = new FormData();
   form.append('query', normalizedQuery);
-  form.append('images', file, file.name);
-  form.append('modality', 'optical');
+  selectedFiles.forEach((file, index) => {
+    form.append('images', file, file.name);
+    form.append('modality', modalities?.[index] ?? 'optical');
+  });
 
   const response = await fetch(`${API_BASE_URL}/query`, {
     method: 'POST',
