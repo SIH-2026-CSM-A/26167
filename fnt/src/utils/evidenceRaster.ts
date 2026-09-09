@@ -48,14 +48,17 @@ export interface RasterLayerSpecification {
 
 export type EvidenceBounds = [number, number, number, number];
 
-/** Read WGS84 bounds from the existing TiTiler COG bounds endpoint. */
+/** Read WGS84 bounds from TiTiler's tilejson endpoint (there is no /cog/bounds route in 2.2.1). */
 export async function loadRasterBounds(overlay: RasterEvidenceOverlay, signal: AbortSignal): Promise<EvidenceBounds | undefined> {
   if (overlay.bounds) return overlay.bounds;
   const url = new URL(overlay.tiles[0], window.location.href);
-  const tilePath = '/cog/tiles/';
+  const tilePath = '/cog/tiles/WebMercatorQuad/';
   const index = url.pathname.indexOf(tilePath);
   if (index < 0 || !url.searchParams.has('url')) return undefined;
-  url.pathname = `${url.pathname.slice(0, index)}/cog/bounds`;
+  url.pathname = `${url.pathname.slice(0, index)}/cog/WebMercatorQuad/tilejson.json`;
+  url.searchParams.delete('z');
+  url.searchParams.delete('x');
+  url.searchParams.delete('y');
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Raster bounds failed (${response.status})`);
   const data = await response.json();

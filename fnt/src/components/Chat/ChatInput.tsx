@@ -3,7 +3,7 @@ import { Send, Paperclip, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 import type { Modality } from '@/types/contracts';
 
 export interface ChatInputProps {
-  onSubmit: (query: string, files: File[], modalities: Modality[]) => void;
+  onSubmit: (query: string, files: File[], modalities: Modality[]) => Promise<boolean>;
   isLoading: boolean;
 }
 
@@ -23,7 +23,8 @@ function useUploadedFiles() {
   const addFiles = (newFiles: File[]) => {
     setFiles((prev) => [...prev, ...newFiles.map((f) => ({ file: f, modality: 'optical' as Modality }))]);
   };
-  return { files, toggleModality, removeFile, addFiles };
+  const clearFiles = () => setFiles([]);
+  return { files, toggleModality, removeFile, addFiles, clearFiles };
 }
 
 const UploadedFilesPreview: React.FC<{
@@ -95,13 +96,21 @@ const InputFormRow: React.FC<{
 
 export const ChatInput: React.FC<ChatInputProps> = ({ onSubmit, isLoading }) => {
   const [query, setQuery] = useState('');
-  const { files, toggleModality, removeFile, addFiles } = useUploadedFiles();
+  const { files, toggleModality, removeFile, addFiles, clearFiles } = useUploadedFiles();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || isLoading) return;
-    onSubmit(query.trim(), files.map((f) => f.file), files.map((f) => f.modality));
+    const submittedQuery = query.trim();
+    const submittedFiles = files.map((f) => f.file);
+    const submittedModalities = files.map((f) => f.modality);
+    void onSubmit(submittedQuery, submittedFiles, submittedModalities).then((succeeded) => {
+      if (succeeded) {
+        setQuery('');
+        clearFiles();
+      }
+    });
   };
 
   return (

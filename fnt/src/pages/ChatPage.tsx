@@ -26,7 +26,7 @@ const ChatConversationPane: React.FC<{
   hoveredEvidenceId: string | null;
   onSelectEvidence: (id: string) => void;
   onHoverEvidence: (id: string | null) => void;
-  onSubmit: (query: string, files: File[], modalities: Modality[]) => void;
+  onSubmit: (query: string, files: File[], modalities: Modality[]) => Promise<boolean>;
   isLoading: boolean;
   isMapVisible: boolean;
 }> = ({
