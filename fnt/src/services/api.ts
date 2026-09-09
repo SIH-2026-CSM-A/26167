@@ -1,6 +1,7 @@
 import type { Answer, Modality } from '@/types/contracts';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
+const QUERY_TIMEOUT_MS = 180_000;
 
 export interface SubmitQueryOptions {
   query: string;
@@ -25,10 +26,24 @@ export async function submitQuery(options: SubmitQueryOptions): Promise<Answer> 
     formData.append('modality', modalities[i]);
   }
 
-  const response = await fetch(`${API_BASE_URL}/query`, {
-    method: 'POST',
-    body: formData,
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/query`, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Query timed out. Check the backend and retry.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     let errorDetail = `Request failed with status ${response.status}`;

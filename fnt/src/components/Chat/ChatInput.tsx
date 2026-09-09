@@ -3,7 +3,7 @@ import { Send, Paperclip, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 import type { Modality } from '@/types/contracts';
 
 export interface ChatInputProps {
-  onSubmit: (query: string, files: File[], modalities: Modality[]) => void;
+  onSubmit: (query: string, files: File[], modalities: Modality[]) => Promise<boolean>;
   isLoading: boolean;
 }
 
@@ -102,9 +102,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSubmit, isLoading }) => 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || isLoading) return;
-    onSubmit(query.trim(), files.map((f) => f.file), files.map((f) => f.modality));
-    setQuery('');
-    clearFiles();
+    const submittedQuery = query.trim();
+    const submittedFiles = files.map((f) => f.file);
+    const submittedModalities = files.map((f) => f.modality);
+    void onSubmit(submittedQuery, submittedFiles, submittedModalities).then((succeeded) => {
+      if (succeeded) {
+        setQuery('');
+        clearFiles();
+      }
+    });
   };
 
   return (

@@ -26,7 +26,7 @@ const ChatConversationPane: React.FC<{
   hoveredEvidenceId: string | null;
   onSelectEvidence: (id: string) => void;
   onHoverEvidence: (id: string | null) => void;
-  onSubmit: (query: string, files: File[], modalities: Modality[]) => void;
+  onSubmit: (query: string, files: File[], modalities: Modality[]) => Promise<boolean>;
   isLoading: boolean;
   isMapVisible: boolean;
 }> = ({
@@ -95,12 +95,30 @@ const ChatPageHeader: React.FC<{ isMapVisible: boolean; onToggleMap: () => void 
   </div>
 );
 
-const ChatErrorBanner: React.FC<{ error: string | null }> = ({ error }) => {
+const ChatErrorBanner: React.FC<{
+  error: string | null;
+  canRetry: boolean;
+  isRetrying: boolean;
+  onRetry: () => void;
+}> = ({ error, canRetry, isRetrying, onRetry }) => {
   if (!error) return null;
   return (
-    <div className="mb-4 flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-950/40 p-3 text-xs text-rose-300">
+    <div
+      role="alert"
+      className="mb-4 flex items-center gap-3 rounded-lg border border-rose-500/40 bg-rose-950/40 p-3 text-xs text-rose-300"
+    >
       <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
-      <span>{error}</span>
+      <span className="flex-1">{error}</span>
+      {canRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={isRetrying}
+          className="shrink-0 rounded-md border border-rose-400/40 bg-rose-900/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-rose-200 transition hover:bg-rose-900/60 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isRetrying ? 'Retrying...' : 'Retry'}
+        </button>
+      )}
     </div>
   );
 };
@@ -114,6 +132,8 @@ export const ChatPage: React.FC = () => {
     selectEvidence,
     hoverEvidence,
     submitUserQuery,
+    retryLastSubmission,
+    lastSubmission,
     isLoading,
     error,
   } = useSatQuery();
@@ -122,7 +142,14 @@ export const ChatPage: React.FC = () => {
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <ChatPageHeader isMapVisible={isMapVisible} onToggleMap={() => setIsMapVisible(!isMapVisible)} />
-      <ChatErrorBanner error={error} />
+      <ChatErrorBanner
+        error={error}
+        canRetry={Boolean(error && lastSubmission)}
+        isRetrying={isLoading}
+        onRetry={() => {
+          void retryLastSubmission();
+        }}
+      />
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <ChatConversationPane
           messages={messages}

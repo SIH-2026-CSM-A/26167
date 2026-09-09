@@ -1,5 +1,6 @@
 import { createContext } from 'react';
 import type { Answer, ChatMessage, Evidence, Modality } from '@/types/contracts';
+import type { SubmitQueryOptions } from '@/services/api';
 
 export interface SatQueryContextValue {
   messages: ChatMessage[];
@@ -16,7 +17,9 @@ export interface SatQueryContextValue {
     query: string,
     images: File[],
     modalities: Modality[]
-  ) => Promise<void>;
+  ) => Promise<boolean>;
+  lastSubmission: SubmitQueryOptions | null;
+  retryLastSubmission: () => Promise<boolean>;
   loadAnswer: (answer: Answer, userQuery?: string) => void;
   clearSession: () => void;
 }
