@@ -3,6 +3,7 @@
 import io
 from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.main import app
@@ -13,8 +14,6 @@ from app.contracts.schemas import (
     ExecutionTrace,
     TraceStep,
 )
-import pytest
-
 from app.evidence.report import (
     NotGeoreferencedError,
     generate_evidence_geojson,
