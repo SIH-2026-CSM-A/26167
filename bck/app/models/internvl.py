@@ -14,6 +14,9 @@ import torch
 from PIL import Image
 
 DEFAULT_MODEL_ID = "OpenGVLab/InternVL3-2B"
+DEFAULT_ADAPTER_PATH = "app/training/checkpoints/yash004_mlp1_vision_lora"
+ADAPTER_PATH = os.environ.get("ADAPTER_PATH", DEFAULT_ADAPTER_PATH)
+ADAPTER_NAME = "yash004-mlp1-vision-lora"
 MODEL_INPUT_SIZE = 448
 MAX_NEW_TOKENS = 128
 IMAGENET_MEAN = np.asarray((0.485, 0.456, 0.406), dtype=np.float32)
@@ -187,6 +190,13 @@ class InternVLAdapter:
         """Report whether weights and tokenizer have been initialized."""
         return self._model is not None and self._tokenizer is not None
 
+    @property
+    def active_model_identity(self) -> str | None:
+        """Report the exact base model + adapter combination actually serving traffic."""
+        if not self.is_loaded:
+            return None
+        return f"{self.model_id} + {ADAPTER_NAME}"
+
     def generate(self, image: Image.Image, prompt: str) -> str:
         """Run real local InternVL chat generation for the supplied image and prompt."""
         if not prompt.strip():
@@ -241,6 +251,14 @@ class InternVLAdapter:
                         trust_remote_code=True,
                         use_safetensors=True,
                     )
+                    try:
+                        from peft import PeftModel
+
+                        model = PeftModel.from_pretrained(model, ADAPTER_PATH)
+                    except Exception as adapter_error:
+                        raise InternVLModelError(
+                            f"Failed to load LoRA adapter from '{ADAPTER_PATH}': {adapter_error}"
+                        ) from adapter_error
                 _prepare_language_model_generation(model)
                 self._tokenizer = tokenizer
                 self._model = model.eval().to(self.device)

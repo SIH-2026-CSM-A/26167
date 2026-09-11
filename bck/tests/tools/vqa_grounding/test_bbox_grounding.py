@@ -38,6 +38,7 @@ class _FakeGroundingModel:
 
     model_id = "test/fake-grounding"
     device = "test"
+    active_model_identity = None
 
     def __init__(self, answer: str, bbox_response: str) -> None:
         self._answer = answer

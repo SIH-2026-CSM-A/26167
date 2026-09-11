@@ -14,6 +14,11 @@ class Modality(StrEnum):
 
     OPTICAL = "optical"
     SAR = "sar"
+    UNKNOWN = "unknown"
+    """Could not be classified as Optical or SAR from raster metadata alone (B4).
+    Never a routing target — the router vetoes any request containing it and asks
+    the client to clarify, rather than guessing.
+    """
 
 
 class ImageInput(BaseModel):

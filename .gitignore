@@ -26,6 +26,7 @@ data/*
 *.bin
 *.ckpt
 # checkpoints/  (scoped below instead)
+bck/checkpoints/
 
 # OS
 .DS_Store

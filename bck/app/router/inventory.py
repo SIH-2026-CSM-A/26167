@@ -14,12 +14,15 @@ def extract_inventory(images: list[ImageInput]) -> InputInventory:
     """
     optical_ids: list[str] = []
     sar_ids: list[str] = []
+    unknown_ids: list[str] = []
 
     for img in images:
         if img.modality == Modality.OPTICAL:
             optical_ids.append(img.id)
         elif img.modality == Modality.SAR:
             sar_ids.append(img.id)
+        elif img.modality == Modality.UNKNOWN:
+            unknown_ids.append(img.id)
 
     return InputInventory(
         total_images=len(images),
@@ -27,4 +30,5 @@ def extract_inventory(images: list[ImageInput]) -> InputInventory:
         has_sar=len(sar_ids) > 0,
         optical_ids=optical_ids,
         sar_ids=sar_ids,
+        unknown_ids=unknown_ids,
     )

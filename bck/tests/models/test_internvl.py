@@ -53,6 +53,9 @@ def test_adapter_prepares_actual_nested_language_model_without_global_mutation(m
     monkeypatch.setattr(
         transformers.AutoTokenizer, "from_pretrained", lambda *args, **kwargs: SimpleNamespace()
     )
+    import peft
+
+    monkeypatch.setattr(peft.PeftModel, "from_pretrained", lambda model, path, **kwargs: model)
 
     adapter = InternVLAdapter(device="cpu")
     adapter._ensure_loaded()

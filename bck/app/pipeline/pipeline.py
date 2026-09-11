@@ -134,7 +134,7 @@ def run(
                 "filename": upload.filename,
                 "content_type": upload.content_type,
                 "size_bytes": len(upload.content),
-                "modality": upload.modality.value,
+                "modality": upload.modality.value if upload.modality is not None else None,
             },
         )
 
