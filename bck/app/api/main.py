@@ -10,7 +10,11 @@ from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.contracts import Answer, Modality
-from app.evidence.report import generate_evidence_geojson, generate_evidence_pdf
+from app.evidence.report import (
+    NotGeoreferencedError,
+    generate_evidence_geojson,
+    generate_evidence_pdf,
+)
 from app.pipeline import PipelineError, PipelineUpload, run
 
 app = FastAPI(title="SatQuery AI")
@@ -83,7 +87,10 @@ async def export_evidence_pdf(payload: Answer) -> StreamingResponse:
 
 @app.post("/api/evidence/export-geojson")
 async def export_evidence_geojson(payload: Answer) -> Response:
-    geojson_str, filename = generate_evidence_geojson(payload)
+    try:
+        geojson_str, filename = generate_evidence_geojson(payload)
+    except NotGeoreferencedError as error:
+        raise HTTPException(status_code=422, detail={"message": str(error)}) from error
     return Response(
         content=geojson_str,
         media_type="application/geo+json",

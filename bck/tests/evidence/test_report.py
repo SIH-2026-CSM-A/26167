@@ -3,6 +3,7 @@
 import io
 from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.main import app
@@ -13,7 +14,11 @@ from app.contracts.schemas import (
     ExecutionTrace,
     TraceStep,
 )
-from app.evidence.report import generate_evidence_geojson, generate_evidence_pdf
+from app.evidence.report import (
+    NotGeoreferencedError,
+    generate_evidence_geojson,
+    generate_evidence_pdf,
+)
 
 Trace = ExecutionTrace
 
@@ -69,6 +74,57 @@ def test_generate_evidence_geojson_contains_crs84() -> None:
     assert "urn:ogc:def:crs:OGC:1.3:CRS84" in geojson_str
     assert filename == "evidence-tr-test-001.geojson"
     assert "ev-001" in geojson_str
+
+
+def _make_pixel_only_answer() -> Answer:
+    """LEVIR-CD-style change_detection MASK evidence: pixel bbox, no source CRS."""
+    now = datetime.now(UTC)
+    step = TraceStep(
+        module="change_detection",
+        action="detect_change",
+        params={"checkpoint": "bit_levir_cd"},
+        confidence=0.8,
+        started_at=now,
+        completed_at=now,
+        evidence_ids=["ev-mask-001"],
+    )
+    trace = Trace(trace_id="tr-test-pixel", steps=[step], created_at=now)
+    ev = Evidence(
+        id="ev-mask-001",
+        tool="change_detection.bit",
+        type=EvidenceType.MASK,
+        payload={
+            "description": "Change detected",
+            "bbox": (0, 0, 255, 255),
+        },
+        confidence=0.8,
+        timing=0.5,
+    )
+    return Answer(
+        text="Change detected between the two LEVIR-CD tiles.",
+        evidence=[ev],
+        trace=trace,
+        confidence=0.8,
+        abstained=False,
+        abstention_reason=None,
+    )
+
+
+def test_generate_evidence_geojson_refuses_pixel_only_bbox() -> None:
+    answer = _make_pixel_only_answer()
+    with pytest.raises(NotGeoreferencedError):
+        generate_evidence_geojson(answer)
+
+
+def test_export_evidence_geojson_endpoint_refuses_pixel_only() -> None:
+    answer = _make_pixel_only_answer()
+    client = TestClient(app)
+    response = client.post(
+        "/api/evidence/export-geojson",
+        json=answer.model_dump(mode="json"),
+    )
+    assert response.status_code == 422
+    assert "CRS84" in response.json()["detail"]["message"]
 
 
 def test_export_evidence_pdf_endpoint() -> None:

@@ -11,7 +11,16 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.contracts.schemas import Answer, Evidence, TraceStep
+from app.contracts.schemas import Answer, Evidence, EvidenceType, TraceStep
+
+
+class NotGeoreferencedError(Exception):
+    """Raised when GeoJSON export is refused: only pixel-space geometry exists.
+
+    No evidence in the answer carries a real-world CRS transform, so there is
+    nothing to honestly express under the exporter's declared CRS84 — pixel
+    coordinates must never be labeled as real-world coordinates.
+    """
 
 
 def _get_query_id(answer: Answer) -> str:
@@ -180,44 +189,60 @@ def generate_evidence_pdf(answer: Answer) -> io.BytesIO:
     return buffer
 
 
-def _extract_geometry(payload: dict[str, Any]) -> dict[str, Any]:
+def _extract_geometry(ev: Evidence) -> tuple[dict[str, Any] | None, str]:
+    """Return (geometry, spatial_reference) for one evidence item.
+
+    spatial_reference is "georeferenced" (real CRS84 lon/lat), "pixel" (image
+    pixel coordinates, no real-world CRS available), or "none" (no geometry
+    claim at all). Only EvidenceType.BBOX may carry a real WGS84 "bbox" —
+    build_bbox_evidence (app/evidence/builder.py) returns None instead of
+    emitting BBOX evidence when the source asset can't be georeferenced, so
+    every BBOX evidence item that exists is guaranteed real. Every other
+    evidence type's "bbox" (e.g. change_detection's MASK evidence, which is
+    pixel row/col per change_summary.py) is pixel-space and must never be
+    exported as CRS84.
+    """
+    payload = ev.payload
     if "geojson" in payload and isinstance(payload["geojson"], dict):
         geo = payload["geojson"]
         if geo.get("type") in ("Point", "Polygon", "MultiPolygon", "LineString", "MultiPoint"):
-            return geo
+            return geo, "georeferenced"
         if "geometry" in geo and isinstance(geo["geometry"], dict):
-            return geo["geometry"]
+            return geo["geometry"], "georeferenced"
     if "geometry" in payload and isinstance(payload["geometry"], dict):
-        return payload["geometry"]
-    if (
-        "bbox" in payload
-        and isinstance(payload["bbox"], (list, tuple))
-        and len(payload["bbox"]) == 4
-    ):
-        min_x, min_y, max_x, max_y = [float(v) for v in payload["bbox"]]
-        return {
-            "type": "Polygon",
-            "coordinates": [
-                [
-                    [min_x, min_y],
-                    [max_x, min_y],
-                    [max_x, max_y],
-                    [min_x, max_y],
-                    [min_x, min_y],
-                ]
-            ],
-        }
-    return {"type": "Point", "coordinates": [0.0, 0.0]}
+        return payload["geometry"], "georeferenced"
+    raw_bbox = payload.get("bbox")
+    if isinstance(raw_bbox, (list, tuple)) and len(raw_bbox) == 4:
+        if ev.type != EvidenceType.BBOX:
+            return None, "pixel"
+        min_x, min_y, max_x, max_y = [float(v) for v in raw_bbox]
+        return (
+            {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [min_x, min_y],
+                        [max_x, min_y],
+                        [max_x, max_y],
+                        [min_x, max_y],
+                        [min_x, min_y],
+                    ]
+                ],
+            },
+            "georeferenced",
+        )
+    return None, "none"
 
 
 def _build_feature(ev: Evidence) -> dict[str, Any]:
-    geometry = _extract_geometry(ev.payload)
+    geometry, spatial_reference = _extract_geometry(ev)
     properties: dict[str, Any] = {
         "evidence_id": ev.id,
         "tool": ev.tool,
         "type": str(ev.type),
         "confidence": ev.confidence,
         "timing": ev.timing,
+        "spatial_reference": spatial_reference,
     }
     for key, val in ev.payload.items():
         if key not in ("geojson", "geometry"):
@@ -231,19 +256,34 @@ def _build_feature(ev: Evidence) -> dict[str, Any]:
 
 
 def generate_evidence_geojson(answer: Answer) -> tuple[str, str]:
+    """Build a CRS84 evidence GeoJSON, refusing when no evidence is georeferenced.
+
+    Raises NotGeoreferencedError if the only geometry-bearing evidence is
+    pixel-space (e.g. a LEVIR-CD change mask with no source CRS) — pixel
+    coordinates are never shipped labeled as CRS84.
+    """
     query_id = _get_query_id(answer)
     features = [_build_feature(ev) for ev in answer.evidence]
+    has_georeferenced = any(f["geometry"] is not None for f in features)
+    has_pixel_only = any(f["properties"]["spatial_reference"] == "pixel" for f in features)
+    if has_pixel_only and not has_georeferenced:
+        raise NotGeoreferencedError(
+            "GeoJSON export refused: source imagery has no real-world CRS (pixel-only "
+            "coordinates, e.g. a benchmark PNG/JPEG such as LEVIR-CD). Refusing to label "
+            "pixel coordinates as CRS84."
+        )
     if not features:
         features.append(
             {
                 "type": "Feature",
                 "id": f"{query_id}-summary",
-                "geometry": {"type": "Point", "coordinates": [0.0, 0.0]},
+                "geometry": None,
                 "properties": {
                     "query_id": query_id,
                     "confidence": answer.confidence,
                     "abstained": answer.abstained,
                     "text": answer.text,
+                    "spatial_reference": "none",
                 },
             }
         )
