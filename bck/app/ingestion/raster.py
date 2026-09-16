@@ -17,7 +17,7 @@ from rasterio.io import MemoryFile
 
 from app.contracts import ImageInput, Modality
 
-SUPPORTED_TIFF_SUFFIXES = frozenset({".tif", ".tiff"})
+SUPPORTED_TIFF_SUFFIXES = frozenset({".tif", ".tiff", ".png", ".jpg", ".jpeg"})
 PREVIEW_MAX_DIMENSION = 1024
 LOWER_VISUAL_PERCENTILE = 2.0
 UPPER_VISUAL_PERCENTILE = 98.0
@@ -100,8 +100,10 @@ def ingest_raster(upload: RasterUpload) -> IngestedRaster:
     _validate_upload(upload)
     try:
         with MemoryFile(upload.content) as memory_file, memory_file.open() as dataset:
-            if dataset.driver != "GTiff":
-                raise UnsupportedRasterError("uploaded asset is not a GeoTIFF/TIFF raster")
+            if dataset.driver not in {"GTiff", "PNG", "JPEG"}:
+                raise UnsupportedRasterError(
+                    f"uploaded asset driver '{dataset.driver}' is not a supported raster format"
+                )
             if upload.modality is not None:
                 modality = upload.modality
                 modality_source = "client_override"
@@ -163,7 +165,9 @@ def _validate_upload(upload: RasterUpload) -> None:
     if not upload.filename.strip():
         raise InvalidRasterError("uploaded filename is required")
     if Path(upload.filename).suffix.lower() not in SUPPORTED_TIFF_SUFFIXES:
-        raise UnsupportedRasterError("only .tif or .tiff raster uploads are supported")
+        raise UnsupportedRasterError(
+            "only .tif, .tiff, .png, or .jpg/.jpeg raster uploads are supported"
+        )
     if not upload.content:
         raise InvalidRasterError(f"TIFF '{upload.filename}' is empty")
 

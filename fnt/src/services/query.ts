@@ -21,8 +21,8 @@ export async function submitImageQuery(
     throw new QueryApiError('Enter a question about the image.');
   }
   const selectedFiles = Array.isArray(files) ? files : [files];
-  if (selectedFiles.some((file) => !/\.tiff?$/i.test(file.name))) {
-    throw new QueryApiError('Select .tif or .tiff rasters.');
+  if (selectedFiles.some((file) => !/\.(tiff?|png|jpe?g)$/i.test(file.name))) {
+    throw new QueryApiError('Select .tif, .tiff, .png, or .jpg/.jpeg imagery.');
   }
 
   const form = new FormData();

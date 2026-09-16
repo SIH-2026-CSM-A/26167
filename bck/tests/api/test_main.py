@@ -83,7 +83,7 @@ def test_query_rejects_unsupported_file() -> None:
     response = client.post(
         "/query",
         data={"query": "Describe this image", "modality": ["optical"]},
-        files=[("images", ("scene.png", b"png", "image/png"))],
+        files=[("images", ("scene.bmp", b"png", "image/bmp"))],
     )
 
     assert response.status_code == 415
