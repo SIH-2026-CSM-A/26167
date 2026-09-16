@@ -20,7 +20,9 @@ from app.core.config import get_settings
 def get_sync_engine() -> Engine:
     """Create or return the cached synchronous SQLAlchemy Engine."""
     settings = get_settings()
-    return create_engine(str(settings.database_url))
+    url = str(settings.database_url)
+    sync_url = url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
+    return create_engine(sync_url)
 
 
 @lru_cache
