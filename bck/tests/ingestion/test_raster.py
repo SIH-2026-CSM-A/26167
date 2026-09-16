@@ -41,8 +41,8 @@ def test_ingest_geotiff_extracts_metadata_and_model_ready_visual() -> None:
 
 def test_ingest_rejects_unsupported_extension() -> None:
     """A non-TIFF extension must fail before raster decoding."""
-    with pytest.raises(UnsupportedRasterError, match=".tif or .tiff"):
-        ingest_raster(_upload("scene.png", make_geotiff_bytes()))
+    with pytest.raises(UnsupportedRasterError, match=".tif, .tiff, .png, or .jpg"):
+        ingest_raster(_upload("scene.bmp", make_geotiff_bytes()))
 
 
 def test_ingest_rejects_unreadable_tiff() -> None:
