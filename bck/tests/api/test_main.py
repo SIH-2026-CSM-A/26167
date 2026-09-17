@@ -3,16 +3,15 @@
 from collections.abc import Iterator
 from unittest.mock import patch
 
+import numpy as np
 import pytest
+import rasterio
 from fastapi.testclient import TestClient
+from rasterio.io import MemoryFile
+from rasterio.transform import from_origin
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
-import numpy as np
-import rasterio
-from rasterio.io import MemoryFile
-from rasterio.transform import from_origin
 
 from app.api.main import app
 from app.db.models import Base
@@ -126,7 +125,8 @@ def test_query_rejects_unreadable_tiff() -> None:
 
 
 def test_query_veto_preserves_reason_code_and_suggested_action() -> None:
-    """A MODALITY_UNKNOWN veto must surface reason_code/suggested_action, not just a flattened message."""
+    """A MODALITY_UNKNOWN veto must surface reason_code/suggested_action,
+    not just a flattened message."""
     response = client.post(
         "/query",
         data={"query": "What changed here?"},
