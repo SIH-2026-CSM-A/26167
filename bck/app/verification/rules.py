@@ -370,7 +370,9 @@ def evaluate_narrative_claim_grounding(
             continue
 
         supported_flags = [_claim_is_supported(claim, observations) for claim, _ in claims]
-        rejected = tuple(claim for (claim, _), ok in zip(claims, supported_flags) if not ok)
+        rejected = tuple(
+            claim for (claim, _), ok in zip(claims, supported_flags, strict=True) if not ok
+        )
 
         for claim in rejected:
             records.append(
@@ -388,7 +390,7 @@ def evaluate_narrative_claim_grounding(
         sentences: list[str] = []
         current_words: list[str] = []
         current_joiners: list[str] = []
-        for i, ((claim, _delim), ok) in enumerate(zip(claims, supported_flags)):
+        for i, ((claim, _delim), ok) in enumerate(zip(claims, supported_flags, strict=True)):
             if not ok:
                 if current_words:
                     sentences.append(_assemble_claim_group(current_words, current_joiners))
@@ -397,7 +399,10 @@ def evaluate_narrative_claim_grounding(
 
             prev_delim = claims[i - 1][1] if i > 0 else None
             joined_from_prev = (
-                current_words and i > 0 and supported_flags[i - 1] and prev_delim not in (None, "sentence")
+                current_words
+                and i > 0
+                and supported_flags[i - 1]
+                and prev_delim not in (None, "sentence")
             )
             if joined_from_prev:
                 current_joiners.append(prev_delim)
@@ -711,7 +716,7 @@ def _split_claims(answer: str) -> tuple[tuple[str, str | None], ...]:
 def _assemble_claim_group(words: list[str], joiners: list[str]) -> str:
     """Rejoin consecutive surviving claims with their original conjunctions."""
     phrase = words[0]
-    for joiner, word in zip(joiners, words[1:]):
+    for joiner, word in zip(joiners, words[1:], strict=True):
         phrase = f"{phrase} {joiner} {word}"
     return _as_sentence(phrase)
 

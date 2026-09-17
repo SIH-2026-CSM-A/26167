@@ -972,8 +972,7 @@ def test_rule_verify_09_regression_shades_of_blue_and_white():
     'shades of blue and white' was split on the plain-conjunction 'and' and,
     on reassembly, turned into 'blue. White', corrupting the prose."""
     raw_text = (
-        "The image shows shades of blue and white, indicating different "
-        "intensities of water depth."
+        "The image shows shades of blue and white, indicating different intensities of water depth."
     )
     evidence_item = _evidence(payload={"verified_answer": raw_text})
     observations = [
