@@ -1,15 +1,20 @@
 import React, { useRef, useState } from 'react';
 import { Modality } from '../../types/contracts';
 
+export type SlotModality = Modality | 'auto';
+
 interface SlotUploaderProps {
   label: string;
   slotIndex: number;
-  modality: Modality;
+  modality: SlotModality;
   isModalityLocked: boolean;
   file: File | null;
   onFileSelect: (file: File | null) => void;
-  onModalityChange: (modality: Modality) => void;
+  onModalityChange: (modality: SlotModality) => void;
   disabled?: boolean;
+  /** Set when a prior submit was vetoed as MODALITY_UNKNOWN and this slot was sent as 'auto' —
+   * it's one of the images that could have been the ambiguous one. */
+  needsClarification?: boolean;
 }
 
 const ALLOWED_BENCHMARK_TAGS = ['sen12ms', 'levir', 'sentinel', 'benchmark', 'optical', 'sar', 't1', 't2'];
@@ -38,6 +43,7 @@ export const SlotUploader: React.FC<SlotUploaderProps> = ({
   onFileSelect,
   onModalityChange,
   disabled = false,
+  needsClarification = false,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,15 +78,24 @@ export const SlotUploader: React.FC<SlotUploaderProps> = ({
             <select
               value={modality}
               disabled={disabled}
-              onChange={(e) => onModalityChange(e.target.value as Modality)}
-              className="bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+              onChange={(e) => onModalityChange(e.target.value as SlotModality)}
+              className={`bg-slate-950 border rounded px-2 py-0.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none ${
+                needsClarification ? 'border-amber-500' : 'border-slate-700'
+              }`}
             >
+              <option value="auto">auto-detect</option>
               <option value="optical">optical</option>
               <option value="sar">sar</option>
             </select>
           )}
         </div>
       </div>
+
+      {needsClarification && (
+        <p className="text-[11px] text-amber-400">
+          ⚠ Could be the image the backend couldn't classify — pick Optical or SAR.
+        </p>
+      )}
 
       <input
         ref={inputRef}

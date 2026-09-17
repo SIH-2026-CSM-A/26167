@@ -156,3 +156,65 @@ test('submits cross-modal optical and SAR imagery with both modalities', async (
   expect((requestBody.getAll('images')[1] as File).name).toBe('s2.tif');
   expect(requestBody.getAll('modality')).toEqual(['optical', 'sar']);
 });
+
+test('MODALITY_UNKNOWN veto surfaces clarification, then resubmit with explicit modality succeeds', async () => {
+  const fetchSpy = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          detail: {
+            message:
+              '1 image was unable to be classified as Optical or SAR from raster metadata alone.',
+            stage: 'routing',
+            reason_code: 'MODALITY_UNKNOWN',
+            suggested_action:
+              'Re-upload with standard band descriptions, or specify the modality explicitly.',
+            trace: { trace_id: 't1', steps: [] },
+          },
+        }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(successfulAnswer), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  vi.stubGlobal('fetch', fetchSpy);
+  const user = userEvent.setup();
+  const { container } = render(<UploadPage />);
+
+  const file = new File(['raster data'], 'scene.tif', { type: 'image/tiff' });
+  const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+  await user.upload(fileInput, file);
+
+  const modalitySelect = screen.getByRole('combobox') as HTMLSelectElement;
+  await user.selectOptions(modalitySelect, 'auto');
+
+  const queryInput = screen.getByPlaceholderText(/e\.g\. Identify land cover classification/i);
+  await user.type(queryInput, 'What sensor is this?');
+
+  await user.click(screen.getByRole('button', { name: 'Run Pipeline' }));
+
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  expect(
+    screen.getByText(/unable to be classified as Optical or SAR/i),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/Re-upload with standard band descriptions/i),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/pick Optical or SAR/i)).toBeInTheDocument();
+
+  const firstRequestBody = fetchSpy.mock.calls[0][1]?.body as FormData;
+  expect(firstRequestBody.getAll('modality')).toEqual([]);
+
+  await user.selectOptions(modalitySelect, 'optical');
+  await user.click(screen.getByRole('button', { name: 'Run Pipeline' }));
+
+  expect(await screen.findByText('Pipeline Result')).toBeInTheDocument();
+  expect(fetchSpy).toHaveBeenCalledTimes(2);
+  const secondRequestBody = fetchSpy.mock.calls[1][1]?.body as FormData;
+  expect(secondRequestBody.getAll('modality')).toEqual(['optical']);
+});
