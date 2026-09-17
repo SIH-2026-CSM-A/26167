@@ -25,6 +25,7 @@ Find your alias at github.com/settings/emails. The repo is public; real emails g
 ```bash
 cd bck
 curl -LsSf https://astral.sh/uv/install.sh | sh   # if uv isn't installed yet
+cp ../.env.example .env   # required env vars — see that file for what each one does
 uv sync --all-extras --dev
 uv run ruff check . && uv run ruff format --check . && uv run lint-imports && uv run pytest
 ```
