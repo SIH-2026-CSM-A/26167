@@ -218,7 +218,14 @@ def run(
         },
     )
     if not decision.is_dispatched or dispatch_plan is None:
-        _fail(recorder, stage="routing", message=route_reason, status_code=422)
+        _fail(
+            recorder,
+            stage="routing",
+            message=route_reason,
+            status_code=422,
+            reason_code=decision.veto.reason_code.value if decision.veto is not None else None,
+            suggested_action=decision.veto.suggested_action if decision.veto is not None else None,
+        )
     if dispatch_plan.tool_name not in _SUPPORTED_TOOLS:
         _fail(
             recorder,
@@ -581,6 +588,8 @@ def _fail(
     stage: str,
     message: str,
     status_code: int,
+    reason_code: str | None = None,
+    suggested_action: str | None = None,
 ) -> None:
     """Record a safe failure event and stop the pipeline with its partial trace."""
     recorder.record(stage, "execution_failed", params={"message": message})
@@ -589,4 +598,6 @@ def _fail(
         stage=stage,
         status_code=status_code,
         trace=recorder.build(),
+        reason_code=reason_code,
+        suggested_action=suggested_action,
     )

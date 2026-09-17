@@ -9,11 +9,34 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import numpy as np
+import rasterio
+from rasterio.io import MemoryFile
+from rasterio.transform import from_origin
+
 from app.api.main import app
 from app.db.models import Base
 from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
 
 client = TestClient(app)
+
+
+def make_unclassifiable_geotiff_bytes() -> bytes:
+    """Single-band GeoTIFF with no SAR/optical band signal — classify_modality returns UNKNOWN."""
+    band = np.array([[10, 20], [30, 40]], dtype=np.uint8)
+    with MemoryFile() as memory_file:
+        with memory_file.open(
+            driver="GTiff",
+            width=2,
+            height=2,
+            count=1,
+            dtype="uint8",
+            crs="EPSG:4326",
+            transform=from_origin(77.0, 13.0, 0.01, 0.01),
+        ) as dataset:
+            dataset.write(band, 1)
+            dataset.colorinterp = (rasterio.enums.ColorInterp.gray,)
+        return memory_file.read()
 
 
 @pytest.fixture(autouse=True)
@@ -100,3 +123,21 @@ def test_query_rejects_unreadable_tiff() -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"]["stage"] == "ingestion"
+
+
+def test_query_veto_preserves_reason_code_and_suggested_action() -> None:
+    """A MODALITY_UNKNOWN veto must surface reason_code/suggested_action, not just a flattened message."""
+    response = client.post(
+        "/query",
+        data={"query": "What changed here?"},
+        files=[("images", ("scene.tif", make_unclassifiable_geotiff_bytes(), "image/tiff"))],
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["reason_code"] == "MODALITY_UNKNOWN"
+    assert detail["suggested_action"] == (
+        "Re-upload with standard band descriptions (e.g. VV/VH for SAR, "
+        "B1-B12/B8A for Sentinel-2 optical), or specify the modality explicitly "
+        "in the request."
+    )

@@ -69,6 +69,8 @@ async def submit_query(
             detail={
                 "message": error.message,
                 "stage": error.stage,
+                "reason_code": error.reason_code,
+                "suggested_action": error.suggested_action,
                 "trace": error.trace.model_dump(mode="json"),
             },
         ) from error

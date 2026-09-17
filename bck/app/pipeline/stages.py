@@ -34,6 +34,8 @@ class PipelineError(RuntimeError):
         stage: str,
         status_code: int,
         trace: ExecutionTrace,
+        reason_code: str | None = None,
+        suggested_action: str | None = None,
     ) -> None:
         """Store a sanitized message, failed stage, HTTP status, and partial trace."""
         super().__init__(message)
@@ -41,6 +43,8 @@ class PipelineError(RuntimeError):
         self.stage = stage
         self.status_code = status_code
         self.trace = trace
+        self.reason_code = reason_code
+        self.suggested_action = suggested_action
 
 
 class TraceRecorder:

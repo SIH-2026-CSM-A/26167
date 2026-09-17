@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { ConfigSelector, PipelineConfigMode } from '../components/Upload/ConfigSelector';
 import { DemoPresetSelector } from '../components/DemoPresetSelector';
-import { SlotUploader } from '../components/Upload/SlotUploader';
+import { SlotUploader, SlotModality } from '../components/Upload/SlotUploader';
 import { QueryResultCard } from '../components/Upload/QueryResultCard';
-import { submitImageQuery } from '@/services/query';
+import { submitImageQuery, QueryApiError } from '@/services/query';
 import type { Answer, Modality } from '../types/contracts';
 import type { PresetApplyPayload, PresetSlotData } from '../types/manifest';
 
@@ -12,7 +12,7 @@ export type UploadSourceMode = 'manual' | 'preset';
 export interface SlotData {
   label: string;
   file: File | null;
-  modality: Modality;
+  modality: SlotModality;
   isLocked: boolean;
 }
 
@@ -23,6 +23,8 @@ export const UploadPage: React.FC = () => {
   const [query, setQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestedAction, setSuggestedAction] = useState<string | null>(null);
+  const [ambiguousSlots, setAmbiguousSlots] = useState<boolean[]>([]);
   const [result, setResult] = useState<Answer | null>(null);
 
   const [slots, setSlots] = useState<SlotData[]>([
@@ -66,10 +68,12 @@ export const UploadPage: React.FC = () => {
 
   const updateSlotFile = (index: number, file: File | null) => {
     setSlots((prev) => prev.map((s, i) => (i === index ? { ...s, file } : s)));
+    setAmbiguousSlots([]);
   };
 
-  const updateSlotModality = (index: number, modality: Modality) => {
+  const updateSlotModality = (index: number, modality: SlotModality) => {
     setSlots((prev) => prev.map((s, i) => (i === index ? { ...s, modality } : s)));
+    setAmbiguousSlots([]);
   };
 
   const canSubmit = !loading && query.trim().length > 0 && slots.every((s) => s.file !== null);
@@ -86,17 +90,34 @@ export const UploadPage: React.FC = () => {
 
     setLoading(true);
     setError(null);
+    setSuggestedAction(null);
     setResult(null);
 
+    // Omitting the whole `modality` override lets the backend classify every image from
+    // raster metadata (B4) instead of assuming optical — the only way to actually reach
+    // MODALITY_UNKNOWN. Mixing an explicit override for one slot with auto-detect for
+    // another isn't a shape the backend's `modality` form field supports, so any slot set
+    // to 'auto' means none of them are sent.
+    const hasAutoSlot = slots.some((slot) => slot.modality === 'auto');
+    const modalityOverride = hasAutoSlot ? undefined : (slots.map((slot) => slot.modality) as Modality[]);
+
     try {
-      const response = await submitImageQuery(
-        selectedFiles,
-        query.trim(),
-        slots.map((slot) => slot.modality)
-      );
+      const response = await submitImageQuery(selectedFiles, query.trim(), modalityOverride);
       setResult(response);
+      setAmbiguousSlots([]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error or backend failed.');
+      if (err instanceof QueryApiError) {
+        setError(err.message);
+        setSuggestedAction(err.suggestedAction ?? null);
+        // Only 'auto' slots could have been the one the backend couldn't classify —
+        // an explicit override can never trigger MODALITY_UNKNOWN.
+        setAmbiguousSlots(
+          err.reasonCode === 'MODALITY_UNKNOWN' ? slots.map((slot) => slot.modality === 'auto') : []
+        );
+      } else {
+        setError(err instanceof Error ? err.message : 'Network error or backend failed.');
+        setAmbiguousSlots([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -161,6 +182,7 @@ export const UploadPage: React.FC = () => {
               onFileSelect={(f) => updateSlotFile(index, f)}
               onModalityChange={(m) => updateSlotModality(index, m)}
               disabled={loading}
+              needsClarification={ambiguousSlots[index] ?? false}
             />
           ))}
         </div>
@@ -193,6 +215,7 @@ export const UploadPage: React.FC = () => {
       {error && (
         <div role="alert" className="p-4 bg-rose-950/30 border border-rose-800 rounded-lg text-xs text-rose-300">
           <strong>Submission Error:</strong> {error}
+          {suggestedAction && <p className="mt-1 text-rose-300/80">{suggestedAction}</p>}
         </div>
       )}
 

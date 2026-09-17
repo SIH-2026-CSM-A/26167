@@ -3,10 +3,15 @@ import type { Answer } from '@/types/contracts';
 const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
 export class QueryApiError extends Error {
-  /** Create a user-displayable API error. */
-  constructor(message: string) {
+  readonly reasonCode?: string;
+  readonly suggestedAction?: string;
+
+  /** Create a user-displayable API error, optionally carrying the backend's veto details. */
+  constructor(message: string, reasonCode?: string, suggestedAction?: string) {
     super(message);
     this.name = 'QueryApiError';
+    this.reasonCode = reasonCode;
+    this.suggestedAction = suggestedAction;
   }
 }
 
@@ -29,7 +34,11 @@ export async function submitImageQuery(
   form.append('query', normalizedQuery);
   selectedFiles.forEach((file, index) => {
     form.append('images', file, file.name);
-    form.append('modality', modalities?.[index] ?? 'optical');
+    // Omitting `modalities` entirely (vs. passing it) lets the backend classify modality
+    // from raster metadata instead of defaulting every image to optical (B4).
+    if (modalities) {
+      form.append('modality', modalities[index] ?? 'optical');
+    }
   });
 
   const response = await fetch(`${API_BASE_URL}/query`, {
@@ -38,23 +47,32 @@ export async function submitImageQuery(
   });
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new QueryApiError(readErrorMessage(body, response.status));
+    const { message, reasonCode, suggestedAction } = readErrorDetail(body, response.status);
+    throw new QueryApiError(message, reasonCode, suggestedAction);
   }
   return body as Answer;
 }
 
-/** Extract FastAPI string or structured details without exposing internal objects. */
-function readErrorMessage(body: unknown, status: number): string {
+/** Extract FastAPI string or structured (PipelineError) details without exposing internal objects. */
+function readErrorDetail(
+  body: unknown,
+  status: number
+): { message: string; reasonCode?: string; suggestedAction?: string } {
   if (isRecord(body)) {
     const detail = body.detail;
     if (typeof detail === 'string') {
-      return detail;
+      return { message: detail };
     }
     if (isRecord(detail) && typeof detail.message === 'string') {
-      return detail.message;
+      return {
+        message: detail.message,
+        reasonCode: typeof detail.reason_code === 'string' ? detail.reason_code : undefined,
+        suggestedAction:
+          typeof detail.suggested_action === 'string' ? detail.suggested_action : undefined,
+      };
     }
   }
-  return `Analysis failed with HTTP ${status}.`;
+  return { message: `Analysis failed with HTTP ${status}.` };
 }
 
 /** Narrow an unknown JSON value to a string-keyed object. */
