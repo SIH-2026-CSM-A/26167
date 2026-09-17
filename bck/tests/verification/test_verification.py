@@ -23,6 +23,7 @@ from app.verification.rules import (
     evaluate_confidence_floor,
     evaluate_cross_modal_conflict,
     evaluate_empty_evidence,
+    evaluate_narrative_claim_grounding,
     evaluate_scattering_divergence,
     evaluate_sensor_compatibility,
     evaluate_spatial_extent_comparison,
@@ -934,4 +935,53 @@ def test_rule_verify_05_preserves_id_order_and_deduplicates():
     record = records[0]
     expected_ids = ["opt-1", "sar-1", "opt-2", "sar-2"]
     assert record.conflicting_evidence_ids == expected_ids
-    assert len(record.conflicting_evidence_ids) == len(set(record.conflicting_evidence_ids))
+
+
+# ---------------------------------------------------------------------------
+# 8. RULE-VERIFY-09: Narrative Claim Grounding Reassembly (B20 conjunction fix)
+# ---------------------------------------------------------------------------
+def test_rule_verify_09_both_conjuncts_supported_rejoin_with_conjunction():
+    evidence_item = _evidence(
+        payload={"verified_answer": "Water appears blue and sky appears white."}
+    )
+    observations = ["water blue color detected", "sky white detected"]
+
+    updated, records = evaluate_narrative_claim_grounding([evidence_item], observations)
+
+    assert records == []
+    assert updated[0].payload["verified_answer"] == "Water appears blue and sky appears white."
+    assert updated[0].payload["rejected_claims"] == []
+
+
+def test_rule_verify_09_only_first_conjunct_supported_stands_alone():
+    evidence_item = _evidence(
+        payload={"verified_answer": "Water appears blue and sky appears green."}
+    )
+    observations = ["water blue color detected"]
+
+    updated, records = evaluate_narrative_claim_grounding([evidence_item], observations)
+
+    assert updated[0].payload["verified_answer"] == "Water appears blue."
+    assert updated[0].payload["rejected_claims"] == ["sky appears green"]
+    assert len(records) == 1
+    assert records[0].category == DisagreementCategory.UNSUPPORTED_NARRATIVE_CLAIM
+
+
+def test_rule_verify_09_regression_shades_of_blue_and_white():
+    """Regression for a real corrupted InternVL output seen in this session:
+    'shades of blue and white' was split on the plain-conjunction 'and' and,
+    on reassembly, turned into 'blue. White', corrupting the prose."""
+    raw_text = (
+        "The image shows shades of blue and white, indicating different intensities of water depth."
+    )
+    evidence_item = _evidence(payload={"verified_answer": raw_text})
+    observations = [
+        "image shows shades of blue color detected",
+        "white indicating different intensities of water depth measured",
+    ]
+
+    updated, records = evaluate_narrative_claim_grounding([evidence_item], observations)
+
+    assert records == []
+    assert updated[0].payload["verified_answer"] == raw_text
+    assert ". White" not in updated[0].payload["verified_answer"]

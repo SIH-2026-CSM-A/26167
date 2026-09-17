@@ -13,7 +13,7 @@ from app.verification.schemas import (
     VerificationPolicy,
 )
 
-CLAIM_BOUNDARY = re.compile(r"(?<=[.!?;])\s+|\s+(?:and|but|while|whereas)\s+", re.IGNORECASE)
+CLAIM_BOUNDARY = re.compile(r"(?<=[.!?;])\s+|\s+(and|but|while|whereas)\s+", re.IGNORECASE)
 WORD_PATTERN = re.compile(r"[a-z0-9]+")
 NON_EVIDENTIAL_WORDS = frozenset(
     {
@@ -369,8 +369,10 @@ def evaluate_narrative_claim_grounding(
             updated.append(item)
             continue
 
-        supported = tuple(claim for claim in claims if _claim_is_supported(claim, observations))
-        rejected = tuple(claim for claim in claims if claim not in supported)
+        supported_flags = [_claim_is_supported(claim, observations) for claim, _ in claims]
+        rejected = tuple(
+            claim for (claim, _), ok in zip(claims, supported_flags, strict=True) if not ok
+        )
 
         for claim in rejected:
             records.append(
@@ -385,12 +387,41 @@ def evaluate_narrative_claim_grounding(
                 )
             )
 
+        sentences: list[str] = []
+        current_words: list[str] = []
+        current_joiners: list[str] = []
+        for i, ((claim, _delim), ok) in enumerate(zip(claims, supported_flags, strict=True)):
+            if not ok:
+                if current_words:
+                    sentences.append(_assemble_claim_group(current_words, current_joiners))
+                    current_words, current_joiners = [], []
+                continue
+
+            prev_delim = claims[i - 1][1] if i > 0 else None
+            joined_from_prev = (
+                current_words
+                and i > 0
+                and supported_flags[i - 1]
+                and prev_delim not in (None, "sentence")
+            )
+            if joined_from_prev:
+                current_joiners.append(prev_delim)
+                current_words.append(claim)
+            else:
+                if current_words:
+                    sentences.append(_assemble_claim_group(current_words, current_joiners))
+                current_words, current_joiners = [claim], []
+
+        if current_words:
+            sentences.append(_assemble_claim_group(current_words, current_joiners))
+
+        num_supported = sum(supported_flags)
         new_payload = dict(item.payload)
-        new_payload["verified_answer"] = " ".join(_as_sentence(claim) for claim in supported)
+        new_payload["verified_answer"] = " ".join(sentences)
         new_payload["rejected_claims"] = [*item.payload.get("rejected_claims", []), *rejected]
         updated.append(
             item.model_copy(
-                update={"payload": new_payload, "confidence": len(supported) / len(claims)}
+                update={"payload": new_payload, "confidence": num_supported / len(claims)}
             )
         )
 
@@ -657,13 +688,37 @@ def classify_cross_modal_relationship(
     return CrossModalRelationship.AGREEMENT
 
 
-def _split_claims(answer: str) -> tuple[str, ...]:
-    """Split prose into atomic sentence and conjunction-delimited candidate claims."""
-    return tuple(
-        cleaned
-        for part in CLAIM_BOUNDARY.split(answer.strip())
-        if (cleaned := part.strip().strip("-• \t\r\n.!?;:"))
-    )
+def _split_claims(answer: str) -> tuple[tuple[str, str | None], ...]:
+    """Split prose into atomic claims, each paired with the delimiter that followed it.
+
+    The delimiter is the conjunction word ("and"/"but"/"while"/"whereas") that joined
+    this claim to the next one, "sentence" if a real sentence boundary followed, or
+    None if this is the last claim. Reassembly needs this to tell "two claims joined
+    by a conjunction" apart from "one claim containing that word as plain prose".
+    """
+    parts = CLAIM_BOUNDARY.split(answer.strip())
+    claims: list[str] = []
+    delimiters: list[str] = []
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            claims.append(part.strip().strip("-• \t\r\n.!?;:"))
+        else:
+            delimiters.append(part.lower() if part else "sentence")
+
+    result: list[tuple[str, str | None]] = []
+    for i, claim in enumerate(claims):
+        if not claim:
+            continue
+        result.append((claim, delimiters[i] if i < len(delimiters) else None))
+    return tuple(result)
+
+
+def _assemble_claim_group(words: list[str], joiners: list[str]) -> str:
+    """Rejoin consecutive surviving claims with their original conjunctions."""
+    phrase = words[0]
+    for joiner, word in zip(joiners, words[1:], strict=True):
+        phrase = f"{phrase} {joiner} {word}"
+    return _as_sentence(phrase)
 
 
 def _claim_is_supported(claim: str, observations: tuple[str, ...]) -> bool:
