@@ -34,7 +34,7 @@ Runs fully offline after model weights and demo data are staged locally. No live
 │   │   ├── core/                 # config, cost ceilings, DB session, logging — Yashwanth only
 │   │   ├── pipeline/             # composes modules per request — the ONLY layer allowed to
 │   │   │                         #   import more than one leaf module — Yashwanth only
-│   │   ├── api/                  # FastAPI routes, thin, calls pipeline only — Yashwanth only
+│   │   ├── api/                  # FastAPI routes, thin; calls pipeline for the query flow, may call any leaf directly (import-linter allows api→any leaf, as evidence-export and auth routes do) — Yashwanth only
 │   │   ├── models/                # InternVL3-2B load/inference wrapper — Aashritha
 │   │   ├── training/               # LoRA fine-tuning on BigEarthNet.txt — Aashritha
 │   │   ├── tools/
