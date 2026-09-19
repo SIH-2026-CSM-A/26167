@@ -1,4 +1,5 @@
 import type { Answer, Modality } from '@/types/contracts';
+import { readErrorDetail } from '@/services/query';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
 const QUERY_TIMEOUT_MS = 180_000;
@@ -46,16 +47,9 @@ export async function submitQuery(options: SubmitQueryOptions): Promise<Answer> 
   }
 
   if (!response.ok) {
-    let errorDetail = `Request failed with status ${response.status}`;
-    try {
-      const errJson = await response.json();
-      if (errJson && typeof errJson.detail === 'string') {
-        errorDetail = errJson.detail;
-      }
-    } catch {
-      // Use fallback status text if json parsing fails
-    }
-    throw new Error(errorDetail);
+    const body: unknown = await response.json().catch(() => null);
+    const { message, suggestedAction } = readErrorDetail(body, response.status);
+    throw new Error([message, suggestedAction].filter(Boolean).join(' '));
   }
 
   const data = (await response.json()) as Answer;

@@ -58,7 +58,7 @@ export async function submitImageQuery(
 }
 
 /** Extract FastAPI string or structured (PipelineError) details without exposing internal objects. */
-function readErrorDetail(
+export function readErrorDetail(
   body: unknown,
   status: number
 ): { message: string; reasonCode?: string; suggestedAction?: string } {
