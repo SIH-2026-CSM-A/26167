@@ -14,6 +14,7 @@ def mock_settings() -> Settings:
         database_url="postgresql+psycopg://satquery:satquery_local_dev@localhost:5432/satquery",
         cost_ceiling=10.0,
         titiler_base_url="http://localhost:8001",
+        jwt_secret_key="test-secret-key-not-for-production",
         _env_file=None,
     )
 
@@ -91,6 +92,7 @@ def test_get_cog_tile_url_handles_base_url_trailing_slash() -> None:
         database_url="postgresql+psycopg://satquery:satquery_local_dev@localhost:5432/satquery",
         cost_ceiling=5.0,
         titiler_base_url="http://titiler.internal:8001/",
+        jwt_secret_key="test-secret-key-not-for-production",
         _env_file=None,
     )
     url = get_cog_tile_url("/path/to/cog.tif", settings=custom_settings)

@@ -5,11 +5,16 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
+from app.api import auth as auth_routes
+from app.api.deps import get_current_user
+from app.auth import User
 from app.contracts import Answer, Modality
+from app.core.config import get_settings
 from app.evidence.report import (
     NotGeoreferencedError,
     generate_evidence_geojson,
@@ -19,6 +24,16 @@ from app.pipeline import PipelineError, PipelineUpload, run
 
 app = FastAPI(title="SatQuery AI")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[get_settings().frontend_origin],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth_routes.router)
+
 
 @app.post("/query", response_model=Answer)
 async def submit_query(
@@ -27,6 +42,7 @@ async def submit_query(
     images: Annotated[list[UploadFile], File()],
     modality: Annotated[list[Modality] | None, Form()] = None,
     capture_order: Annotated[list[int] | None, Form()] = None,
+    _user: User | None = Depends(get_current_user),
 ) -> Answer:
     """Validate multipart shape, retain bytes, and delegate all processing to the pipeline."""
     if not query.strip():

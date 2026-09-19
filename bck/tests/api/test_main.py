@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.main import app
+from app.auth.models import Base as AuthBase
 from app.db.models import Base
 from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
 
@@ -41,18 +42,35 @@ def make_unclassifiable_geotiff_bytes() -> bytes:
 
 @pytest.fixture(autouse=True)
 def sqlite_db() -> Iterator[None]:
-    """Provide an in-memory SQLite database sessionmaker for pipeline persistence."""
+    """Provide an in-memory SQLite database sessionmaker for pipeline persistence and auth."""
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
+    AuthBase.metadata.create_all(bind=engine)
     session_maker = sessionmaker(bind=engine, expire_on_commit=False)
-    with patch("app.db.session.get_sync_session_maker", return_value=session_maker):
+    client.cookies.clear()
+    with (
+        patch("app.db.session.get_sync_session_maker", return_value=session_maker),
+        patch("app.auth.db.get_sync_session_maker", return_value=session_maker),
+    ):
         yield
     Base.metadata.drop_all(bind=engine)
+    AuthBase.metadata.drop_all(bind=engine)
     engine.dispose()
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    """Register+log in a throwaway test user, returning a bearer header for /query."""
+    response = client.post(
+        "/auth/register",
+        json={"email": "query-test@example.com", "password": "correct-horse-battery"},
+    )
+    assert response.status_code == 201, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
 @pytest.fixture(autouse=True)
@@ -65,12 +83,13 @@ def deterministic_model() -> Iterator[None]:
     del app.state.vqa_model
 
 
-def test_query_accepts_real_multipart_geotiff() -> None:
+def test_query_accepts_real_multipart_geotiff(auth_headers: dict[str, str]) -> None:
     """A valid multipart GeoTIFF request must return the canonical verified answer."""
     response = client.post(
         "/query",
         data={"query": "What feature is visible?", "modality": ["optical"]},
         files=[("images", ("scene.tif", make_geotiff_bytes(), "image/tiff"))],
+        headers=auth_headers,
     )
 
     assert response.status_code == 200
@@ -81,51 +100,54 @@ def test_query_accepts_real_multipart_geotiff() -> None:
     assert body["trace"]["steps"][-1]["action"] == "response_completed"
 
 
-def test_query_requires_non_whitespace_question() -> None:
+def test_query_requires_non_whitespace_question(auth_headers: dict[str, str]) -> None:
     """Whitespace-only questions must fail request validation."""
     response = client.post(
         "/query",
         data={"query": "   ", "modality": ["optical"]},
         files=[("images", ("scene.tif", make_geotiff_bytes(), "image/tiff"))],
+        headers=auth_headers,
     )
 
     assert response.status_code == 422
     assert "query" in str(response.json()["detail"]).lower()
 
 
-def test_query_requires_an_uploaded_image() -> None:
+def test_query_requires_an_uploaded_image(auth_headers: dict[str, str]) -> None:
     """Multipart validation must reject a query without an image."""
-    response = client.post("/query", data={"query": "Describe this image"})
+    response = client.post("/query", data={"query": "Describe this image"}, headers=auth_headers)
 
     assert response.status_code == 422
     assert "images" in str(response.json()["detail"]).lower()
 
 
-def test_query_rejects_unsupported_file() -> None:
+def test_query_rejects_unsupported_file(auth_headers: dict[str, str]) -> None:
     """A non-TIFF upload must return a useful media-type error."""
     response = client.post(
         "/query",
         data={"query": "Describe this image", "modality": ["optical"]},
         files=[("images", ("scene.bmp", b"png", "image/bmp"))],
+        headers=auth_headers,
     )
 
     assert response.status_code == 415
     assert response.json()["detail"]["stage"] == "ingestion"
 
 
-def test_query_rejects_unreadable_tiff() -> None:
+def test_query_rejects_unreadable_tiff(auth_headers: dict[str, str]) -> None:
     """Unreadable TIFF bytes must produce a handled validation response."""
     response = client.post(
         "/query",
         data={"query": "Describe this image", "modality": ["optical"]},
         files=[("images", ("broken.tiff", b"not-a-tiff", "image/tiff"))],
+        headers=auth_headers,
     )
 
     assert response.status_code == 422
     assert response.json()["detail"]["stage"] == "ingestion"
 
 
-def test_query_change_vqa_without_capture_order_abstains() -> None:
+def test_query_change_vqa_without_capture_order_abstains(auth_headers: dict[str, str]) -> None:
     """Bi-temporal change requests with no capture_order signal must abstain, not
     silently guess pre/post from upload order (this is the Chat path)."""
     response = client.post(
@@ -138,6 +160,7 @@ def test_query_change_vqa_without_capture_order_abstains() -> None:
             ("images", ("t1.tif", make_geotiff_bytes(), "image/tiff")),
             ("images", ("t2.tif", make_geotiff_bytes(), "image/tiff")),
         ],
+        headers=auth_headers,
     )
 
     assert response.status_code == 422
@@ -145,7 +168,9 @@ def test_query_change_vqa_without_capture_order_abstains() -> None:
     assert detail["reason_code"] == "TEMPORAL_ORDER_MISSING"
 
 
-def test_query_change_detection_binds_pre_post_by_capture_order_not_upload_order() -> None:
+def test_query_change_detection_binds_pre_post_by_capture_order_not_upload_order(
+    auth_headers: dict[str, str],
+) -> None:
     """Images uploaded post-then-pre must still bind pre_image/post_image by their
     explicit capture_order, not by multipart upload order."""
     fixed_ids = [uuid_module.UUID(int=1), uuid_module.UUID(int=2)]
@@ -171,6 +196,7 @@ def test_query_change_detection_binds_pre_post_by_capture_order_not_upload_order
                 ("images", ("post.tif", make_geotiff_bytes(), "image/tiff")),
                 ("images", ("pre.tif", make_geotiff_bytes(), "image/tiff")),
             ],
+            headers=auth_headers,
         )
 
     # Whether a BIT checkpoint happens to be present in this environment or not,
@@ -185,13 +211,16 @@ def test_query_change_detection_binds_pre_post_by_capture_order_not_upload_order
     assert started["params"]["post_image_id"] == str(fixed_ids[0])
 
 
-def test_query_veto_preserves_reason_code_and_suggested_action() -> None:
+def test_query_veto_preserves_reason_code_and_suggested_action(
+    auth_headers: dict[str, str],
+) -> None:
     """A MODALITY_UNKNOWN veto must surface reason_code/suggested_action,
     not just a flattened message."""
     response = client.post(
         "/query",
         data={"query": "What changed here?"},
         files=[("images", ("scene.tif", make_unclassifiable_geotiff_bytes(), "image/tiff"))],
+        headers=auth_headers,
     )
 
     assert response.status_code == 422
@@ -202,3 +231,15 @@ def test_query_veto_preserves_reason_code_and_suggested_action() -> None:
         "B1-B12/B8A for Sentinel-2 optical), or specify the modality explicitly "
         "in the request."
     )
+
+
+def test_query_without_token_is_401() -> None:
+    """/query must reject requests with no Authorization header when AUTH_REQUIRED is on."""
+    response = client.post(
+        "/query",
+        data={"query": "Describe this image", "modality": ["optical"]},
+        files=[("images", ("scene.tif", make_geotiff_bytes(), "image/tiff"))],
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["reason_code"] == "UNAUTHORIZED"

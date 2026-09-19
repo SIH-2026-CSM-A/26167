@@ -28,6 +28,8 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://satquery:satquery_local_dev@127.0.0.1:5432/satquery
       COST_CEILING: "1"
+      # CI-only throwaway value, not a real secret — matches COST_CEILING's treatment above.
+      JWT_SECRET_KEY: ci-test-secret-key-not-for-production-use
 
     defaults:
       run:

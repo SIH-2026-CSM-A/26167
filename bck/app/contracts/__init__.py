@@ -1,3 +1,4 @@
+from app.contracts.auth import AuthResponse, LoginRequest, RegisterRequest, UserPublic
 from app.contracts.schemas import (
     Answer,
     DegradationNotice,
@@ -12,12 +13,16 @@ from app.contracts.schemas import (
 
 __all__ = [
     "Answer",
+    "AuthResponse",
     "DegradationNotice",
     "Evidence",
     "EvidenceType",
     "ExecutionTrace",
     "ImageInput",
+    "LoginRequest",
     "Modality",
     "QueryRequest",
+    "RegisterRequest",
     "TraceStep",
+    "UserPublic",
 ]
