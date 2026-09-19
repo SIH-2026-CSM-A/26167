@@ -1,5 +1,6 @@
 """Multipart API integration tests for the real vertical-slice orchestration."""
 
+import uuid as uuid_module
 from collections.abc import Iterator
 from unittest.mock import patch
 
@@ -122,6 +123,66 @@ def test_query_rejects_unreadable_tiff() -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"]["stage"] == "ingestion"
+
+
+def test_query_change_vqa_without_capture_order_abstains() -> None:
+    """Bi-temporal change requests with no capture_order signal must abstain, not
+    silently guess pre/post from upload order (this is the Chat path)."""
+    response = client.post(
+        "/query",
+        data={
+            "query": "What changed between these two dates, and where did the change occur?",
+            "modality": ["optical", "optical"],
+        },
+        files=[
+            ("images", ("t1.tif", make_geotiff_bytes(), "image/tiff")),
+            ("images", ("t2.tif", make_geotiff_bytes(), "image/tiff")),
+        ],
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["reason_code"] == "TEMPORAL_ORDER_MISSING"
+
+
+def test_query_change_detection_binds_pre_post_by_capture_order_not_upload_order() -> None:
+    """Images uploaded post-then-pre must still bind pre_image/post_image by their
+    explicit capture_order, not by multipart upload order."""
+    fixed_ids = [uuid_module.UUID(int=1), uuid_module.UUID(int=2)]
+    real_uuid4 = uuid_module.uuid4
+
+    def _uuid4_sequence() -> Iterator[uuid_module.UUID]:
+        # The request generates more uuids than just the two upload ids (trace id,
+        # persisted-raster paths, ...) — only the first two (one per uploaded image,
+        # in upload order) need to be pinned down for this test's assertions.
+        yield from fixed_ids
+        while True:
+            yield real_uuid4()
+
+    with patch("app.api.main.uuid.uuid4", side_effect=_uuid4_sequence()):
+        response = client.post(
+            "/query",
+            data={
+                "query": "What changed between these two dates, and where did the change occur?",
+                "modality": ["optical", "optical"],
+                "capture_order": ["1", "0"],
+            },
+            files=[
+                ("images", ("post.tif", make_geotiff_bytes(), "image/tiff")),
+                ("images", ("pre.tif", make_geotiff_bytes(), "image/tiff")),
+            ],
+        )
+
+    # Whether a BIT checkpoint happens to be present in this environment or not,
+    # dispatch itself must reach the tool with the correct pre/post binding — that's
+    # recorded in "change_detection_started" regardless of what BIT does afterward.
+    assert response.status_code in (200, 503)
+    body = response.json()
+    trace = body["trace"] if response.status_code == 200 else body["detail"]["trace"]
+    steps = trace["steps"]
+    started = next(step for step in steps if step["action"] == "change_detection_started")
+    assert started["params"]["pre_image_id"] == str(fixed_ids[1])
+    assert started["params"]["post_image_id"] == str(fixed_ids[0])
 
 
 def test_query_veto_preserves_reason_code_and_suggested_action() -> None:

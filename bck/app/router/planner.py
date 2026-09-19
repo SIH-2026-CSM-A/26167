@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from app.contracts import ImageInput
-from app.router.schemas import DispatchPlan, InputInventory, IntentClassification, TaskType
+from app.router.schemas import (
+    DispatchPlan,
+    InputInventory,
+    IntentClassification,
+    TaskType,
+    VetoDecision,
+    VetoReasonCode,
+)
 
 
 def build_dispatch_plan(
@@ -11,7 +18,7 @@ def build_dispatch_plan(
     raw_query: str,
     images: list[ImageInput],
     inventory: InputInventory,
-) -> DispatchPlan:
+) -> DispatchPlan | VetoDecision:
     """Construct immutable DispatchPlan with tool name, image bindings, and parameters.
 
     The router never invokes tools directly. It produces explicit slot bindings
@@ -48,10 +55,24 @@ def build_dispatch_plan(
         )
 
     if task == TaskType.CHANGE_VQA:
-        # Request order is strictly preserved: first image is pre-event, second is post-event
+        capture_orders = {image.metadata.get("capture_order") for image in images}
+        if capture_orders != {0, 1}:
+            return VetoDecision(
+                reason_code=VetoReasonCode.TEMPORAL_ORDER_MISSING,
+                message=(
+                    "Temporal order not specified — use the bi-temporal Upload "
+                    "slots to indicate before/after."
+                ),
+                suggested_action=(
+                    "Re-submit via the Upload page's bi-temporal slots "
+                    "(Slot 1 = before, Slot 2 = after) instead of Chat."
+                ),
+            )
+        pre_id = next(image.id for image in images if image.metadata.get("capture_order") == 0)
+        post_id = next(image.id for image in images if image.metadata.get("capture_order") == 1)
         return DispatchPlan(
             tool_name="change_detection",
-            image_bindings={"pre_image": images[0].id, "post_image": images[1].id},
+            image_bindings={"pre_image": pre_id, "post_image": post_id},
             task_parameters={"prompt": raw_query},
         )
 

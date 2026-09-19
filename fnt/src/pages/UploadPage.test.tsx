@@ -155,6 +155,40 @@ test('submits cross-modal optical and SAR imagery with both modalities', async (
   expect((requestBody.getAll('images')[0] as File).name).toBe('s1.tif');
   expect((requestBody.getAll('images')[1] as File).name).toBe('s2.tif');
   expect(requestBody.getAll('modality')).toEqual(['optical', 'sar']);
+  expect(requestBody.getAll('capture_order')).toEqual(['0', '1']);
+});
+
+test('submits bi-temporal pair with capture_order in slot order', async () => {
+  const fetchSpy = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify(successfulAnswer), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+  vi.stubGlobal('fetch', fetchSpy);
+  const user = userEvent.setup();
+  const { container } = render(<UploadPage />);
+
+  await user.click(screen.getByRole('button', { name: /Bi-Temporal Pair/i }));
+
+  const fileInputs = container.querySelectorAll('input[type="file"]');
+  expect(fileInputs.length).toBe(2);
+
+  const t1 = new File(['t1'], 't1.tif', { type: 'image/tiff' });
+  const t2 = new File(['t2'], 't2.tif', { type: 'image/tiff' });
+  await user.upload(fileInputs[0] as HTMLInputElement, t1);
+  await user.upload(fileInputs[1] as HTMLInputElement, t2);
+
+  const queryInput = screen.getByPlaceholderText(/e\.g\. Identify land cover classification/i);
+  await user.type(queryInput, 'What changed?');
+
+  await user.click(screen.getByRole('button', { name: 'Run Pipeline' }));
+
+  expect(await screen.findByText('Pipeline Result')).toBeInTheDocument();
+  const requestBody = fetchSpy.mock.calls[0][1]?.body as FormData;
+  expect((requestBody.getAll('images')[0] as File).name).toBe('t1.tif');
+  expect((requestBody.getAll('images')[1] as File).name).toBe('t2.tif');
+  expect(requestBody.getAll('capture_order')).toEqual(['0', '1']);
 });
 
 test('MODALITY_UNKNOWN veto surfaces clarification, then resubmit with explicit modality succeeds', async () => {

@@ -184,6 +184,9 @@ def _assert_manifest_error(
         assert fragment in message
 
 
+_ROLE_CAPTURE_ORDER = {"pre_image": 0, "post_image": 1}
+
+
 def _query_request(manifest: DemoManifest, preset: DemoPreset) -> QueryRequest:
     """Build the existing router contract from one validated production manifest preset."""
     images = []
@@ -191,12 +194,15 @@ def _query_request(manifest: DemoManifest, preset: DemoPreset) -> QueryRequest:
         resolved_path = manifest.resolve_asset(asset)
         with rasterio.open(resolved_path) as dataset:
             driver = dataset.driver
+        capture_order = _ROLE_CAPTURE_ORDER.get(asset.role)
+        metadata = {} if capture_order is None else {"capture_order": capture_order}
         images.append(
             ImageInput(
                 id=asset.id,
                 modality=Modality(asset.modality),
                 format=driver,
                 path=str(resolved_path),
+                metadata=metadata,
             )
         )
     return QueryRequest(query=preset.query, images=images)

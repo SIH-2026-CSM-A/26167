@@ -19,7 +19,8 @@ export class QueryApiError extends Error {
 export async function submitImageQuery(
   files: File | File[],
   query: string,
-  modalities?: string[]
+  modalities?: string[],
+  captureOrder?: number[]
 ): Promise<Answer> {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {
@@ -39,6 +40,9 @@ export async function submitImageQuery(
     if (modalities) {
       form.append('modality', modalities[index] ?? 'optical');
     }
+    if (captureOrder) {
+      form.append('capture_order', String(captureOrder[index]));
+    }
   });
 
   const response = await fetch(`${API_BASE_URL}/query`, {
@@ -54,7 +58,7 @@ export async function submitImageQuery(
 }
 
 /** Extract FastAPI string or structured (PipelineError) details without exposing internal objects. */
-function readErrorDetail(
+export function readErrorDetail(
   body: unknown,
   status: number
 ): { message: string; reasonCode?: string; suggestedAction?: string } {

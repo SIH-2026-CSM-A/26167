@@ -26,6 +26,7 @@ async def submit_query(
     query: Annotated[str, Form()],
     images: Annotated[list[UploadFile], File()],
     modality: Annotated[list[Modality] | None, Form()] = None,
+    capture_order: Annotated[list[int] | None, Form()] = None,
 ) -> Answer:
     """Validate multipart shape, retain bytes, and delegate all processing to the pipeline."""
     if not query.strip():
@@ -40,8 +41,22 @@ async def submit_query(
     if len(images) != len(modalities):
         raise HTTPException(status_code=422, detail="images and modality must have the same length")
 
+    # Temporal order fix: a client-supplied `capture_order` form field is an explicit
+    # 0=pre/1=post signal (from the Upload page's bi-temporal slots); omitting it means
+    # the router cannot trust arrival order and must abstain for CHANGE_VQA instead of
+    # guessing images[0]/images[1].
+    capture_orders: list[int | None] = (
+        capture_order if capture_order is not None else [None] * len(images)
+    )
+    if len(images) != len(capture_orders):
+        raise HTTPException(
+            status_code=422, detail="images and capture_order must have the same length"
+        )
+
     uploads: list[PipelineUpload] = []
-    for image, image_modality in zip(images, modalities, strict=True):
+    for image, image_modality, image_capture_order in zip(
+        images, modalities, capture_orders, strict=True
+    ):
         try:
             content = await image.read()
         except OSError as error:
@@ -57,6 +72,7 @@ async def submit_query(
                 content_type=image.content_type or "application/octet-stream",
                 content=content,
                 modality=image_modality,
+                capture_order=image_capture_order,
             )
         )
 

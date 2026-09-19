@@ -9,7 +9,7 @@ from app.contracts import QueryRequest, TraceStep
 from app.router.classifier import classify_intent
 from app.router.inventory import extract_inventory
 from app.router.planner import build_dispatch_plan
-from app.router.schemas import RouterDecision, TaskType
+from app.router.schemas import RouterDecision, TaskType, VetoDecision
 from app.router.veto import evaluate_veto
 
 
@@ -44,17 +44,24 @@ def route(
             veto=veto,
         )
 
-    dispatch_plan = build_dispatch_plan(
+    plan = build_dispatch_plan(
         intent=intent,
         raw_query=raw_query,
         images=request.images,
         inventory=inventory,
     )
 
+    if isinstance(plan, VetoDecision):
+        return RouterDecision(
+            status="vetoed",
+            intent=intent,
+            veto=plan,
+        )
+
     return RouterDecision(
         status="dispatched",
         intent=intent,
-        dispatch_plan=dispatch_plan,
+        dispatch_plan=plan,
     )
 
 
