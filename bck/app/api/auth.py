@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 
 from app.api.deps import get_current_user
@@ -14,9 +16,11 @@ from app.auth import (
     create_user,
     decode_token,
     get_sync_session,
+    get_token_claims,
     get_user_by_email,
     get_user_by_id,
     hash_password,
+    revoke_token,
     verify_password,
 )
 from app.contracts import AuthResponse, LoginRequest, RegisterRequest, UserPublic
@@ -123,7 +127,17 @@ def refresh(
 
 
 @router.post("/logout", status_code=204)
-def logout(response: Response) -> None:
+def logout(
+    response: Response, refresh_token: str | None = Cookie(default=None, alias=REFRESH_COOKIE_NAME)
+) -> None:
+    if refresh_token is not None:
+        try:
+            claims = get_token_claims(refresh_token, "refresh")
+        except InvalidTokenError:
+            claims = None
+        if claims is not None:
+            with get_sync_session() as session:
+                revoke_token(session, claims["jti"], datetime.fromtimestamp(claims["exp"], UTC))
     response.delete_cookie(REFRESH_COOKIE_NAME, path="/auth")
 
 
