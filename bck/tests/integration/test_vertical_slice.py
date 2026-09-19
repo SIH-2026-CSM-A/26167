@@ -8,23 +8,29 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.main import app
+from app.auth.models import Base as AuthBase
 from app.db.models import Base
 from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
 
 
 @pytest.fixture(autouse=True)
 def sqlite_db() -> Iterator[None]:
-    """Provide an in-memory SQLite database sessionmaker for pipeline persistence."""
+    """Provide an in-memory SQLite database sessionmaker for pipeline persistence and auth."""
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
+    AuthBase.metadata.create_all(bind=engine)
     session_maker = sessionmaker(bind=engine, expire_on_commit=False)
-    with patch("app.db.session.get_sync_session_maker", return_value=session_maker):
+    with (
+        patch("app.db.session.get_sync_session_maker", return_value=session_maker),
+        patch("app.auth.db.get_sync_session_maker", return_value=session_maker),
+    ):
         yield
     Base.metadata.drop_all(bind=engine)
+    AuthBase.metadata.drop_all(bind=engine)
     engine.dispose()
 
 
@@ -34,11 +40,19 @@ def test_live_api_path_removes_an_unsupported_model_claim() -> None:
         answer="A river is visible and industrial pollution is contaminating the water.",
         grounding="A river is visible in the scene.",
     )
+    client = TestClient(app)
+    register_response = client.post(
+        "/auth/register",
+        json={"email": "vertical-slice@example.com", "password": "correct-horse-battery"},
+    )
+    assert register_response.status_code == 201, register_response.text
+    auth_headers = {"Authorization": f"Bearer {register_response.json()['access_token']}"}
     try:
-        response = TestClient(app).post(
+        response = client.post(
             "/query",
             data={"query": "What is visible?", "modality": ["optical"]},
             files=[("images", ("scene.tif", make_geotiff_bytes(), "image/tiff"))],
+            headers=auth_headers,
         )
     finally:
         del app.state.vqa_model

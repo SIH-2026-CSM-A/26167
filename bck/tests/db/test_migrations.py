@@ -30,3 +30,26 @@ def test_upgrade_repairs_existing_nullable_evidence_trace_id(monkeypatch) -> Non
         get_settings.cache_clear()
 
     assert "ALTER TABLE evidence ALTER COLUMN trace_id SET NOT NULL" in sql_output.getvalue()
+
+
+def test_upgrade_creates_users_table(monkeypatch) -> None:
+    """The migration chain creates the users table with its uniqueness constraints."""
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://satquery:satquery_local_dev@127.0.0.1:5432/satquery",
+    )
+    monkeypatch.setenv("COST_CEILING", "1")
+    get_settings.cache_clear()
+    config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
+    sql_output = StringIO()
+
+    try:
+        with redirect_stdout(sql_output):
+            command.upgrade(config, "head", sql=True)
+    finally:
+        get_settings.cache_clear()
+
+    sql = sql_output.getvalue()
+    assert "CREATE TABLE users" in sql
+    assert "UNIQUE (email)" in sql
+    assert "UNIQUE (provider_subject)" in sql

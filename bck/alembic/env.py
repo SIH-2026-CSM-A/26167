@@ -4,6 +4,7 @@ import sys
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from alembic import context
+from app.auth.models import Base as AuthBase
 from app.core.config import get_settings
 from app.core.db import get_engine
 from app.db.models import Base
@@ -13,7 +14,7 @@ if sys.platform == "win32":
 
 config = context.config
 
-target_metadata = Base.metadata
+target_metadata = [Base.metadata, AuthBase.metadata]
 
 
 def run_migrations_offline() -> None:
