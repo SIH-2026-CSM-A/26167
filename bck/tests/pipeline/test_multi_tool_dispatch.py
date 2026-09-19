@@ -128,6 +128,7 @@ def test_change_detection_dispatch_reaches_bit_or_fails_cleanly_not_with_a_raw_5
         content_type="image/tiff",
         content=_png_to_tiff_bytes(LEVIR_T1_PATH),
         modality=Modality.OPTICAL,
+        capture_order=0,
     )
     post_upload = PipelineUpload(
         id="post-1",
@@ -135,6 +136,7 @@ def test_change_detection_dispatch_reaches_bit_or_fails_cleanly_not_with_a_raw_5
         content_type="image/tiff",
         content=_png_to_tiff_bytes(LEVIR_T2_PATH),
         modality=Modality.OPTICAL,
+        capture_order=1,
     )
 
     query = "What changed between these two images?"

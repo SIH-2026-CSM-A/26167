@@ -20,12 +20,22 @@ PS_QUERY_4 = (
 PS_QUERY_5 = "Has the built-up area increased, decreased, or remained unchanged?"
 
 
-def _opt(img_id: str = "opt-01") -> ImageInput:
-    return ImageInput(id=img_id, modality=Modality.OPTICAL, format="GeoTIFF", path=f"{img_id}.tif")
+def _opt(img_id: str = "opt-01", capture_order: int | None = None) -> ImageInput:
+    metadata = {} if capture_order is None else {"capture_order": capture_order}
+    return ImageInput(
+        id=img_id,
+        modality=Modality.OPTICAL,
+        format="GeoTIFF",
+        path=f"{img_id}.tif",
+        metadata=metadata,
+    )
 
 
-def _sar(img_id: str = "sar-01") -> ImageInput:
-    return ImageInput(id=img_id, modality=Modality.SAR, format="GeoTIFF", path=f"{img_id}.tif")
+def _sar(img_id: str = "sar-01", capture_order: int | None = None) -> ImageInput:
+    metadata = {} if capture_order is None else {"capture_order": capture_order}
+    return ImageInput(
+        id=img_id, modality=Modality.SAR, format="GeoTIFF", path=f"{img_id}.tif", metadata=metadata
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +71,10 @@ def test_ps_query_2_grounding_dispatched():
 
 def test_ps_query_3_change_vqa_dispatched():
     """Query 3: Bi-temporal change routes to TaskType.CHANGE_VQA and 'change_detection'."""
-    req = QueryRequest(query=PS_QUERY_3, images=[_opt("opt-pre"), _opt("opt-post")])
+    req = QueryRequest(
+        query=PS_QUERY_3,
+        images=[_opt("opt-pre", capture_order=0), _opt("opt-post", capture_order=1)],
+    )
     decision = route(req)
 
     assert decision.is_dispatched
@@ -93,7 +106,10 @@ def test_ps_query_4_fusion_dispatched():
 
 def test_ps_query_5_change_vqa_sar_dispatched():
     """Query 5: Categorical change on SAR pair routes to TaskType.CHANGE_VQA."""
-    req = QueryRequest(query=PS_QUERY_5, images=[_sar("sar-t1"), _sar("sar-t2")])
+    req = QueryRequest(
+        query=PS_QUERY_5,
+        images=[_sar("sar-t1", capture_order=0), _sar("sar-t2", capture_order=1)],
+    )
     decision = route(req)
 
     assert decision.is_dispatched
@@ -235,14 +251,46 @@ def test_sar_vqa_dispatches_without_structural_veto():
     assert decision.dispatch_plan.image_bindings == {"image": "sar-1"}
 
 
-def test_change_vqa_preserves_request_image_order():
-    """Change detection binds pre_image to images[0] and post_image to images[1]."""
-    req = QueryRequest(query=PS_QUERY_3, images=[_opt("scene-alpha"), _opt("scene-beta")])
+def test_change_vqa_binds_by_capture_order_not_arrival_order():
+    """Change detection binds pre_image/post_image from capture_order, regardless of
+    arrival order in the request — the post-event image arrives first here."""
+    req = QueryRequest(
+        query=PS_QUERY_3,
+        images=[_opt("scene-beta", capture_order=1), _opt("scene-alpha", capture_order=0)],
+    )
     decision = route(req)
 
+    assert decision.is_dispatched
     assert decision.dispatch_plan is not None
     assert decision.dispatch_plan.image_bindings["pre_image"] == "scene-alpha"
     assert decision.dispatch_plan.image_bindings["post_image"] == "scene-beta"
+
+
+def test_change_vqa_abstains_without_capture_order():
+    """CHANGE_VQA with no capture_order on either image abstains instead of guessing
+    images[0]/images[1] — this is the Chat path (no slot-order signal)."""
+    req = QueryRequest(query=PS_QUERY_3, images=[_opt("scene-alpha"), _opt("scene-beta")])
+    decision = route(req)
+
+    assert decision.is_vetoed
+    assert not decision.is_dispatched
+    assert decision.dispatch_plan is None
+    assert decision.veto is not None
+    assert decision.veto.reason_code is VetoReasonCode.TEMPORAL_ORDER_MISSING
+
+
+def test_change_vqa_abstains_on_ambiguous_capture_order():
+    """CHANGE_VQA with both images claiming the same capture_order abstains rather than
+    picking one arbitrarily."""
+    req = QueryRequest(
+        query=PS_QUERY_3,
+        images=[_opt("scene-alpha", capture_order=0), _opt("scene-beta", capture_order=0)],
+    )
+    decision = route(req)
+
+    assert decision.is_vetoed
+    assert decision.veto is not None
+    assert decision.veto.reason_code is VetoReasonCode.TEMPORAL_ORDER_MISSING
 
 
 # ---------------------------------------------------------------------------

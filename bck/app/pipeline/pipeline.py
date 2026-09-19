@@ -163,6 +163,7 @@ def run(
                     content_type=upload.content_type,
                     content=upload.content,
                     modality=upload.modality,
+                    capture_order=upload.capture_order,
                 )
             )
             for upload in uploads

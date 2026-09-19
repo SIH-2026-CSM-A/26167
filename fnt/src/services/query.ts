@@ -19,7 +19,8 @@ export class QueryApiError extends Error {
 export async function submitImageQuery(
   files: File | File[],
   query: string,
-  modalities?: string[]
+  modalities?: string[],
+  captureOrder?: number[]
 ): Promise<Answer> {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {
@@ -38,6 +39,9 @@ export async function submitImageQuery(
     // from raster metadata instead of defaulting every image to optical (B4).
     if (modalities) {
       form.append('modality', modalities[index] ?? 'optical');
+    }
+    if (captureOrder) {
+      form.append('capture_order', String(captureOrder[index]));
     }
   });
 

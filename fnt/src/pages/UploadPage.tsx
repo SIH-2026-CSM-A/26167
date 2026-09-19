@@ -101,8 +101,17 @@ export const UploadPage: React.FC = () => {
     const hasAutoSlot = slots.some((slot) => slot.modality === 'auto');
     const modalityOverride = hasAutoSlot ? undefined : (slots.map((slot) => slot.modality) as Modality[]);
 
+    // Slot index IS the temporal order (Slot 1 = 0/before, Slot 2 = 1/after) — sent so
+    // the router can bind CHANGE_VQA pre/post images by declared order, not arrival order.
+    const captureOrder = slots.map((_, index) => index);
+
     try {
-      const response = await submitImageQuery(selectedFiles, query.trim(), modalityOverride);
+      const response = await submitImageQuery(
+        selectedFiles,
+        query.trim(),
+        modalityOverride,
+        captureOrder
+      );
       setResult(response);
       setAmbiguousSlots([]);
     } catch (err) {

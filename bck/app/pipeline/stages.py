@@ -22,6 +22,10 @@ class PipelineUpload:
     """None means the client did not supply one: ingestion classifies it from
     raster metadata (B4) instead of defaulting to Optical.
     """
+    capture_order: int | None = None
+    """0=pre/before, 1=post/after, from the Upload page's bi-temporal slots. None
+    means the client did not supply one (e.g. Chat) — the router must not guess.
+    """
 
 
 class PipelineError(RuntimeError):

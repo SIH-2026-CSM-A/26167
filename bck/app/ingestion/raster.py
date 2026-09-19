@@ -59,6 +59,10 @@ class RasterUpload:
     from raster metadata (see `classify_modality`). A concrete value is a
     client-supplied override, used as-is without re-classification.
     """
+    capture_order: int | None = None
+    """0=pre/before, 1=post/after, from the Upload page's bi-temporal slots. None
+    means the client did not supply one (e.g. Chat) — the router must not guess.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +122,8 @@ def ingest_raster(upload: RasterUpload) -> IngestedRaster:
                 visualization_method=visualization_method,
             )
             metadata["modality_source"] = modality_source
+            if upload.capture_order is not None:
+                metadata["capture_order"] = upload.capture_order
             source = ImageInput(
                 id=upload.id,
                 modality=modality,
