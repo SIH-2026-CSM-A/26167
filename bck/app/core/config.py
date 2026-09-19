@@ -44,6 +44,24 @@ class Settings(BaseSettings):
     """
     frontend_origin: str = "http://localhost:5173"
 
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+    """Google OAuth. All three optional/None-default: the app must boot without them, and
+    /auth/google/* returns a clean 503 when any is unset rather than failing at startup.
+    """
+
+    isro_client_id: str | None = None
+    isro_client_secret: str | None = None
+    isro_auth_url: str | None = None
+    isro_token_url: str | None = None
+    isro_userinfo_url: str | None = None
+    isro_redirect_uri: str | None = None
+    """ISRO/Bhuvan CAS SSO. Real authorization-code flow, pointed at these config slots — no
+    credentials exist yet (Bhuvan requires ISRO to register the app). All optional/None-default;
+    /auth/isro/* returns a clean 503 until every one of these is set.
+    """
+
 
 @lru_cache
 def get_settings() -> Settings:

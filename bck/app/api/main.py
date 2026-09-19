@@ -11,6 +11,7 @@ from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.api import auth as auth_routes
+from app.api import oauth as oauth_routes
 from app.api.deps import get_current_user
 from app.auth import User
 from app.contracts import Answer, Modality
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_routes.router)
+app.include_router(oauth_routes.router)
 
 
 @app.post("/query", response_model=Answer)
