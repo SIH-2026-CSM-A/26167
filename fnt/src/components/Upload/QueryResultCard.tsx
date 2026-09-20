@@ -61,7 +61,7 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
             className="rounded px-2 py-0.5 text-xs font-bold"
             style={
               answer.confidence >= 0.75
-                ? { background: 'rgba(74,124,89,0.18)', border: '1px solid var(--ndvi)', color: '#8fc79e' }
+                ? { background: 'var(--accent-dim)', border: '1px solid var(--accent)', color: 'var(--accent)' }
                 : { background: 'rgba(199,123,58,0.16)', border: '1px solid var(--thermal)', color: '#e3a66c' }
             }
           >

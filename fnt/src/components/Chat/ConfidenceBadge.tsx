@@ -32,16 +32,17 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
   }
 
   const percent = Math.round(confidence * 100);
-  const colorClass =
-    percent >= 80
-      ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300'
-      : percent >= 50
-      ? 'border-amber-500/40 bg-amber-950/40 text-amber-300'
-      : 'border-rose-500/40 bg-rose-950/40 text-rose-300';
+  const isHigh = percent >= 80;
+  const colorClass = isHigh
+    ? ''
+    : percent >= 50
+    ? 'border-amber-500/40 bg-amber-950/40 text-amber-300'
+    : 'border-rose-500/40 bg-rose-950/40 text-rose-300';
 
   return (
     <div
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${colorClass} ${className}`}
+      style={isHigh ? { borderColor: 'var(--accent)', background: 'var(--accent-dim)', color: 'var(--accent)' } : undefined}
     >
       <ShieldCheck className="h-3.5 w-3.5" />
       <span>Confidence: {percent}%</span>

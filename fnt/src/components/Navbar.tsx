@@ -57,13 +57,13 @@ export const Navbar: React.FC = () => {
           <div
             className="flex items-center gap-2 rounded-full px-3 py-1 text-xs"
             style={{
-              background: 'var(--ndvi-fill)',
-              border: '1px solid var(--ndvi)',
-              color: 'var(--ndvi)',
+              background: 'var(--accent-dim)',
+              border: '1px solid var(--accent)',
+              color: 'var(--accent)',
               fontFamily: 'var(--font-mono)',
             }}
           >
-            <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--ndvi)' }} />
+            <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--accent)' }} />
             <span>Ground link active</span>
           </div>
         </div>
