@@ -7,6 +7,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 import rasterio
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 from rasterio.io import MemoryFile
 from rasterio.transform import from_origin
@@ -16,6 +18,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.main import app
 from app.auth.models import Base as AuthBase
+from app.core.config import get_settings
 from app.db.models import Base
 from tests.helpers import DeterministicVqaModel, make_geotiff_bytes
 
@@ -243,3 +246,31 @@ def test_query_without_token_is_401() -> None:
 
     assert response.status_code == 401
     assert response.json()["detail"]["reason_code"] == "UNAUTHORIZED"
+
+
+def test_cors_allows_every_configured_frontend_origin(monkeypatch) -> None:
+    """CORS must allow all configured origins, not just the first (regression for the
+    single-origin frontend_origin field that broke WSL-IP-based testing alongside localhost)."""
+    monkeypatch.setenv("FRONTEND_ORIGINS", "http://localhost:5173,http://172.31.22.203:5173")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        cors_app = FastAPI()
+        cors_app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.frontend_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+        @cors_app.get("/ping")
+        def _ping() -> dict[str, bool]:
+            return {"ok": True}
+
+        cors_client = TestClient(cors_app)
+        for origin in settings.frontend_origins:
+            response = cors_client.get("/ping", headers={"Origin": origin})
+            assert response.headers["access-control-allow-origin"] == origin
+    finally:
+        get_settings.cache_clear()

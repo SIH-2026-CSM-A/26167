@@ -53,3 +53,24 @@ def test_settings_rejects_trivially_short_jwt_secret_key(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", "too-short")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+def test_settings_defaults_to_single_localhost_origin(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pass@localhost/db")
+    monkeypatch.setenv("COST_CEILING", "2.5")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-not-for-production")
+    monkeypatch.delenv("FRONTEND_ORIGINS", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.frontend_origins == ["http://localhost:5173"]
+
+
+def test_settings_parses_comma_separated_frontend_origins(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pass@localhost/db")
+    monkeypatch.setenv("COST_CEILING", "2.5")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-not-for-production")
+    monkeypatch.setenv("FRONTEND_ORIGINS", "http://localhost:5173,http://172.31.22.203:5173")
+    settings = Settings(_env_file=None)
+    assert settings.frontend_origins == [
+        "http://localhost:5173",
+        "http://172.31.22.203:5173",
+    ]

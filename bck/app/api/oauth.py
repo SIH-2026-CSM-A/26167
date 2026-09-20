@@ -91,7 +91,7 @@ def _redirect_with_tokens(settings: Settings, user: User) -> RedirectResponse:
         f"&expires_in={settings.access_token_expire_minutes * 60}"
         "&token_type=bearer"
     )
-    redirect_url = f"{settings.frontend_origin}/oauth/callback?{query}"
+    redirect_url = f"{settings.frontend_origins[0]}/oauth/callback?{query}"
     redirect = RedirectResponse(redirect_url, status_code=303)
     redirect.set_cookie(
         REFRESH_COOKIE_NAME,

@@ -3,9 +3,10 @@ environment (or a local .env file for dev) via pydantic-settings.
 """
 
 from functools import lru_cache
+from typing import Annotated
 
-from pydantic import Field, PostgresDsn
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, PostgresDsn, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -42,7 +43,22 @@ class Settings(BaseSettings):
     """Secure flag on the refresh-token cookie. False for local http dev; must be True
     wherever the app is served over https.
     """
-    frontend_origin: str = "http://localhost:5173"
+    frontend_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:5173"]
+    )
+    """CORS allow-list and OAuth redirect targets. Comma-separated in the env var
+    (`FRONTEND_ORIGINS=http://a,http://b`) so different machines/networks (e.g. a WSL
+    172.x address alongside localhost) can be tested without editing code or restarting
+    with a code change. `NoDecode` skips pydantic-settings' default JSON-array parsing
+    for list fields, so the validator below can split the plain comma-separated string.
+    """
+
+    @field_validator("frontend_origins", mode="before")
+    @classmethod
+    def _split_origins(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
 
     google_client_id: str | None = None
     google_client_secret: str | None = None
