@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import {
   Map as MapLibreMap,
   type GeoJSONSource,
@@ -351,14 +351,20 @@ function useMapActions(
   return { handleBasemapChange, handleFitAll };
 }
 
-export const EvidenceMap: React.FC<EvidenceMapProps> = ({
+export interface EvidenceMapHandle {
+  /** Forces MapLibre to recompute its canvas size — call after a layout change (e.g. a
+   * console-v2 rail overlay opening/closing) that might leave the map stale/blank. */
+  resize: () => void;
+}
+
+export const EvidenceMap = forwardRef<EvidenceMapHandle, EvidenceMapProps>(({
   evidenceList,
   selectedEvidenceId,
   onSelectEvidence,
   hoveredEvidenceId = null,
   onHoverEvidence,
   className = 'h-[560px] w-full',
-}) => {
+}, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [basemap, setBasemap] = useState<BasemapMode>('satellite');
   const { mapRef, isLoaded } = useMapInstance(containerRef, onSelectEvidence, onHoverEvidence);
@@ -375,6 +381,7 @@ export const EvidenceMap: React.FC<EvidenceMapProps> = ({
   const sourceStatuses = useEvidenceStatuses(mapRef.current, isLoaded, rasterOverlays, evidenceToFeatures(evidenceList).length);
   useFeatureHighlight(mapRef.current, isLoaded, selectedEvidenceId, evidenceList);
   useHoverHighlight(mapRef.current, isLoaded, hoveredEvidenceId);
+  useImperativeHandle(ref, () => ({ resize: () => mapRef.current?.resize() }), [mapRef]);
 
   return (
     <div className={`relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950 ${className}`}>
@@ -401,6 +408,8 @@ export const EvidenceMap: React.FC<EvidenceMapProps> = ({
       />
     </div>
   );
-};
+});
+
+EvidenceMap.displayName = 'EvidenceMap';
 
 export default EvidenceMap;
