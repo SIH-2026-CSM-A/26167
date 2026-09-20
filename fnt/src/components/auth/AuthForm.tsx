@@ -82,8 +82,12 @@ export const AuthForm: React.FC<{ mode: Mode; onSuccess: () => void }> = ({ mode
       )}
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="auth-email" className="text-xs font-medium" style={{ color: 'var(--text-mid)' }}>
-          Email
+        <label
+          htmlFor="auth-email"
+          className="text-[11px] font-medium uppercase tracking-widest"
+          style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+        >
+          Identification
         </label>
         <input
           id="auth-email"
@@ -110,8 +114,12 @@ export const AuthForm: React.FC<{ mode: Mode; onSuccess: () => void }> = ({ mode
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="auth-password" className="text-xs font-medium" style={{ color: 'var(--text-mid)' }}>
-          Password
+        <label
+          htmlFor="auth-password"
+          className="text-[11px] font-medium uppercase tracking-widest"
+          style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+        >
+          Access Key
         </label>
         <div className="relative">
           <input

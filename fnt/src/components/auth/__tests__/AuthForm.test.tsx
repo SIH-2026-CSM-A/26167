@@ -30,8 +30,8 @@ describe('AuthForm', () => {
     const user = userEvent.setup();
 
     render(<AuthForm mode="login" onSuccess={onSuccess} />);
-    await user.type(screen.getByLabelText('Email'), 'a@example.com');
-    await user.type(screen.getByLabelText('Password'), 'password123');
+    await user.type(screen.getByLabelText('Identification'), 'a@example.com');
+    await user.type(screen.getByLabelText('Access Key'), 'password123');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await waitFor(() => expect(login).toHaveBeenCalledWith('a@example.com', 'password123'));
@@ -44,8 +44,8 @@ describe('AuthForm', () => {
     const user = userEvent.setup();
 
     render(<AuthForm mode="register" onSuccess={vi.fn()} />);
-    await user.type(screen.getByLabelText('Email'), 'b@example.com');
-    await user.type(screen.getByLabelText('Password'), 'password123');
+    await user.type(screen.getByLabelText('Identification'), 'b@example.com');
+    await user.type(screen.getByLabelText('Access Key'), 'password123');
     await user.click(screen.getByRole('button', { name: 'Create account' }));
 
     await waitFor(() => expect(register).toHaveBeenCalledWith('b@example.com', 'password123'));
@@ -59,8 +59,8 @@ describe('AuthForm', () => {
     const user = userEvent.setup();
 
     render(<AuthForm mode="login" onSuccess={vi.fn()} />);
-    await user.type(screen.getByLabelText('Email'), 'a@example.com');
-    await user.type(screen.getByLabelText('Password'), 'wrongpassword');
+    await user.type(screen.getByLabelText('Identification'), 'a@example.com');
+    await user.type(screen.getByLabelText('Access Key'), 'wrongpassword');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(await screen.findByText('Invalid email or password.')).toBeInTheDocument();
@@ -74,8 +74,8 @@ describe('AuthForm', () => {
     const user = userEvent.setup();
 
     render(<AuthForm mode="login" onSuccess={vi.fn()} />);
-    await user.type(screen.getByLabelText('Email'), 'a@example.com');
-    await user.type(screen.getByLabelText('Password'), 'password123');
+    await user.type(screen.getByLabelText('Identification'), 'a@example.com');
+    await user.type(screen.getByLabelText('Access Key'), 'password123');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     const button = screen.getByRole('button', { name: 'Signing in…' });
