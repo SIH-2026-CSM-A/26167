@@ -393,7 +393,7 @@ export const EvidenceMap = forwardRef<EvidenceMapHandle, EvidenceMapProps>(({
             <div key={status.id} className="flex items-center gap-2">
               <span
                 className={`h-2 w-2 rounded-full ${status.state === 'error' ? 'bg-rose-400' : status.state === 'loading' ? 'bg-amber-400' : status.state === 'ready' ? '' : 'bg-slate-500'}`}
-                style={status.state === 'ready' ? { background: 'var(--accent)' } : undefined}
+                style={status.state === 'ready' ? { background: 'var(--success)' } : undefined}
               />
               <span className="truncate">{status.label}: {status.state}</span>
               {status.state === 'error' && <span className="text-rose-300">failed</span>}

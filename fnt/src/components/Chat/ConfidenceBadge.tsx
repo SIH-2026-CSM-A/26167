@@ -42,7 +42,7 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
   return (
     <div
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${colorClass} ${className}`}
-      style={isHigh ? { borderColor: 'var(--accent)', background: 'var(--accent-dim)', color: 'var(--accent)' } : undefined}
+      style={isHigh ? { borderColor: 'var(--success)', background: 'var(--success-dim)', color: 'var(--success)' } : undefined}
     >
       <ShieldCheck className="h-3.5 w-3.5" />
       <span>Confidence: {percent}%</span>

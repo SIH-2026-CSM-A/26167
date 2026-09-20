@@ -24,7 +24,7 @@ const EvidenceMetrics: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
       </div>
       <div className="flex justify-between items-center text-slate-300">
         <span className="text-slate-400">Confidence:</span>
-        <span className="flex items-center gap-1 font-semibold" style={{ color: 'var(--accent)' }}>
+        <span className="flex items-center gap-1 font-semibold" style={{ color: 'var(--success)' }}>
           <ShieldCheck className="h-3.5 w-3.5" />
           {(evidence.confidence * 100).toFixed(1)}%
         </span>

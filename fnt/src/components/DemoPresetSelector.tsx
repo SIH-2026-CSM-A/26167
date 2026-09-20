@@ -74,7 +74,7 @@ export const DemoPresetSelector: React.FC<DemoPresetSelectorProps> = ({
 
   if (loading) {
     return (
-      <div className="p-4 text-xs" style={{ color: 'var(--text-low)' }}>
+      <div className="p-4 text-xs" style={{ color: 'var(--text-low)', textShadow: 'var(--photo-text-shadow)' }}>
         Loading demo presets...
       </div>
     );
@@ -85,11 +85,14 @@ export const DemoPresetSelector: React.FC<DemoPresetSelectorProps> = ({
       <div className="flex items-center justify-between">
         <label
           className="text-[11px] font-medium uppercase tracking-widest"
-          style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+          style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)', textShadow: 'var(--photo-text-shadow)' }}
         >
           Curated Demo Presets (F24)
         </label>
-        <span className="text-[11px]" style={{ color: 'var(--text-low)' }}>
+        <span
+          className="text-[11px]"
+          style={{ color: 'var(--text-low)', textShadow: 'var(--photo-text-shadow)' }}
+        >
           Auto-populates query &amp; verified imagery
         </span>
       </div>
@@ -151,7 +154,7 @@ export const DemoPresetSelector: React.FC<DemoPresetSelectorProps> = ({
                     Loading files...
                   </span>
                 ) : isSelected ? (
-                  <span className="font-medium" style={{ color: 'var(--accent)' }}>Active</span>
+                  <span className="font-medium" style={{ color: 'var(--success)' }}>Active</span>
                 ) : (
                   <span>Select preset</span>
                 )}

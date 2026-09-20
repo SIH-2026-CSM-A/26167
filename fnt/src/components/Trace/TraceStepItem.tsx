@@ -46,7 +46,7 @@ const StepHeaderRow: React.FC<{
     </div>
     <div className="flex items-center gap-3 text-[11px] text-slate-400">
       {confidence !== null && (
-        <span className="flex items-center gap-1 font-mono" style={{ color: 'var(--accent)' }}>
+        <span className="flex items-center gap-1 font-mono" style={{ color: 'var(--success)' }}>
           <CheckCircle className="h-3 w-3" />
           {(confidence * 100).toFixed(0)}%
         </span>
