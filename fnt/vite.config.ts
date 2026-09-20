@@ -88,6 +88,10 @@ export default defineConfig({
           });
         },
       },
+      '/auth': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
     },
   },
   test: {
