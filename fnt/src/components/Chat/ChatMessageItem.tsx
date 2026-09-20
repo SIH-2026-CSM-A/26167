@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { ChatMessage, Answer, StatsPayload } from '@/types/contracts';
 import { CitationText } from './CitationText';
 import { CitationChip } from './CitationChip';
+import { EvidenceSummaryCard } from '@/components/EvidenceSummaryCard';
 import { downloadEvidencePdf } from '@/services/api';
 
 export interface ChatMessageItemProps {
@@ -161,6 +162,13 @@ const IntelligenceTurn: React.FC<{
     </div>
     {answer && <InlineTraceSequence answer={answer} />}
     {answer && <EvidenceMetadataGrid answer={answer} />}
+    {answer && answer.evidence.length > 0 && (
+      <div className="flex flex-col gap-2">
+        {answer.evidence.map((ev) => (
+          <EvidenceSummaryCard key={ev.id} evidence={ev} onViewOnMap={onSelect} />
+        ))}
+      </div>
+    )}
     {answer && (
       <GroundedEvidenceRibbon
         answer={answer}

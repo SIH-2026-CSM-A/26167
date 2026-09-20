@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Answer } from '../../types/contracts';
 import { downloadEvidenceGeoJson, downloadEvidencePdf } from '../../services/api';
+import { EvidenceSummaryCard } from '@/components/EvidenceSummaryCard';
+import { TraceStepItem } from '@/components/Trace/TraceStepItem';
+import { useSatQuery } from '@/hooks/useSatQuery';
 
 interface QueryResultCardProps {
   answer: Answer;
@@ -10,6 +14,8 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
   const [showTrace, setShowTrace] = useState<boolean>(false);
   const [downloadingPdf, setDownloadingPdf] = useState<boolean>(false);
   const [downloadingGeoJson, setDownloadingGeoJson] = useState<boolean>(false);
+  const { loadAnswer } = useSatQuery();
+  const navigate = useNavigate();
 
   const handleDownloadPdf = async () => {
     try {
@@ -31,6 +37,13 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
     } finally {
       setDownloadingGeoJson(false);
     }
+  };
+
+  // Upload has no map panel of its own — "View on map" hands this result to the shared
+  // chat/query context and opens Chat, whose map hero already fits to all of its bounds.
+  const handleViewOnMap = () => {
+    loadAnswer(answer);
+    navigate('/chat');
   };
 
   return (
@@ -103,25 +116,9 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
             Grounded Evidence ({answer.evidence.length})
           </label>
           <div className="mt-1.5 flex flex-col gap-1.5">
-            {answer.evidence.map((ev, i) => {
-              const desc =
-                ev.payload && typeof ev.payload === 'object' && 'description' in ev.payload
-                  ? String((ev.payload as Record<string, unknown>).description)
-                  : JSON.stringify(ev.payload);
-              return (
-                <div
-                  key={ev.id || i}
-                  className="rounded p-2 text-xs"
-                  style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--text-mid)' }}
-                >
-                  <span className="mr-2" style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
-                    [{ev.type.toUpperCase()}]
-                  </span>
-                  <span className="mr-2" style={{ color: 'var(--text-low)' }}>({ev.tool})</span>
-                  <span>{desc}</span>
-                </div>
-              );
-            })}
+            {answer.evidence.map((ev) => (
+              <EvidenceSummaryCard key={ev.id} evidence={ev} onViewOnMap={handleViewOnMap} />
+            ))}
           </div>
         </div>
       )}
@@ -138,31 +135,9 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
             <span style={{ color: 'var(--text-low)' }}>({answer.trace.steps.length} steps)</span>
           </button>
           {showTrace && (
-            <div
-              className="mt-2.5 flex flex-col gap-1 rounded p-3 text-[11px]"
-              style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', fontFamily: 'var(--font-mono)' }}
-            >
+            <div className="mt-2.5 flex flex-col gap-1">
               {answer.trace.steps.map((step, idx) => (
-                <div
-                  key={idx}
-                  className="flex flex-col gap-0.5 py-1 last:border-0"
-                  style={{ color: 'var(--text-low)', borderBottom: '1px solid var(--line-soft)' }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span>{idx + 1}.</span>
-                    <span className="font-semibold" style={{ color: 'var(--accent)' }}>{step.module}</span>
-                    <span>→</span>
-                    <span style={{ color: '#e3a66c' }}>{step.action}</span>
-                    {step.confidence !== null && (
-                      <span className="text-[10px]" style={{ color: '#8fc79e' }}>
-                        ({Math.round(step.confidence * 100)}%)
-                      </span>
-                    )}
-                  </div>
-                  {step.params && Object.keys(step.params).length > 0 && (
-                    <div className="truncate pl-4 text-[10px]">{JSON.stringify(step.params)}</div>
-                  )}
-                </div>
+                <TraceStepItem key={`${step.module}-${idx}`} step={step} index={idx} />
               ))}
             </div>
           )}
