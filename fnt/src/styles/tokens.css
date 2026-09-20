@@ -1,7 +1,13 @@
 /* Central design tokens — the single source both the login page and workspace pages import.
-   SEMANTIC COLOR RULE: --ndvi/--water/--thermal are data-meaning colors only (satellite
-   analysis categories), never decorative or interactive. --accent is the only interactive
-   color (buttons, links, focus rings). Do not reuse the data colors as UI accents.
+   SEMANTIC COLOR RULE, three distinct meanings, no double duty:
+     --accent   — the only interactive color (buttons, links, focus rings, brand mark,
+                  active tabs/selection, inline emphasized terms). Currently a warm orange.
+     --success  — confidence-high / "this succeeded" signal only (confidence badges, status
+                  dots, trace-step confidence readouts). Never used for anything interactive.
+     --thermal  — warning / low-confidence signal only.
+   --ndvi/--water/--thermal below that point aren't --success or --accent are reserved,
+   data-meaning colors (satellite analysis categories) with no current live consumer —
+   never decorative or interactive.
 
    Visual system (console-v2): serif display type ("Source Serif 4") for headings/turn
    text, plain sans body ("Inter") for UI chrome, small all-caps tracked "IBM Plex Mono"
@@ -35,11 +41,18 @@
   --thermal: #c77b3a;
   --thermal-fill: rgba(199, 123, 58, 0.16);
 
-  --accent: #5eead4;
-  --accent-dim: rgba(94, 234, 212, 0.14);
+  --accent: #e8935a;
+  --accent-dim: rgba(232, 147, 90, 0.14);
+  --success: #8fc79e;
+  --success-dim: rgba(74, 124, 89, 0.18);
   --observer: #f2867e;
   --observer-dim: rgba(242, 134, 126, 0.14);
   --danger: #d2574b;
+
+  /* For text that sits directly on a full-bleed page photo (LoginPage/UploadPage) with no
+     solid panel behind it — strong enough to hold contrast over the brightest city-light
+     clusters in the image, not just its darker corners. */
+  --photo-text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 14px rgba(13, 14, 12, 0.9);
 
   --font-display: 'Source Serif 4', 'Georgia', serif;
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
