@@ -34,17 +34,23 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
   };
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/90 p-5 flex flex-col gap-4 shadow-lg">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-        <h3 className="font-semibold text-sm text-slate-100">Pipeline Result</h3>
+    <div
+      className="flex flex-col gap-4 rounded-lg p-5 shadow-lg"
+      style={{ background: 'var(--bg-1)', border: '1px solid var(--line)' }}
+    >
+      <div className="flex items-center justify-between pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
+        <h3 className="text-sm" style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-display)' }}>
+          Pipeline Result
+        </h3>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Confidence:</span>
+          <span className="text-xs" style={{ color: 'var(--text-low)' }}>Confidence:</span>
           <span
-            className={`font-mono text-xs px-2 py-0.5 rounded font-bold ${
+            className="rounded px-2 py-0.5 text-xs font-bold"
+            style={
               answer.confidence >= 0.75
-                ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
-                : 'bg-amber-950 border border-amber-800 text-amber-300'
-            }`}
+                ? { background: 'rgba(74,124,89,0.18)', border: '1px solid var(--ndvi)', color: '#8fc79e' }
+                : { background: 'rgba(199,123,58,0.16)', border: '1px solid var(--thermal)', color: '#e3a66c' }
+            }
           >
             {(answer.confidence * 100).toFixed(0)}%
           </span>
@@ -52,7 +58,8 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
             type="button"
             onClick={handleDownloadPdf}
             disabled={downloadingPdf}
-            className="ml-2 rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition disabled:opacity-50"
+            className="ml-2 rounded px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--text-mid)' }}
           >
             {downloadingPdf ? 'Exporting...' : 'PDF Report'}
           </button>
@@ -60,7 +67,8 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
             type="button"
             onClick={handleDownloadGeoJson}
             disabled={downloadingGeoJson}
-            className="rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition disabled:opacity-50"
+            className="rounded px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--text-mid)' }}
           >
             {downloadingGeoJson ? 'Exporting...' : 'Export GeoJSON'}
           </button>
@@ -68,19 +76,30 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
       </div>
 
       {answer.abstained && (
-        <div className="p-3 bg-amber-950/40 border border-amber-800/80 rounded-md text-amber-300 text-xs">
+        <div
+          className="rounded-md p-3 text-xs"
+          style={{ background: 'rgba(199,123,58,0.16)', border: '1px solid var(--thermal)', color: '#e3a66c' }}
+        >
           <strong>Pipeline Abstained:</strong> {answer.abstention_reason || 'Confidence threshold unmet.'}
         </div>
       )}
 
       <div>
-        <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Answer</label>
-        <p className="mt-1 text-sm text-slate-200 leading-relaxed font-sans">{answer.text}</p>
+        <label
+          className="text-[11px] font-medium uppercase tracking-widest"
+          style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+        >
+          Answer
+        </label>
+        <p className="mt-1 text-sm leading-relaxed" style={{ color: 'var(--text-hi)' }}>{answer.text}</p>
       </div>
 
       {answer.evidence && answer.evidence.length > 0 && (
         <div>
-          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+          <label
+            className="text-[11px] font-medium uppercase tracking-widest"
+            style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+          >
             Grounded Evidence ({answer.evidence.length})
           </label>
           <div className="mt-1.5 flex flex-col gap-1.5">
@@ -90,9 +109,15 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
                   ? String((ev.payload as Record<string, unknown>).description)
                   : JSON.stringify(ev.payload);
               return (
-                <div key={ev.id || i} className="p-2 rounded bg-slate-950/60 border border-slate-800 text-xs text-slate-300">
-                  <span className="font-mono text-cyan-400 mr-2">[{ev.type.toUpperCase()}]</span>
-                  <span className="text-slate-400 mr-2">({ev.tool})</span>
+                <div
+                  key={ev.id || i}
+                  className="rounded p-2 text-xs"
+                  style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--text-mid)' }}
+                >
+                  <span className="mr-2" style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                    [{ev.type.toUpperCase()}]
+                  </span>
+                  <span className="mr-2" style={{ color: 'var(--text-low)' }}>({ev.tool})</span>
                   <span>{desc}</span>
                 </div>
               );
@@ -102,32 +127,40 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
       )}
 
       {answer.trace?.steps && answer.trace.steps.length > 0 && (
-        <div className="border-t border-slate-800 pt-3">
+        <div className="pt-3" style={{ borderTop: '1px solid var(--line)' }}>
           <button
             type="button"
             onClick={() => setShowTrace(!showTrace)}
-            className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+            className="flex cursor-pointer items-center gap-1 text-xs"
+            style={{ color: 'var(--accent)' }}
           >
             <span>{showTrace ? 'Hide' : 'Show'} Execution Trace</span>
-            <span className="text-slate-500">({answer.trace.steps.length} steps)</span>
+            <span style={{ color: 'var(--text-low)' }}>({answer.trace.steps.length} steps)</span>
           </button>
           {showTrace && (
-            <div className="mt-2.5 flex flex-col gap-1 font-mono text-[11px] bg-slate-950 p-3 rounded border border-slate-800">
+            <div
+              className="mt-2.5 flex flex-col gap-1 rounded p-3 text-[11px]"
+              style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', fontFamily: 'var(--font-mono)' }}
+            >
               {answer.trace.steps.map((step, idx) => (
-                <div key={idx} className="flex flex-col gap-0.5 text-slate-400 py-1 border-b border-slate-800/50 last:border-0">
+                <div
+                  key={idx}
+                  className="flex flex-col gap-0.5 py-1 last:border-0"
+                  style={{ color: 'var(--text-low)', borderBottom: '1px solid var(--line-soft)' }}
+                >
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-600">{idx + 1}.</span>
-                    <span className="text-cyan-400 font-semibold">{step.module}</span>
-                    <span className="text-slate-500">→</span>
-                    <span className="text-amber-300">{step.action}</span>
+                    <span>{idx + 1}.</span>
+                    <span className="font-semibold" style={{ color: 'var(--accent)' }}>{step.module}</span>
+                    <span>→</span>
+                    <span style={{ color: '#e3a66c' }}>{step.action}</span>
                     {step.confidence !== null && (
-                      <span className="text-emerald-400 text-[10px]">({Math.round(step.confidence * 100)}%)</span>
+                      <span className="text-[10px]" style={{ color: '#8fc79e' }}>
+                        ({Math.round(step.confidence * 100)}%)
+                      </span>
                     )}
                   </div>
                   {step.params && Object.keys(step.params).length > 0 && (
-                    <div className="text-slate-500 text-[10px] pl-4 truncate">
-                      {JSON.stringify(step.params)}
-                    </div>
+                    <div className="truncate pl-4 text-[10px]">{JSON.stringify(step.params)}</div>
                   )}
                 </div>
               ))}

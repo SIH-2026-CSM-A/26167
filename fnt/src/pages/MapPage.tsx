@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Layers, ShieldCheck, Filter, Clock } from 'lucide-react';
 import { useSatQuery } from '@/hooks/useSatQuery';
-import { EvidenceMap } from '@/components/Map/EvidenceMap';
+import { MapHero } from '@/components/Map/MapHero';
 import { formatDuration } from '@/utils/evidenceGeoJson';
 import type { Evidence, EvidenceType } from '@/types/contracts';
 
@@ -12,26 +12,35 @@ const EvidenceCardItem: React.FC<{
 }> = ({ ev, isSelected, onSelect }) => (
   <button
     onClick={() => onSelect(isSelected ? null : ev.id)}
-    className={`w-full text-left p-3 rounded-lg border transition-all text-xs ${
+    className="w-full rounded-lg border p-3 text-left text-xs transition-all"
+    style={
       isSelected
-        ? 'border-cyan-500 bg-cyan-950/50 shadow-md shadow-cyan-950/40'
-        : 'border-slate-800 bg-slate-900/80 hover:border-slate-700 hover:bg-slate-800/60 text-slate-300'
-    }`}
+        ? { borderColor: 'var(--accent)', background: 'var(--accent-dim)', color: 'var(--text-hi)' }
+        : { borderColor: 'var(--line)', background: 'var(--bg-2)', color: 'var(--text-mid)' }
+    }
   >
     <div className="flex items-center justify-between">
-      <span className="font-mono font-bold text-cyan-400">[{ev.id}]</span>
-      <span className="uppercase text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+      <span className="font-bold" style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+        [{ev.id}]
+      </span>
+      <span
+        className="rounded px-1.5 py-0.5 text-[10px] uppercase"
+        style={{ background: 'var(--bg-1)', color: 'var(--text-low)' }}
+      >
         {ev.type}
       </span>
     </div>
-    <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+    <div className="mt-2 flex items-center justify-between text-[11px]" style={{ color: 'var(--text-low)' }}>
       <span>Tool: {ev.tool}</span>
-      <span className="flex items-center gap-1 text-emerald-400 font-mono">
+      <span className="flex items-center gap-1" style={{ color: '#8fc79e', fontFamily: 'var(--font-mono)' }}>
         <ShieldCheck className="h-3 w-3" />
         {(ev.confidence * 100).toFixed(0)}%
       </span>
     </div>
-    <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+    <div
+      className="mt-1 flex items-center gap-1 text-[10px]"
+      style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+    >
       <Clock className="h-3 w-3" />
       <span>Inference: {formatDuration(ev.timing)}</span>
     </div>
@@ -46,9 +55,9 @@ const EvidenceListSection: React.FC<{
 }> = ({ items, totalCount, selectedId, onSelect }) => {
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-48 text-center p-4">
-        <Layers className="h-8 w-8 text-slate-600 mb-2" />
-        <p className="text-xs text-slate-400">
+      <div className="flex h-48 flex-col items-center justify-center p-4 text-center">
+        <Layers className="mb-2 h-8 w-8" style={{ color: 'var(--text-low)' }} />
+        <p className="text-xs" style={{ color: 'var(--text-low)' }}>
           {totalCount === 0
             ? 'No spatial evidence generated yet. Submit a query in Chat or upload imagery to display grounded features.'
             : 'No features match the selected filter.'}
@@ -58,7 +67,7 @@ const EvidenceListSection: React.FC<{
   }
 
   return (
-    <div className="flex-1 overflow-y-auto mt-3 space-y-2 pr-1">
+    <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
       {items.map((ev) => (
         <EvidenceCardItem key={ev.id} ev={ev} isSelected={selectedId === ev.id} onSelect={onSelect} />
       ))}
@@ -81,14 +90,18 @@ const MapSidebar: React.FC<{
     <div className="flex items-center justify-between pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
       <div className="flex items-center gap-2">
         <Filter className="h-4 w-4" style={{ color: 'var(--accent)' }} />
-        <span className="text-sm font-semibold" style={{ color: 'var(--text-hi)' }}>
+        <span
+          className="text-[11px] font-medium uppercase tracking-widest"
+          style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+        >
           Evidence Features
         </span>
       </div>
       <select
         value={filterType}
         onChange={(e) => onFilterChange(e.target.value as EvidenceType | 'all')}
-        className="rounded bg-slate-800 border border-slate-700 px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-cyan-500"
+        className="rounded px-2 py-1 text-xs outline-none"
+        style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--text-mid)' }}
       >
         <option value="all">All Types</option>
         <option value="bbox">Bounding Boxes</option>
@@ -121,10 +134,10 @@ export const MapPage: React.FC = () => {
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-hi)' }}>
+          <h1 className="text-2xl sm:text-3xl" style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-display)' }}>
             Spatial Evidence &amp; Map View
           </h1>
-          <p className="mt-1 text-xs sm:text-sm" style={{ color: 'var(--text-mid)' }}>
+          <p className="mt-1 text-xs sm:text-sm" style={{ color: 'var(--text-low)' }}>
             Interactive MapLibre satellite viewport with vector masks, bounding boxes, and audit metadata.
           </p>
         </div>
@@ -151,8 +164,9 @@ export const MapPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div className="lg:col-span-8 xl:col-span-9 h-[660px]">
-          <EvidenceMap
+        <div className="relative h-[660px] overflow-hidden rounded-xl lg:col-span-8 xl:col-span-9">
+          <MapHero
+            edgeLabel="SPATIAL FEED"
             evidenceList={evidenceList}
             selectedEvidenceId={selectedEvidenceId}
             hoveredEvidenceId={hoveredEvidenceId}

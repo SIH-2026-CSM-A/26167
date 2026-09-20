@@ -33,7 +33,10 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
 }) => {
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+      <label
+        className="text-[11px] font-medium uppercase tracking-widest"
+        style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+      >
         Pipeline Configuration
       </label>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -45,14 +48,19 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
               type="button"
               disabled={disabled}
               onClick={() => onSelectMode(opt.id)}
-              className={`text-left p-3.5 rounded-lg border transition-all ${
+              className={`text-left p-3.5 rounded-lg border transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              style={
                 isSelected
-                  ? 'border-cyan-500 bg-cyan-950/30 text-white shadow-sm shadow-cyan-950'
-                  : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700'
-              } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  ? { borderColor: 'var(--accent)', background: 'var(--accent-dim)', color: 'var(--text-hi)' }
+                  : { borderColor: 'var(--line)', background: 'var(--bg-2)', color: 'var(--text-mid)' }
+              }
             >
-              <div className="font-medium text-sm text-slate-100">{opt.label}</div>
-              <div className="text-xs text-slate-400 mt-1 leading-snug">{opt.description}</div>
+              <div className="font-medium text-sm" style={{ color: 'var(--text-hi)' }}>
+                {opt.label}
+              </div>
+              <div className="text-xs mt-1 leading-snug" style={{ color: 'var(--text-low)' }}>
+                {opt.description}
+              </div>
             </button>
           );
         })}
