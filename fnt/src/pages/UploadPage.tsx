@@ -142,10 +142,16 @@ export const UploadPage: React.FC = () => {
         style={{ borderBottom: '1px solid var(--line)' }}
       >
         <div>
-          <h1 className="text-2xl" style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-display)' }}>
+          <h1
+            className="text-2xl"
+            style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-display)', textShadow: 'var(--photo-text-shadow)' }}
+          >
             Satellite Imagery Query
           </h1>
-          <p className="text-xs mt-1" style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}>
+          <p
+            className="text-xs mt-1"
+            style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)', textShadow: 'var(--photo-text-shadow)' }}
+          >
             Multi-modal earth observation query and analysis pipeline
           </p>
         </div>
@@ -214,7 +220,7 @@ export const UploadPage: React.FC = () => {
         <div className="flex flex-col gap-1.5">
           <label
             className="text-[11px] font-medium uppercase tracking-widest"
-            style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+            style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)', textShadow: 'var(--photo-text-shadow)' }}
           >
             Analysis Query
           </label>

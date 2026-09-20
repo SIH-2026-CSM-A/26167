@@ -35,7 +35,7 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
     <div className="flex flex-col gap-2">
       <label
         className="text-[11px] font-medium uppercase tracking-widest"
-        style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+        style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)', textShadow: 'var(--photo-text-shadow)' }}
       >
         Pipeline Configuration
       </label>

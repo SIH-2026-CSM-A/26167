@@ -12,7 +12,7 @@ export const LoginPage: React.FC = () => (
 
     <div
       className="absolute bottom-6 left-6 text-xs tracking-wide"
-      style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}
+      style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', textShadow: 'var(--photo-text-shadow)' }}
     >
       <div>04&deg; 23&apos; 11&quot; N / 114&deg; 18&apos; 42&quot; E</div>
       <div className="mt-1" style={{ color: 'var(--text-low)' }}>
