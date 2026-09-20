@@ -10,9 +10,12 @@ import numpy as np
 import rasterio
 
 from app.contracts import Answer, Evidence, Modality, QueryRequest
+from app.core.logging import get_logger
 from app.core.raster_artifacts import write_mask_artifact
 from app.db import persist_trace
 from app.evidence import assemble_answer, build_bbox_evidence, build_vqa_evidence
+from app.history import get_sync_session as get_history_session
+from app.history import record_query
 from app.ingestion import (
     IngestedRaster,
     InvalidRasterError,
@@ -32,6 +35,8 @@ from app.tools.fusion.sar_scale import SarScale
 from app.tools.fusion.sar_water_mask import otsu_water_mask
 from app.tools.vqa_grounding import VqaModel, VqaToolError, VqaToolResult, execute_vqa
 from app.verification import VerificationPolicy, verification_trace_params, verify
+
+logger = get_logger(__name__)
 
 _default_model: InternVLAdapter | None = None
 
@@ -117,6 +122,7 @@ def run(
     uploads: list[PipelineUpload],
     model: VqaModel | None = None,
     policy: VerificationPolicy | None = None,
+    user_id: str | None = None,
 ) -> Answer:
     """Run the real vertical slice for whichever tool the router dispatches to."""
     recorder = TraceRecorder()
@@ -350,6 +356,25 @@ def run(
         persist_trace(trace, _json_safe_evidence(evidence_list))
     except Exception as error:
         _fail(recorder, stage="persistence", message=str(error), status_code=500)
+
+    # History is a best-effort convenience feature, not part of the answer contract: unlike
+    # persist_trace above (a deliberate P0 hard-failure), a broken history write must never
+    # turn a successful answer into a 500 — swallow and log instead.
+    try:
+        modality_str = (
+            "fusion" if dispatch_plan.tool_name == "fusion" else ingested[0].source.modality.value
+        )
+        with get_history_session() as history_session:
+            record_query(
+                history_session,
+                user_id=user_id,
+                query_text=request.query,
+                answer_text=answer.text,
+                confidence=answer.confidence,
+                modality=modality_str,
+            )
+    except Exception:
+        logger.exception("history write failed; answer is unaffected")
 
     return answer
 

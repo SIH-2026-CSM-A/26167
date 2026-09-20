@@ -8,13 +8,14 @@ from app.auth.models import Base as AuthBase
 from app.core.config import get_settings
 from app.core.db import get_engine
 from app.db.models import Base
+from app.history.models import Base as HistoryBase
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 config = context.config
 
-target_metadata = [Base.metadata, AuthBase.metadata]
+target_metadata = [Base.metadata, AuthBase.metadata, HistoryBase.metadata]
 
 
 def run_migrations_offline() -> None:

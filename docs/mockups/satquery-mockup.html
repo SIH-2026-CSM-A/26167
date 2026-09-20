@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SatQuery AI — Mission Console Concept</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#0A0E12; --bg-1:#0F151B; --bg-2:#141C24; --bg-3:#1A2530;
+    --line:#233040; --line-soft:#1B2733;
+    --text-hi:#E8EDF2; --text-mid:#9AACBC; --text-low:#5E6E7D;
+    --ndvi:#4A7C59; --ndvi-fill:rgba(74,124,89,0.18);
+    --water:#2C6E8E; --water-fill:rgba(44,110,142,0.20);
+    --thermal:#C77B3A; --thermal-fill:rgba(199,123,58,0.18);
+    --accent:#3DDBD9; --accent-dim:rgba(61,219,217,0.14);
+    --danger:#D2574B;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg-0); color:var(--text-hi);
+    font-family:'IBM Plex Sans',sans-serif;
+    width:1280px; margin:0 auto;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  /* header */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 24px; border-bottom:1px solid var(--line);
+    background:var(--bg-1);
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{
+    width:26px; height:26px; border-radius:6px;
+    background:linear-gradient(135deg, var(--accent), var(--water));
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:600; color:#08181A;
+  }
+  .brand-name{font-size:15px; font-weight:600; letter-spacing:0.2px;}
+  .brand-sub{font-size:11px; color:var(--text-low); margin-left:8px;}
+  .status-pill{
+    display:flex; align-items:center; gap:6px;
+    font-size:11px; color:var(--text-mid);
+    padding:5px 10px; border:1px solid var(--line); border-radius:20px;
+  }
+  .dot{width:6px; height:6px; border-radius:50%; background:var(--ndvi);}
+  .header-right{display:flex; align-items:center; gap:14px;}
+  .team-badge{
+    font-size:11px; color:var(--text-mid); font-family:'IBM Plex Mono',monospace;
+    padding:5px 10px; border:1px solid var(--line); border-radius:6px;
+  }
+
+  /* layout */
+  .layout{display:grid; grid-template-columns:280px 1fr 320px; height:760px;}
+  .panel{border-right:1px solid var(--line); overflow:hidden; display:flex; flex-direction:column;}
+  .panel:last-child{border-right:none; border-left:1px solid var(--line);}
+
+  /* left: query panel */
+  .section-label{
+    font-size:10px; text-transform:uppercase; letter-spacing:1px;
+    color:var(--text-low); padding:16px 16px 8px;
+  }
+  .query-box{
+    margin:0 16px 16px; background:var(--bg-2); border:1px solid var(--line);
+    border-radius:8px; padding:12px; font-size:13px; color:var(--text-mid);
+  }
+  .example-chip{
+    display:inline-block; font-size:11px; color:var(--text-mid);
+    border:1px solid var(--line-soft); border-radius:14px;
+    padding:5px 10px; margin:3px 4px 0 0;
+  }
+  .chip-row{padding:0 16px 16px;}
+  .history-item{
+    padding:10px 16px; font-size:12.5px; color:var(--text-mid);
+    border-bottom:1px solid var(--line-soft); cursor:default;
+  }
+  .history-item.active{background:var(--accent-dim); color:var(--text-hi); border-left:2px solid var(--accent);}
+  .history-item .meta{font-size:10.5px; color:var(--text-low); margin-top:3px;}
+  .conf-badge{
+    display:inline-block; font-size:10px; font-family:'IBM Plex Mono',monospace;
+    padding:1px 6px; border-radius:4px; margin-top:4px;
+  }
+  .conf-high{background:rgba(74,124,89,0.2); color:#8FC79E;}
+  .conf-mid{background:rgba(199,123,58,0.2); color:#E3A66C;}
+
+  /* center: map hero */
+  .map-hero{position:relative; flex:1; background:var(--bg-1);}
+  .map-toolbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 18px; border-bottom:1px solid var(--line);
+  }
+  .toolbar-tabs{display:flex; gap:2px; background:var(--bg-2); border-radius:7px; padding:3px;}
+  .tab{font-size:11.5px; padding:6px 12px; border-radius:5px; color:var(--text-mid);}
+  .tab.active{background:var(--bg-3); color:var(--text-hi);}
+  .toolbar-right{font-size:11px; color:var(--text-low); font-family:'IBM Plex Mono',monospace;}
+
+  .compare-frame{
+    position:relative; margin:16px; height:430px; border-radius:10px;
+    overflow:hidden; border:1px solid var(--line);
+    background:
+      repeating-linear-gradient(100deg, #17222B 0 40px, #131C24 40px 80px);
+  }
+  .tile-before, .tile-after{
+    position:absolute; top:0; bottom:0; width:100%;
+    background:
+      radial-gradient(circle at 30% 40%, var(--water-fill) 0 90px, transparent 91px),
+      radial-gradient(circle at 65% 65%, var(--ndvi-fill) 0 120px, transparent 121px),
+      radial-gradient(circle at 80% 25%, var(--thermal-fill) 0 60px, transparent 61px),
+      repeating-linear-gradient(100deg, #17222B 0 40px, #131C24 40px 80px);
+  }
+  .tile-after{clip-path:inset(0 0 0 52%);}
+  .swipe-line{
+    position:absolute; top:0; bottom:0; left:52%; width:2px; background:var(--accent);
+  }
+  .swipe-handle{
+    position:absolute; top:50%; left:52%; transform:translate(-50%,-50%);
+    width:28px; height:28px; border-radius:50%; background:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    font-size:12px; color:#08181A; font-weight:600;
+  }
+  .frame-label{
+    position:absolute; top:12px; font-size:10.5px; font-family:'IBM Plex Mono',monospace;
+    color:var(--text-mid); background:rgba(10,14,18,0.6); padding:3px 8px; border-radius:4px;
+  }
+  .label-before{left:14px;} .label-after{right:14px;}
+
+  .evidence-badge{
+    position:absolute; border:1.5px solid var(--water); border-radius:4px;
+    background:rgba(44,110,142,0.12);
+  }
+  .evidence-tag{
+    position:absolute; font-size:9.5px; font-family:'IBM Plex Mono',monospace;
+    color:#8FC0D6; background:var(--bg-0); padding:1px 5px; border-radius:3px;
+    border:1px solid var(--water);
+  }
+
+  .legend{
+    display:flex; gap:16px; padding:0 32px 16px; font-size:11px; color:var(--text-mid);
+  }
+  .legend-item{display:flex; align-items:center; gap:6px;}
+  .legend-swatch{width:9px; height:9px; border-radius:2px;}
+
+  .metric-row{display:flex; gap:12px; padding:0 16px 16px;}
+  .metric-card{
+    flex:1; background:var(--bg-2); border:1px solid var(--line);
+    border-radius:8px; padding:10px 14px;
+  }
+  .metric-label{font-size:10px; color:var(--text-low); text-transform:uppercase; letter-spacing:0.5px;}
+  .metric-value{font-size:19px; font-weight:600; margin-top:4px; font-family:'IBM Plex Mono',monospace;}
+  .metric-value.up{color:#8FC79E;} .metric-value.warn{color:#E3A66C;}
+
+  /* right: evidence trace */
+  .trace-step{
+    padding:11px 16px; border-bottom:1px solid var(--line-soft);
+    display:flex; gap:10px; align-items:flex-start;
+  }
+  .trace-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--ndvi);
+    margin-top:5px; flex-shrink:0;
+  }
+  .trace-dot.pending{background:var(--text-low);}
+  .trace-title{font-size:12.5px; font-weight:500;}
+  .trace-sub{font-size:11px; color:var(--text-low); margin-top:2px; line-height:1.4;}
+
+  .report-cta{
+    margin:16px; padding:11px; text-align:center;
+    background:var(--accent-dim); border:1px solid var(--accent);
+    border-radius:8px; font-size:12.5px; color:var(--accent);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">SQ</div>
+    <div class="brand-name">SatQuery AI</div>
+    <div class="brand-sub">SIH 2026 · PS 26167 · ISRO / NRSC</div>
+  </div>
+  <div class="header-right">
+    <div class="status-pill"><span class="dot"></span> Ground link active</div>
+    <div class="team-badge">CSM-A</div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT: query + history -->
+  <div class="panel">
+    <div class="section-label">Ask</div>
+    <div class="query-box">What changed between these two acquisitions?</div>
+    <div class="chip-row">
+      <span class="example-chip">Has this area flooded?</span>
+      <span class="example-chip">Detect built-up expansion</span>
+      <span class="example-chip">Fuse optical + SAR</span>
+    </div>
+    <div class="section-label">History</div>
+    <div class="history-item active">
+      Highlight the water in the above image
+      <div class="meta">Optical · <span class="conf-badge conf-high">70% conf</span></div>
+    </div>
+    <div class="history-item">
+      Compare these two time periods
+      <div class="meta">SAR + Optical · <span class="conf-badge conf-mid">54% conf</span></div>
+    </div>
+    <div class="history-item">
+      Detect building changes between these two
+      <div class="meta">Optical · <span class="conf-badge conf-high">88% conf</span></div>
+    </div>
+    <div class="history-item">
+      Analyze land cover, optical and SAR
+      <div class="meta">Fusion · <span class="conf-badge conf-mid">77% conf</span></div>
+    </div>
+  </div>
+
+  <!-- CENTER: map hero -->
+  <div class="panel map-hero">
+    <div class="map-toolbar">
+      <div class="toolbar-tabs">
+        <div class="tab active">Bi-temporal compare</div>
+        <div class="tab">True colour</div>
+        <div class="tab">NDVI</div>
+      </div>
+      <div class="toolbar-right">EPSG:4326 · 10.0 m/px · GeoTIFF</div>
+    </div>
+
+    <div class="compare-frame">
+      <div class="tile-before"></div>
+      <div class="tile-after"></div>
+      <div class="swipe-line"></div>
+      <div class="swipe-handle">↔</div>
+      <div class="frame-label label-before">T1 · 04 Aug 2026</div>
+      <div class="frame-label label-after">T2 · 11 Sep 2026</div>
+      <div class="evidence-badge" style="top:120px; left:190px; width:110px; height:80px;"></div>
+      <div class="evidence-tag" style="top:104px; left:190px;">water +14.8%</div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--water)"></span> Water</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--ndvi)"></span> Vegetation</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--thermal)"></span> Built-up</div>
+    </div>
+
+    <div class="metric-row">
+      <div class="metric-card"><div class="metric-label">Change detected</div><div class="metric-value up">+14.8%</div></div>
+      <div class="metric-card"><div class="metric-label">Confidence</div><div class="metric-value">92.4%</div></div>
+      <div class="metric-card"><div class="metric-label">AOI area</div><div class="metric-value">2,423 km²</div></div>
+      <div class="metric-card"><div class="metric-label">Hazard flag</div><div class="metric-value warn">Moderate</div></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: evidence / agent trace -->
+  <div class="panel">
+    <div class="section-label">Agent trace</div>
+    <div class="trace-step">
+      <div class="trace-dot"></div>
+      <div>
+        <div class="trace-title">Sensor intelligence</div>
+        <div class="trace-sub">modality: optical + SAR, res: 10.0 m/px</div>
+      </div>
+    </div>
+    <div class="trace-step">
+      <div class="trace-dot"></div>
+      <div>
+        <div class="trace-title">Task classification</div>
+        <div class="trace-sub">routed to CHANGE_DETECTION</div>
+      </div>
+    </div>
+    <div class="trace-step">
+      <div class="trace-dot"></div>
+      <div>
+        <div class="trace-title">Tool execution</div>
+        <div class="trace-sub">BIT change model · confidence 0.92</div>
+      </div>
+    </div>
+    <div class="trace-step">
+      <div class="trace-dot"></div>
+      <div>
+        <div class="trace-title">Evidence synthesis</div>
+        <div class="trace-sub">bbox grounded to raster CRS, cited</div>
+      </div>
+    </div>
+    <div class="trace-step">
+      <div class="trace-dot pending"></div>
+      <div>
+        <div class="trace-title" style="color:var(--text-low)">Answer verification</div>
+        <div class="trace-sub">checking claims against evidence…</div>
+      </div>
+    </div>
+    <div class="report-cta">Download evidence-backed PDF report</div>
+  </div>
+
+</div>
+
+</body>
+</html>

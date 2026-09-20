@@ -24,6 +24,7 @@ def create_user(
     hashed_password: str | None,
     auth_provider: str = "password",
     provider_subject: str | None = None,
+    is_verified: bool = False,
 ) -> User:
     user = User(
         id=str(uuid.uuid4()),
@@ -31,6 +32,7 @@ def create_user(
         hashed_password=hashed_password,
         auth_provider=auth_provider,
         provider_subject=provider_subject,
+        is_verified=is_verified,
     )
     session.add(user)
     try:
@@ -48,3 +50,9 @@ def get_user_by_email(session: Session, email: str) -> User | None:
 
 def get_user_by_id(session: Session, user_id: str) -> User | None:
     return session.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+
+
+def get_user_by_provider_subject(session: Session, provider_subject: str) -> User | None:
+    return session.execute(
+        select(User).where(User.provider_subject == provider_subject)
+    ).scalar_one_or_none()

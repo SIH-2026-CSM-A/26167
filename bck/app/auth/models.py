@@ -41,3 +41,18 @@ class User(Base):
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
+
+
+class RevokedToken(Base):
+    """A refresh token's jti that was explicitly revoked (via logout) before its natural expiry.
+
+    No FK to users: a revoked jti stays meaningful even if the user record is later removed.
+    # ponytail: rows accumulate forever (no cleanup job exists in this repo). Correctness never
+    # depends on cleanup since is_token_revoked filters expires_at > now(). If row count ever
+    # matters, add `DELETE FROM revoked_tokens WHERE expires_at < now()` as an ops task.
+    """
+
+    __tablename__ = "revoked_tokens"
+
+    jti: Mapped[str] = mapped_column(String(36), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

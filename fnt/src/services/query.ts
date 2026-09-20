@@ -1,4 +1,5 @@
 import type { Answer } from '@/types/contracts';
+import { authFetch } from '@/services/authFetch';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -45,7 +46,7 @@ export async function submitImageQuery(
     }
   });
 
-  const response = await fetch(`${API_BASE_URL}/query`, {
+  const response = await authFetch(`${API_BASE_URL}/query`, {
     method: 'POST',
     body: form,
   });

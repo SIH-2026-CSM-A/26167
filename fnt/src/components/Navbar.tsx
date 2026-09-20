@@ -47,7 +47,7 @@ export const Navbar: React.FC = () => {
         <div className="hidden md:flex items-center">
           <div className="flex items-center gap-2 rounded-full bg-emerald-950/50 border border-emerald-500/40 px-3 py-1 text-xs font-mono text-emerald-300">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Tailwind CSS Active</span>
+            <span>Ground link active</span>
           </div>
         </div>
       </div>

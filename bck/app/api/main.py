@@ -11,6 +11,8 @@ from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.api import auth as auth_routes
+from app.api import history as history_routes
+from app.api import oauth as oauth_routes
 from app.api.deps import get_current_user
 from app.auth import User
 from app.contracts import Answer, Modality
@@ -33,6 +35,8 @@ app.add_middleware(
 )
 
 app.include_router(auth_routes.router)
+app.include_router(oauth_routes.router)
+app.include_router(history_routes.router)
 
 
 @app.post("/query", response_model=Answer)
@@ -94,7 +98,13 @@ async def submit_query(
 
     model = getattr(request.app.state, "vqa_model", None)
     try:
-        return await run_in_threadpool(run, query=query, uploads=uploads, model=model)
+        return await run_in_threadpool(
+            run,
+            query=query,
+            uploads=uploads,
+            model=model,
+            user_id=_user.id if _user is not None else None,
+        )
     except PipelineError as error:
         raise HTTPException(
             status_code=error.status_code,

@@ -1,13 +1,22 @@
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import jwt
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
+from app.auth.db import get_sync_session
+from app.auth.models import Base
+from app.auth.revocation import revoke_token
 from app.auth.tokens import (
     InvalidTokenError,
     create_access_token,
     create_refresh_token,
     decode_token,
+    get_token_claims,
 )
 from app.core.config import get_settings
 
@@ -20,6 +29,24 @@ def _settings_env(monkeypatch):
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def sqlite_auth_db() -> Iterator[None]:
+    """Refresh-token decode checks revocation via a DB read — give it an in-memory SQLite
+    instead of the fake DATABASE_URL above, mirroring tests/api/test_auth.py's pattern.
+    """
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_maker = sessionmaker(bind=engine, expire_on_commit=False)
+    with patch("app.auth.db.get_sync_session_maker", return_value=session_maker):
+        yield
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 def test_access_token_round_trips():
@@ -63,3 +90,18 @@ def test_expired_token_rejected():
 def test_malformed_token_rejected():
     with pytest.raises(InvalidTokenError):
         decode_token("not-a-real-token", "access")
+
+
+def test_refresh_token_has_a_jti_claim():
+    token = create_refresh_token("user-1")
+    claims = get_token_claims(token, "refresh")
+    assert isinstance(claims["jti"], str) and claims["jti"]
+
+
+def test_revoked_refresh_token_is_rejected():
+    token = create_refresh_token("user-1")
+    claims = get_token_claims(token, "refresh")
+    with get_sync_session() as session:
+        revoke_token(session, claims["jti"], datetime.fromtimestamp(claims["exp"], UTC))
+    with pytest.raises(InvalidTokenError):
+        decode_token(token, "refresh")

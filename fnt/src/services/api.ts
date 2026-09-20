@@ -1,5 +1,6 @@
 import type { Answer, Modality } from '@/types/contracts';
 import { readErrorDetail } from '@/services/query';
+import { authFetch } from '@/services/authFetch';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
 const QUERY_TIMEOUT_MS = 180_000;
@@ -32,7 +33,7 @@ export async function submitQuery(options: SubmitQueryOptions): Promise<Answer> 
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/query`, {
+    response = await authFetch(`${API_BASE_URL}/query`, {
       method: 'POST',
       body: formData,
       signal: controller.signal,

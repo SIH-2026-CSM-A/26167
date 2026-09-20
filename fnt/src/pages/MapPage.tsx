@@ -74,11 +74,16 @@ const MapSidebar: React.FC<{
   selectedId: string | null;
   onSelect: (id: string | null) => void;
 }> = ({ filterType, onFilterChange, filteredItems, totalCount, selectedId, onSelect }) => (
-  <div className="lg:col-span-4 xl:col-span-3 flex flex-col h-[660px] rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-    <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+  <div
+    className="lg:col-span-4 xl:col-span-3 flex flex-col h-[660px] rounded-xl p-4"
+    style={{ background: 'var(--bg-1)', border: '1px solid var(--line)' }}
+  >
+    <div className="flex items-center justify-between pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
       <div className="flex items-center gap-2">
-        <Filter className="h-4 w-4 text-cyan-400" />
-        <span className="text-sm font-semibold text-white">Evidence Features</span>
+        <Filter className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+        <span className="text-sm font-semibold" style={{ color: 'var(--text-hi)' }}>
+          Evidence Features
+        </span>
       </div>
       <select
         value={filterType}
@@ -116,17 +121,30 @@ export const MapPage: React.FC = () => {
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Spatial Evidence & Map View</h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-400">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-hi)' }}>
+            Spatial Evidence &amp; Map View
+          </h1>
+          <p className="mt-1 text-xs sm:text-sm" style={{ color: 'var(--text-mid)' }}>
             Interactive MapLibre satellite viewport with vector masks, bounding boxes, and audit metadata.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300">
-            <Layers className="h-4 w-4 text-cyan-400" />
+          <div
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs"
+            style={{ border: '1px solid var(--line)', background: 'var(--bg-1)', color: 'var(--text-mid)' }}
+          >
+            <Layers className="h-4 w-4" style={{ color: 'var(--accent)' }} />
             <span>Active Layers: {evidenceList.length}</span>
           </div>
-          <div className="rounded-md border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-400 font-mono">
+          <div
+            className="rounded-md px-3 py-1.5 text-xs"
+            style={{
+              border: '1px solid var(--line)',
+              background: 'var(--bg-1)',
+              color: 'var(--text-low)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
             CRS: EPSG:4326
           </div>
         </div>

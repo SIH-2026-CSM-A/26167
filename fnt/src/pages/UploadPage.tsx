@@ -134,10 +134,17 @@ export const UploadPage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+      <div
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4"
+        style={{ borderBottom: '1px solid var(--line)' }}
+      >
         <div>
-          <h1 className="text-xl font-bold text-slate-100">Satellite Imagery Query</h1>
-          <p className="text-xs text-slate-400 mt-1">Multi-modal earth observation query and analysis pipeline</p>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--text-hi)' }}>
+            Satellite Imagery Query
+          </h1>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-mid)' }}>
+            Multi-modal earth observation query and analysis pipeline
+          </p>
         </div>
 
         <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-lg shrink-0">

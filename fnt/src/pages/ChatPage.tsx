@@ -4,7 +4,39 @@ import { useSatQuery } from '@/hooks/useSatQuery';
 import { ChatMessageItem } from '@/components/Chat/ChatMessageItem';
 import { ChatInput } from '@/components/Chat/ChatInput';
 import { EvidenceMap } from '@/components/Map/EvidenceMap';
-import type { ChatMessage, Modality } from '@/types/contracts';
+import { TracePanel } from '@/components/Trace/TracePanel';
+import { HistoryPanel } from '@/components/History/HistoryPanel';
+import { Legend } from '@/components/Console/Legend';
+import { MetricCard } from '@/components/Console/MetricCard';
+import type { Answer, ChatMessage, Modality, StatsPayload } from '@/types/contracts';
+
+/* Only ever renders numbers that trace back to a real evidence-schema entry — never a
+ * fabricated figure (e.g. the mockup's static "Hazard flag" has no backing evidence source
+ * and is intentionally left out here). */
+const MapHeroMetrics: React.FC<{ answer: Answer | null }> = ({ answer }) => {
+  if (answer === null) return null;
+  const statsEvidence = answer.evidence.find((item) => item.type === 'stats');
+  const stats = statsEvidence?.payload as StatsPayload | undefined;
+
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <Legend />
+      <div className="flex gap-3">
+        {typeof stats?.change_percent === 'number' && (
+          <MetricCard
+            label="Change detected"
+            value={`${stats.change_percent > 0 ? '+' : ''}${stats.change_percent.toFixed(1)}%`}
+            tone={stats.change_percent >= 0 ? 'up' : 'default'}
+          />
+        )}
+        <MetricCard label="Confidence" value={`${(answer.confidence * 100).toFixed(1)}%`} />
+        {typeof stats?.area_sqkm === 'number' && (
+          <MetricCard label="AOI area" value={`${stats.area_sqkm.toLocaleString()} km²`} />
+        )}
+      </div>
+    </div>
+  );
+};
 
 const EmptyChatNotice: React.FC = () => (
   <div className="flex items-start gap-3">
@@ -41,7 +73,7 @@ const ChatConversationPane: React.FC<{
 }) => (
   <div
     className={`flex flex-col h-[640px] rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden ${
-      isMapVisible ? 'lg:col-span-6 xl:col-span-5' : 'lg:col-span-12'
+      isMapVisible ? 'lg:col-span-4' : 'lg:col-span-9'
     }`}
   >
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
@@ -132,6 +164,7 @@ const ChatErrorBanner: React.FC<{
 export const ChatPage: React.FC = () => {
   const {
     messages,
+    currentAnswer,
     evidenceList,
     selectedEvidenceId,
     hoveredEvidenceId,
@@ -181,17 +214,31 @@ export const ChatPage: React.FC = () => {
           isMapVisible={isMapVisible}
         />
         {isMapVisible && (
-          <div className="lg:col-span-6 xl:col-span-7 h-[640px]">
-            <EvidenceMap
-              evidenceList={evidenceList}
-              selectedEvidenceId={selectedEvidenceId}
-              hoveredEvidenceId={hoveredEvidenceId}
-              onSelectEvidence={selectEvidence}
-              onHoverEvidence={hoverEvidence}
-              className="h-full w-full"
-            />
+          <div className="lg:col-span-5 flex h-[640px] flex-col">
+            <div className="flex-1 min-h-0">
+              <EvidenceMap
+                evidenceList={evidenceList}
+                selectedEvidenceId={selectedEvidenceId}
+                hoveredEvidenceId={hoveredEvidenceId}
+                onSelectEvidence={selectEvidence}
+                onHoverEvidence={hoverEvidence}
+                className="h-full w-full"
+              />
+            </div>
+            <MapHeroMetrics answer={currentAnswer} />
           </div>
         )}
+        <div
+          className="lg:col-span-3 flex h-[640px] flex-col overflow-hidden rounded-xl"
+          style={{ background: 'var(--bg-1)', border: '1px solid var(--line)' }}
+        >
+          <div className="flex-1 overflow-hidden border-b" style={{ borderColor: 'var(--line)' }}>
+            <TracePanel answer={currentAnswer} onSelectEvidence={selectEvidence} />
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <HistoryPanel refreshKey={currentAnswer} />
+          </div>
+        </div>
       </div>
     </main>
   );

@@ -115,6 +115,25 @@ def test_logout_clears_cookie():
     assert client.cookies.get("refresh_token") is None
 
 
+def test_logout_revokes_the_refresh_token():
+    _register(email="revoke@example.com", password="correct-horse-battery")
+    refresh_cookie = client.cookies.get("refresh_token")
+    logout_response = client.post("/auth/logout")
+    assert logout_response.status_code == 204
+    # Re-attach the pre-logout cookie value directly (the client's own cookie jar was just
+    # cleared by the Set-Cookie on logout) to prove the token itself, not just the cookie,
+    # is now invalid server-side.
+    response = client.post("/auth/refresh", cookies={"refresh_token": refresh_cookie})
+    assert response.status_code == 401
+    assert response.json()["detail"]["reason_code"] == "INVALID_REFRESH_TOKEN"
+
+
+def test_double_logout_does_not_crash():
+    _register(email="double-logout@example.com", password="correct-horse-battery")
+    assert client.post("/auth/logout").status_code == 204
+    assert client.post("/auth/logout").status_code == 204
+
+
 def test_me_with_valid_token_returns_user():
     body = _register(email="me@example.com", password="correct-horse-battery")
     response = client.get("/auth/me", headers={"Authorization": f"Bearer {body['access_token']}"})
