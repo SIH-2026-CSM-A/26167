@@ -1,7 +1,21 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { UploadPage } from '@/pages/UploadPage';
+import { SatQueryProvider } from '@/context/SatQueryProvider';
+
+// QueryResultCard's "View on map" action needs SatQueryProvider (loadAnswer) and a router
+// (useNavigate) — both always present in the real app (see App.tsx), absent only here.
+function renderUploadPage() {
+  return render(
+    <MemoryRouter>
+      <SatQueryProvider>
+        <UploadPage />
+      </SatQueryProvider>
+    </MemoryRouter>
+  );
+}
 
 const successfulAnswer = {
   text: 'A river is visible in the satellite scene.',
@@ -46,7 +60,7 @@ afterEach(() => {
 
 test('renders LIKI-002 multi-slot upload structure and configuration modes', async () => {
   const user = userEvent.setup();
-  render(<UploadPage />);
+  renderUploadPage();
 
   expect(screen.getByText('Satellite Imagery Query')).toBeInTheDocument();
   expect(screen.getByText('Pipeline Configuration')).toBeInTheDocument();
@@ -69,7 +83,7 @@ test('submits single-image GeoTIFF and question and renders pipeline result', as
   );
   vi.stubGlobal('fetch', fetchSpy);
   const user = userEvent.setup();
-  const { container } = render(<UploadPage />);
+  const { container } = renderUploadPage();
 
   const file = new File(['raster data'], 'scene.tif', { type: 'image/tiff' });
   const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -105,7 +119,7 @@ test('renders backend error when query fails', async () => {
     ),
   );
   const user = userEvent.setup();
-  const { container } = render(<UploadPage />);
+  const { container } = renderUploadPage();
 
   const file = new File(['broken'], 'broken.tif', { type: 'image/tiff' });
   const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -129,7 +143,7 @@ test('submits cross-modal optical and SAR imagery with both modalities', async (
   );
   vi.stubGlobal('fetch', fetchSpy);
   const user = userEvent.setup();
-  const { container } = render(<UploadPage />);
+  const { container } = renderUploadPage();
 
   await user.click(screen.getByRole('button', { name: /Cross-Modal Pair/i }));
 
@@ -167,7 +181,7 @@ test('submits bi-temporal pair with capture_order in slot order', async () => {
   );
   vi.stubGlobal('fetch', fetchSpy);
   const user = userEvent.setup();
-  const { container } = render(<UploadPage />);
+  const { container } = renderUploadPage();
 
   await user.click(screen.getByRole('button', { name: /Bi-Temporal Pair/i }));
 
@@ -218,7 +232,7 @@ test('MODALITY_UNKNOWN veto surfaces clarification, then resubmit with explicit 
     );
   vi.stubGlobal('fetch', fetchSpy);
   const user = userEvent.setup();
-  const { container } = render(<UploadPage />);
+  const { container } = renderUploadPage();
 
   const file = new File(['raster data'], 'scene.tif', { type: 'image/tiff' });
   const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
