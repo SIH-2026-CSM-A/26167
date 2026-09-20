@@ -110,13 +110,16 @@ export const DemoPresetSelector: React.FC<DemoPresetSelectorProps> = ({
               }`}
               style={
                 isSelected
-                  ? { borderColor: 'var(--accent)', background: 'var(--accent-dim)', color: 'var(--text-hi)' }
+                  ? { borderColor: 'var(--accent)', background: 'var(--bg-2)', color: 'var(--text-hi)' }
                   : { borderColor: 'var(--line)', background: 'var(--bg-2)', color: 'var(--text-mid)' }
               }
             >
               <div>
                 <div className="mb-1 flex items-center justify-between gap-1.5">
-                  <span className="truncate text-xs font-semibold" style={{ color: 'var(--text-hi)' }}>
+                  <span
+                    className="truncate text-xs font-semibold"
+                    style={{ color: isSelected ? 'var(--accent)' : 'var(--text-hi)' }}
+                  >
                     {preset.label}
                   </span>
                   <span
@@ -148,7 +151,7 @@ export const DemoPresetSelector: React.FC<DemoPresetSelectorProps> = ({
                     Loading files...
                   </span>
                 ) : isSelected ? (
-                  <span className="font-medium" style={{ color: '#8fc79e' }}>Active</span>
+                  <span className="font-medium" style={{ color: 'var(--accent)' }}>Active</span>
                 ) : (
                   <span>Select preset</span>
                 )}

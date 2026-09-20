@@ -51,11 +51,11 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
               className={`text-left p-3.5 rounded-lg border transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
               style={
                 isSelected
-                  ? { borderColor: 'var(--accent)', background: 'var(--accent-dim)', color: 'var(--text-hi)' }
+                  ? { borderColor: 'var(--accent)', background: 'var(--bg-2)', color: 'var(--text-hi)' }
                   : { borderColor: 'var(--line)', background: 'var(--bg-2)', color: 'var(--text-mid)' }
               }
             >
-              <div className="font-medium text-sm" style={{ color: 'var(--text-hi)' }}>
+              <div className="font-medium text-sm" style={{ color: isSelected ? 'var(--accent)' : 'var(--text-hi)' }}>
                 {opt.label}
               </div>
               <div className="text-xs mt-1 leading-snug" style={{ color: 'var(--text-low)' }}>
