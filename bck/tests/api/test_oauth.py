@@ -44,7 +44,8 @@ def google_configured(monkeypatch):
 
 def _mock_oauth_client(userinfo: dict) -> MagicMock:
     instance = MagicMock()
-    instance.create_authorization_url.return_value = ("https://accounts.google.com/o/oauth2/v2/auth?state=abc", "abc")
+    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?state=abc"
+    instance.create_authorization_url.return_value = (auth_url, "abc")
     instance.fetch_token = AsyncMock(return_value={"access_token": "provider-access-token"})
     instance.get = AsyncMock(return_value=MagicMock(json=lambda: userinfo))
     return instance
@@ -78,7 +79,8 @@ def test_google_login_redirects_to_google_when_configured(google_configured):
 
 
 def test_google_callback_creates_user_and_issues_tokens(google_configured):
-    mock_client = _mock_oauth_client({"email": "new-google-user@example.com", "sub": "google-sub-1"})
+    userinfo = {"email": "new-google-user@example.com", "sub": "google-sub-1"}
+    mock_client = _mock_oauth_client(userinfo)
     client.cookies.set("google_oauth_state", "abc")
     with patch("app.api.oauth.AsyncOAuth2Client", return_value=mock_client):
         response = client.get("/auth/google/callback", params={"code": "abc123", "state": "abc"})
@@ -89,7 +91,8 @@ def test_google_callback_creates_user_and_issues_tokens(google_configured):
 
 def test_google_callback_state_mismatch_is_401(google_configured):
     client.cookies.set("google_oauth_state", "expected-state")
-    response = client.get("/auth/google/callback", params={"code": "abc123", "state": "wrong-state"})
+    params = {"code": "abc123", "state": "wrong-state"}
+    response = client.get("/auth/google/callback", params=params)
     assert response.status_code == 401
     assert response.json()["detail"]["reason_code"] == "OAUTH_STATE_MISMATCH"
 
