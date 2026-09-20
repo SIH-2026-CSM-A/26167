@@ -132,7 +132,7 @@ export const ChatPage: React.FC = () => {
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="relative h-[720px]">
+        <div className="relative h-[720px] overflow-hidden rounded-xl">
           <MapHero
             evidenceList={evidenceList}
             selectedEvidenceId={selectedEvidenceId}
