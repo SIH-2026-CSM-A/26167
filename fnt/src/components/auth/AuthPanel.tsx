@@ -11,7 +11,7 @@ export const AuthPanel: React.FC = () => {
 
   return (
     <div
-      className="w-full max-w-md rounded-xl p-10"
+      className="w-full max-w-md rounded-xl p-10 shadow-2xl"
       style={{ background: 'var(--bg-1)', border: '1px solid var(--line)' }}
     >
       <div

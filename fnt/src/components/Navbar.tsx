@@ -10,15 +10,26 @@ export const Navbar: React.FC = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur-md">
+    <header
+      className="sticky top-0 z-50 w-full backdrop-blur-md"
+      style={{ borderBottom: '1px solid var(--line)', background: 'rgba(17,18,16,0.85)' }}
+    >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-600/20 text-cyan-400 border border-cyan-500/30">
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-lg"
+            style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+          >
             <Satellite className="h-5 w-5" />
           </div>
           <div>
-            <span className="text-lg font-bold tracking-tight text-white">SatQuery AI</span>
-            <span className="ml-2 hidden text-xs font-medium text-slate-400 sm:inline">
+            <span style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-display)' }} className="text-lg">
+              SatQuery AI
+            </span>
+            <span
+              className="ml-2 hidden text-xs font-medium sm:inline"
+              style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+            >
               SIH26167
             </span>
           </div>
@@ -30,12 +41,11 @@ export const Navbar: React.FC = () => {
               key={to}
               to={to}
               aria-label={label}
-              className={({ isActive }) =>
-                `flex items-center gap-2 rounded-md p-2 text-sm font-medium transition-colors sm:px-3 ${
-                  isActive
-                    ? 'bg-cyan-600/15 text-cyan-400 border border-cyan-500/30'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`
+              className="flex items-center gap-2 rounded-md p-2 text-sm font-medium transition-colors sm:px-3"
+              style={({ isActive }) =>
+                isActive
+                  ? { background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent)' }
+                  : { color: 'var(--text-mid)', border: '1px solid transparent' }
               }
             >
               <Icon className="h-4 w-4" />
@@ -45,8 +55,16 @@ export const Navbar: React.FC = () => {
         </nav>
 
         <div className="hidden md:flex items-center">
-          <div className="flex items-center gap-2 rounded-full bg-emerald-950/50 border border-emerald-500/40 px-3 py-1 text-xs font-mono text-emerald-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+          <div
+            className="flex items-center gap-2 rounded-full px-3 py-1 text-xs"
+            style={{
+              background: 'var(--ndvi-fill)',
+              border: '1px solid var(--ndvi)',
+              color: 'var(--ndvi)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--ndvi)' }} />
             <span>Ground link active</span>
           </div>
         </div>
@@ -54,3 +72,5 @@ export const Navbar: React.FC = () => {
     </header>
   );
 };
+
+export default Navbar;
