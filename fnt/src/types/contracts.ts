@@ -84,6 +84,15 @@ export interface Answer {
   abstention_reason: string | null;
 }
 
+export interface QueryHistoryItem {
+  id: number;
+  query_text: string;
+  answer_text: string;
+  confidence: number;
+  modality: string;
+  created_at: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
