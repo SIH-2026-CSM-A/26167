@@ -1,24 +1,14 @@
 import React from 'react';
 import { AuthPanel } from '@/components/auth/AuthPanel';
+import { PageBackdrop } from '@/components/PageBackdrop';
 
-/* Full-bleed Earth photo: NASA Earth Observatory "Night Lights 2012 Map" (Suomi NPP/VIIRS
- * day-night band composite) — public domain, U.S. government work.
- * Source: https://eoimages.gsfc.nasa.gov/images/imagerecords/79000/79765/dnb_land_ocean_ice.2012.3600x1800.jpg
- *
- * The navbar is hidden on this route (see App.tsx) so this covers the entire viewport edge
- * to edge; the auth card floats centered on top of it via absolute positioning, not a
- * layout column. */
+/* The navbar is hidden on this route (see App.tsx) so the photo covers the entire viewport
+ * edge to edge; the auth card floats centered on top of it via absolute positioning, not a
+ * layout column. No dimming scrim — the auth card's own solid background carries its own
+ * legibility. */
 export const LoginPage: React.FC = () => (
   <div className="fixed inset-0">
-    <div
-      className="absolute inset-0"
-      style={{
-        backgroundImage: 'url(/assets/earth-night-lights.jpg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }}
-    />
-    <div className="absolute inset-0" style={{ background: 'rgba(13,14,12,0.55)' }} />
+    <PageBackdrop />
 
     <div
       className="absolute bottom-6 left-6 text-xs tracking-wide"

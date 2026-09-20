@@ -9,9 +9,16 @@
    pixel sampling, not guessed.
 */
 :root {
+  /* Panels (--bg-1/--bg-2, used as solid card/panel backgrounds throughout) are mixed down
+     from this single opacity knob — default 1 (fully solid, current look unchanged). Turning
+     it down lets full-bleed page photos (ChatPage/UploadPage/LoginPage) show faintly through
+     every panel at once, without touching any component. */
+  --panel-bg-opacity: 1;
   --bg-0: #0d0e0c;
-  --bg-1: #111210;
-  --bg-2: #17181a;
+  --bg-1-solid: #111210;
+  --bg-2-solid: #17181a;
+  --bg-1: color-mix(in srgb, var(--bg-1-solid) calc(var(--panel-bg-opacity) * 100%), transparent);
+  --bg-2: color-mix(in srgb, var(--bg-2-solid) calc(var(--panel-bg-opacity) * 100%), transparent);
   --bg-3: #1e201f;
 
   --line: #2a2b28;

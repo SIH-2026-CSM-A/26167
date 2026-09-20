@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PageBackdrop } from '@/components/PageBackdrop';
 import { ConfigSelector, PipelineConfigMode } from '../components/Upload/ConfigSelector';
 import { DemoPresetSelector } from '../components/DemoPresetSelector';
 import { SlotUploader, SlotModality } from '../components/Upload/SlotUploader';
@@ -133,7 +134,9 @@ export const UploadPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
+    <>
+      <PageBackdrop />
+      <div className="relative max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
       <div
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4"
         style={{ borderBottom: '1px solid var(--line)' }}
@@ -252,6 +255,7 @@ export const UploadPage: React.FC = () => {
       )}
 
       {result && <QueryResultCard answer={result} />}
-    </div>
+      </div>
+    </>
   );
 };

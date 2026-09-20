@@ -6,6 +6,7 @@ import { ChatInput } from '@/components/Chat/ChatInput';
 import { MapHero } from '@/components/Map/MapHero';
 import type { EvidenceMapHandle } from '@/components/Map/EvidenceMap';
 import { ConsoleRail } from '@/components/Console/ConsoleRail';
+import { PageBackdrop } from '@/components/PageBackdrop';
 import type { ChatMessage } from '@/types/contracts';
 
 const EmptyChatNotice: React.FC = () => (
@@ -84,7 +85,9 @@ export const ChatPage: React.FC = () => {
       .find((value): value is string => typeof value === 'string') ?? null;
 
   return (
-    <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
+    <>
+      <PageBackdrop />
+      <main className="relative mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1
@@ -172,7 +175,8 @@ export const ChatPage: React.FC = () => {
           <ChatInput onSubmit={submitUserQuery} isLoading={isLoading} />
         </div>
       </div>
-    </main>
+      </main>
+    </>
   );
 };
 
