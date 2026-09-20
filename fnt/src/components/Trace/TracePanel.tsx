@@ -6,9 +6,12 @@ import { downloadEvidencePdf } from '@/services/api';
 export interface TracePanelProps {
   answer: Answer | null;
   onSelectEvidence?: (id: string) => void;
+  /** console-v2: the PDF action lives inline under the relevant chat turn instead;
+   * the rail's copy of this panel hides its own button to avoid a duplicate CTA. */
+  showDownload?: boolean;
 }
 
-export const TracePanel: React.FC<TracePanelProps> = ({ answer, onSelectEvidence }) => {
+export const TracePanel: React.FC<TracePanelProps> = ({ answer, onSelectEvidence, showDownload = true }) => {
   const [isDownloading, setIsDownloading] = useState(false);
 
   const handleDownload = async () => {
@@ -49,21 +52,23 @@ export const TracePanel: React.FC<TracePanelProps> = ({ answer, onSelectEvidence
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => {
-          void handleDownload();
-        }}
-        disabled={answer === null || isDownloading}
-        className="m-4 rounded-lg py-2.5 text-center text-[12.5px] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
-        style={{
-          background: 'var(--accent-dim)',
-          border: '1px solid var(--accent)',
-          color: 'var(--accent)',
-        }}
-      >
-        {isDownloading ? 'Generating PDF…' : 'Download evidence-backed PDF report'}
-      </button>
+      {showDownload && (
+        <button
+          type="button"
+          onClick={() => {
+            void handleDownload();
+          }}
+          disabled={answer === null || isDownloading}
+          className="m-4 rounded-lg py-2.5 text-center text-[12.5px] font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+          style={{
+            background: 'var(--accent-dim)',
+            border: '1px solid var(--accent)',
+            color: 'var(--accent)',
+          }}
+        >
+          {isDownloading ? 'Generating PDF…' : 'Download evidence-backed PDF report'}
+        </button>
+      )}
     </div>
   );
 };

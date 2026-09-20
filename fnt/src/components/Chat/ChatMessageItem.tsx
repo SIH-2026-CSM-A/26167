@@ -1,10 +1,8 @@
-import React from 'react';
-import { Bot, User, Layers } from 'lucide-react';
-import type { ChatMessage, Answer } from '@/types/contracts';
+import React, { useState } from 'react';
+import type { ChatMessage, Answer, StatsPayload } from '@/types/contracts';
 import { CitationText } from './CitationText';
 import { CitationChip } from './CitationChip';
-import { ConfidenceBadge } from './ConfidenceBadge';
-import { ExecutionTracePanel } from '@/components/Trace/ExecutionTracePanel';
+import { downloadEvidencePdf } from '@/services/api';
 
 export interface ChatMessageItemProps {
   message: ChatMessage;
@@ -14,16 +12,96 @@ export interface ChatMessageItemProps {
   onHoverEvidence?: (id: string | null) => void;
 }
 
-const UserBubble: React.FC<{ content: string }> = ({ content }) => (
-  <div className="flex items-start gap-3 justify-end">
-    <div className="rounded-2xl rounded-tr-none bg-cyan-600 px-4 py-3 text-sm text-white max-w-xl shadow-lg shadow-cyan-950/30">
-      <p className="whitespace-pre-wrap">{content}</p>
-    </div>
-    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-800 text-white shadow">
-      <User className="h-4 w-4" />
-    </div>
+const ObserverTurn: React.FC<{ content: string }> = ({ content }) => (
+  <div className="flex flex-col items-end gap-1 text-right">
+    <span
+      className="text-[10px] font-medium uppercase tracking-widest"
+      style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+    >
+      Observer
+    </span>
+    <p className="max-w-xl whitespace-pre-wrap italic" style={{ color: 'var(--observer)', fontFamily: 'var(--font-sans)' }}>
+      {content}
+    </p>
   </div>
 );
+
+/* Only ever renders numbers that trace back to a real evidence-schema entry — never a
+ * fabricated figure. Matches exactly what the old MapHeroMetrics metric-card row showed
+ * (confidence / change / AOI area); modality and hazard flag have no backing evidence
+ * source today and are deliberately left out, same as that component's own rule. */
+const EvidenceMetadataGrid: React.FC<{ answer: Answer }> = ({ answer }) => {
+  const statsEvidence = answer.evidence.find((item) => item.type === 'stats');
+  const stats = statsEvidence?.payload as StatsPayload | undefined;
+
+  const fields: { label: string; value: string }[] = [
+    { label: 'Confidence', value: `${(answer.confidence * 100).toFixed(1)}%` },
+  ];
+  if (typeof stats?.change_percent === 'number') {
+    fields.push({
+      label: 'Change',
+      value: `${stats.change_percent > 0 ? '+' : ''}${stats.change_percent.toFixed(1)}%`,
+    });
+  }
+  if (typeof stats?.area_sqkm === 'number') {
+    fields.push({ label: 'AOI area', value: `${stats.area_sqkm.toLocaleString()} km²` });
+  }
+  if (fields.length === 0) return null;
+
+  return (
+    <div
+      className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg px-3.5 py-3 text-xs"
+      style={{ border: '1px solid var(--line)', background: 'var(--bg-2)' }}
+    >
+      {fields.map((field) => (
+        <div key={field.label}>
+          <div
+            className="text-[10px] uppercase tracking-wide"
+            style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+          >
+            {field.label}
+          </div>
+          <div className="mt-0.5" style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-mono)' }}>
+            {field.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/* Condenses TracePanel/ExecutionTracePanel's real step data into a short inline sequence —
+ * the underlying step data isn't discarded, just displayed differently here. */
+const InlineTraceSequence: React.FC<{ answer: Answer }> = ({ answer }) => {
+  if (answer.trace.steps.length === 0) return null;
+  const parts = answer.trace.steps.map((step) => {
+    const confidence = step.confidence !== null ? ` ${(step.confidence * 100).toFixed(0)}%` : '';
+    return `${step.module}/${step.action}${confidence}`;
+  });
+  return (
+    <p className="text-[11px]" style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}>
+      Processing. {parts.join(' → ')}.
+    </p>
+  );
+};
+
+const DownloadReportAction: React.FC<{ answer: Answer }> = ({ answer }) => {
+  const [isDownloading, setIsDownloading] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setIsDownloading(true);
+        void downloadEvidencePdf(answer).finally(() => setIsDownloading(false));
+      }}
+      disabled={isDownloading}
+      className="self-start text-[11px] font-medium uppercase tracking-wide transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+      style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}
+    >
+      {isDownloading ? 'Generating PDF…' : 'Download evidence report ↓'}
+    </button>
+  );
+};
 
 const GroundedEvidenceRibbon: React.FC<{
   answer: Answer;
@@ -34,9 +112,11 @@ const GroundedEvidenceRibbon: React.FC<{
 }> = ({ answer, selectedId, hoveredId, onSelect, onHover }) => {
   if (!answer.evidence.length) return null;
   return (
-    <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2 flex-wrap text-xs">
-      <span className="flex items-center gap-1 text-slate-400 font-medium">
-        <Layers className="h-3 w-3 text-cyan-400" />
+    <div className="flex flex-wrap items-center gap-2 pt-2 text-xs" style={{ borderTop: '1px solid var(--line)' }}>
+      <span
+        className="font-medium"
+        style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+      >
         Citations:
       </span>
       {answer.evidence.map((ev) => (
@@ -54,7 +134,7 @@ const GroundedEvidenceRibbon: React.FC<{
   );
 };
 
-const AssistantBubble: React.FC<{
+const IntelligenceTurn: React.FC<{
   content: string;
   answer?: Answer;
   selectedId: string | null;
@@ -62,44 +142,35 @@ const AssistantBubble: React.FC<{
   onSelect: (id: string) => void;
   onHover?: (id: string | null) => void;
 }> = ({ content, answer, selectedId, hoveredId, onSelect, onHover }) => (
-  <div className="flex items-start gap-3">
-    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-600/20 text-cyan-400 border border-cyan-500/30 shadow">
-      <Bot className="h-4 w-4" />
+  <div className="flex flex-col gap-3">
+    <span
+      className="text-[10px] font-medium uppercase tracking-widest"
+      style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+    >
+      Intelligence
+    </span>
+    <div style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-sans)' }}>
+      <CitationText
+        text={content}
+        evidenceList={answer?.evidence ?? []}
+        selectedEvidenceId={selectedId}
+        hoveredEvidenceId={hoveredId}
+        onSelectEvidence={onSelect}
+        onHoverEvidence={onHover}
+      />
     </div>
-    <div className="flex-1 space-y-3 max-w-3xl">
-      <div className="rounded-2xl rounded-tl-none border border-slate-800 bg-slate-900/90 p-4 text-sm text-slate-200 shadow-xl space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-800">
-          <span className="font-semibold text-white">SatQuery Assistant</span>
-          {answer && (
-            <ConfidenceBadge
-              confidence={answer.confidence}
-              abstained={answer.abstained}
-              abstentionReason={answer.abstention_reason}
-            />
-          )}
-        </div>
-        <div className="text-slate-200">
-          <CitationText
-            text={content}
-            evidenceList={answer?.evidence ?? []}
-            selectedEvidenceId={selectedId}
-            hoveredEvidenceId={hoveredId}
-            onSelectEvidence={onSelect}
-            onHoverEvidence={onHover}
-          />
-        </div>
-        {answer && (
-          <GroundedEvidenceRibbon
-            answer={answer}
-            selectedId={selectedId}
-            hoveredId={hoveredId}
-            onSelect={onSelect}
-            onHover={onHover}
-          />
-        )}
-      </div>
-      {answer?.trace && <ExecutionTracePanel trace={answer.trace} onSelectEvidence={onSelect} />}
-    </div>
+    {answer && <InlineTraceSequence answer={answer} />}
+    {answer && <EvidenceMetadataGrid answer={answer} />}
+    {answer && (
+      <GroundedEvidenceRibbon
+        answer={answer}
+        selectedId={selectedId}
+        hoveredId={hoveredId}
+        onSelect={onSelect}
+        onHover={onHover}
+      />
+    )}
+    {answer && <DownloadReportAction answer={answer} />}
   </div>
 );
 
@@ -111,10 +182,10 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   onHoverEvidence,
 }) => {
   if (message.role === 'user') {
-    return <UserBubble content={message.content} />;
+    return <ObserverTurn content={message.content} />;
   }
   return (
-    <AssistantBubble
+    <IntelligenceTurn
       content={message.content}
       answer={message.answer}
       selectedId={selectedEvidenceId}
