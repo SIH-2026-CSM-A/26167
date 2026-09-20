@@ -1,0 +1,32 @@
+/* Central design tokens — the single source both the login page and workspace pages import.
+   SEMANTIC COLOR RULE: --ndvi/--water/--thermal are data-meaning colors only (satellite
+   analysis categories), never decorative or interactive. --accent is the only interactive
+   color (buttons, links, focus rings). Do not reuse the data colors as UI accents.
+*/
+:root {
+  --bg-0: #0a0e12;
+  --bg-1: #0f151b;
+  --bg-2: #141c24;
+  --bg-3: #1a2530;
+
+  --line: #233040;
+  --line-soft: #1b2733;
+
+  --text-hi: #e8edf2;
+  --text-mid: #9aacbc;
+  --text-low: #5e6e7d;
+
+  --ndvi: #4a7c59;
+  --ndvi-fill: rgba(74, 124, 89, 0.18);
+  --water: #2c6e8e;
+  --water-fill: rgba(44, 110, 142, 0.22);
+  --thermal: #c77b3a;
+  --thermal-fill: rgba(199, 123, 58, 0.16);
+
+  --accent: #3ddbd9;
+  --accent-dim: rgba(61, 219, 217, 0.14);
+  --danger: #d2574b;
+
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+}
