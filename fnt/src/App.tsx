@@ -3,7 +3,6 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
 import { UploadPage } from '@/pages/UploadPage';
 import { ChatPage } from '@/pages/ChatPage';
-import { MapPage } from '@/pages/MapPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { OAuthCallbackPage } from '@/pages/OAuthCallbackPage';
 import { SatQueryProvider } from '@/context/SatQueryProvider';
@@ -44,14 +43,6 @@ export const App: React.FC = () => {
                 element={
                   <ProtectedRoute>
                     <ChatPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/map"
-                element={
-                  <ProtectedRoute>
-                    <MapPage />
                   </ProtectedRoute>
                 }
               />

@@ -1,12 +1,11 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Upload, MessageSquare, MapPin, Satellite } from 'lucide-react';
+import { Upload, MessageSquare, Satellite } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const navItems = [
     { to: '/upload', label: 'Upload', icon: Upload },
     { to: '/chat', label: 'Chat & VQA', icon: MessageSquare },
-    { to: '/map', label: 'Map View', icon: MapPin },
   ];
 
   return (
