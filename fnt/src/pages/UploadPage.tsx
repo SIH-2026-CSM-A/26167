@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { PageBackdrop } from '@/components/PageBackdrop';
+import React, { Suspense, lazy, useState } from 'react';
 import { PhotoLabel } from '@/components/PhotoLabel';
 import { ConfigSelector, PipelineConfigMode } from '../components/Upload/ConfigSelector';
 import { DemoPresetSelector } from '../components/DemoPresetSelector';
@@ -8,6 +7,12 @@ import { QueryResultCard } from '../components/Upload/QueryResultCard';
 import { submitImageQuery, QueryApiError } from '@/services/query';
 import type { Answer, Modality } from '../types/contracts';
 import type { PresetApplyPayload, PresetSlotData } from '../types/manifest';
+
+// three.js (and the sphere/texture it loads) is only ever needed on this one page — code-split
+// it into its own chunk instead of paying for it on every route's initial load.
+const RotatingEarthBackdrop = lazy(() =>
+  import('@/components/RotatingEarthBackdrop').then((m) => ({ default: m.RotatingEarthBackdrop }))
+);
 
 export type UploadSourceMode = 'manual' | 'preset';
 
@@ -136,7 +141,9 @@ export const UploadPage: React.FC = () => {
 
   return (
     <>
-      <PageBackdrop />
+      <Suspense fallback={null}>
+        <RotatingEarthBackdrop />
+      </Suspense>
       <div className="relative max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
       <div
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4"
