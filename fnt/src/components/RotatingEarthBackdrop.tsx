@@ -35,8 +35,26 @@ function createStarSpriteTexture(): THREE.Texture {
   return texture;
 }
 
-function randomPointOnSphereShell(radius: number): [number, number, number] {
-  // Marsaglia method — uniform points on a sphere shell.
+/** A larger, softer, tinted blob — for a faint nebula/Milky-Way haze, not a pinpoint star. */
+function createHazeSpriteTexture(color: string): THREE.Texture {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, `${color}aa`);
+  gradient.addColorStop(0.5, `${color}44`);
+  gradient.addColorStop(1, `${color}00`);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function randomUnitVector(): [number, number, number] {
+  // Marsaglia method — uniform points on a unit sphere.
   let x = 0;
   let y = 0;
   let s = 2;
@@ -46,37 +64,144 @@ function randomPointOnSphereShell(radius: number): [number, number, number] {
     s = x * x + y * y;
   }
   const factor = 2 * Math.sqrt(1 - s);
-  return [x * factor * radius, y * factor * radius, (1 - 2 * s) * radius];
+  return [x * factor, y * factor, 1 - 2 * s];
 }
 
-// Three size/brightness tiers (mostly small+dim, a few bright+larger) rather than one uniform
-// PointsMaterial for every star — real starfields vary; a single size/opacity read as
-// mechanically generated next to the photographic Earth texture (hallmark audit finding).
-const STAR_TIERS: { count: number; size: number; opacity: number }[] = [
-  { count: 420, size: 0.14, opacity: 0.5 },
-  { count: 150, size: 0.22, opacity: 0.75 },
-  { count: 30, size: 0.34, opacity: 1 },
+/** A handful of loose "band" centers (stand-ins for Milky-Way-style density variation) —
+ * most stars scatter uniformly, but a fraction cluster loosely near these directions instead
+ * of being perfectly evenly spread, which is what reads as a real sky rather than a uniform
+ * random scatter. */
+function makeDensityBandSampler(bandCount: number, clusterFraction: number) {
+  const bandCenters = Array.from({ length: bandCount }, () => randomUnitVector());
+  return (): [number, number, number] => {
+    const uniform = randomUnitVector();
+    if (Math.random() >= clusterFraction) return uniform;
+    const center = bandCenters[Math.floor(Math.random() * bandCenters.length)];
+    const jitter = 0.35 + Math.random() * 0.3; // how loosely stars scatter around the band
+    const mixed: [number, number, number] = [
+      center[0] * (1 - jitter) + uniform[0] * jitter,
+      center[1] * (1 - jitter) + uniform[1] * jitter,
+      center[2] * (1 - jitter) + uniform[2] * jitter,
+    ];
+    const len = Math.hypot(...mixed) || 1;
+    return [mixed[0] / len, mixed[1] / len, mixed[2] / len];
+  };
+}
+
+// Per-vertex size/opacity via a small custom shader (rather than one uniform PointsMaterial
+// per tier) is what lets brightness vary continuously star-to-star instead of in visible
+// steps. Two layers at different radii give a mild sense of depth even though nothing moves.
+const STAR_VERTEX_SHADER = `
+  attribute float aSize;
+  attribute float aOpacity;
+  uniform float uPixelRatio;
+  varying float vOpacity;
+  void main() {
+    vOpacity = aOpacity;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = aSize * uPixelRatio * (60.0 / -mvPosition.z);
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+const STAR_FRAGMENT_SHADER = `
+  uniform sampler2D pointTexture;
+  varying float vOpacity;
+  void main() {
+    vec4 tex = texture2D(pointTexture, gl_PointCoord);
+    gl_FragColor = vec4(vec3(1.0), tex.a * vOpacity);
+  }
+`;
+
+interface StarLayerConfig {
+  count: number;
+  radius: number;
+  sizeRange: [number, number];
+  opacityRange: [number, number];
+}
+
+const STAR_LAYERS: StarLayerConfig[] = [
+  // Far layer: many small, mostly dim points.
+  { count: 2200, radius: 55, sizeRange: [0.4, 1.1], opacityRange: [0.15, 0.6] },
+  // Near layer: fewer, larger, brighter — the "foreground" stars that read first.
+  { count: 500, radius: 30, sizeRange: [0.7, 1.7], opacityRange: [0.4, 0.9] },
 ];
 
-function createStarfield(starTexture: THREE.Texture): THREE.Points[] {
-  const radius = 40;
-  return STAR_TIERS.map(({ count, size, opacity }) => {
-    const positions = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      positions.set(randomPointOnSphereShell(radius), i * 3);
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const material = new THREE.PointsMaterial({
-      size,
-      map: starTexture,
-      transparent: true,
-      depthWrite: false,
-      sizeAttenuation: true,
-      opacity,
-    });
-    return new THREE.Points(geometry, material);
+function createStarLayer(starTexture: THREE.Texture, pixelRatio: number, config: StarLayerConfig): THREE.Points {
+  const { count, radius, sizeRange, opacityRange } = config;
+  const sampleDirection = makeDensityBandSampler(3, 0.4);
+  const positions = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+  const opacities = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const [x, y, z] = sampleDirection();
+    positions.set([x * radius, y * radius, z * radius], i * 3);
+    // Bias toward the small/dim end (pow > 1) — most stars are faint, a few stand out.
+    const t = Math.pow(Math.random(), 2.2);
+    sizes[i] = sizeRange[0] + (sizeRange[1] - sizeRange[0]) * t;
+    opacities[i] = opacityRange[0] + (opacityRange[1] - opacityRange[0]) * Math.random();
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute('aOpacity', new THREE.BufferAttribute(opacities, 1));
+  const material = new THREE.ShaderMaterial({
+    vertexShader: STAR_VERTEX_SHADER,
+    fragmentShader: STAR_FRAGMENT_SHADER,
+    uniforms: { pointTexture: { value: starTexture }, uPixelRatio: { value: pixelRatio } },
+    transparent: true,
+    depthWrite: false,
   });
+  return new THREE.Points(geometry, material);
+}
+
+// A couple of large, very-low-opacity tinted blobs, hand-placed in front of the camera —
+// a cheap stand-in for a distant nebula/Milky-Way haze band. Subtle on purpose: this is
+// atmosphere, not a hero visual, and must not compete with the panels above it.
+const NEBULA_SPOTS: { position: [number, number, number]; scale: number; color: string }[] = [
+  // Camera vertical FOV is 38deg, so keep |y| comfortably inside d*tan(19deg) at this z or
+  // the sprite falls outside the frustum and never renders (that was the previous bug).
+  { position: [-8, 4, -30], scale: 22, color: '#3a4a7a' },
+  { position: [9, 6, -35], scale: 26, color: '#4a3a6a' },
+];
+
+function createSky(pixelRatio: number): { group: THREE.Group; dispose: () => void } {
+  const group = new THREE.Group();
+  const starTexture = createStarSpriteTexture();
+  const layers = STAR_LAYERS.map((config) => createStarLayer(starTexture, pixelRatio, config));
+  layers.forEach((layer) => group.add(layer));
+
+  const nebulaTextures = new Map<string, THREE.Texture>();
+  const nebulaSprites = NEBULA_SPOTS.map(({ position, scale, color }) => {
+    let texture = nebulaTextures.get(color);
+    if (!texture) {
+      texture = createHazeSpriteTexture(color);
+      nebulaTextures.set(color, texture);
+    }
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.position.set(...position);
+    sprite.scale.set(scale, scale, 1);
+    return sprite;
+  });
+  nebulaSprites.forEach((sprite) => group.add(sprite));
+
+  const dispose = () => {
+    layers.forEach((layer) => {
+      layer.geometry.dispose();
+      (layer.material as THREE.Material).dispose();
+    });
+    nebulaSprites.forEach((sprite) => (sprite.material as THREE.Material).dispose());
+    nebulaTextures.forEach((texture) => texture.dispose());
+    starTexture.dispose();
+  };
+
+  return { group, dispose };
 }
 
 // Classic three.js Fresnel "atmosphere" glow: a slightly larger, back-face sphere whose
@@ -195,9 +320,8 @@ export const RotatingEarthBackdrop: React.FC<RotatingEarthBackdropProps> = ({
     sphere.position.y = PLANET_Y_OFFSET;
     atmosphere.position.y = PLANET_Y_OFFSET;
 
-    const starTexture = createStarSpriteTexture();
-    const stars = createStarfield(starTexture);
-    stars.forEach((tier) => scene.add(tier));
+    const sky = createSky(renderer.getPixelRatio());
+    scene.add(sky.group);
 
     const resize = () => {
       const { clientWidth, clientHeight } = container;
@@ -256,11 +380,7 @@ export const RotatingEarthBackdrop: React.FC<RotatingEarthBackdropProps> = ({
       texture.dispose();
       atmosphereGeometry.dispose();
       atmosphereMaterial.dispose();
-      stars.forEach((tier) => {
-        tier.geometry.dispose();
-        (tier.material as THREE.Material).dispose();
-      });
-      starTexture.dispose();
+      sky.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
