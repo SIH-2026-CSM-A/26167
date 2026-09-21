@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PageBackdrop } from '@/components/PageBackdrop';
+import { PhotoLabel } from '@/components/PhotoLabel';
 import { ConfigSelector, PipelineConfigMode } from '../components/Upload/ConfigSelector';
 import { DemoPresetSelector } from '../components/DemoPresetSelector';
 import { SlotUploader, SlotModality } from '../components/Upload/SlotUploader';
@@ -141,19 +142,15 @@ export const UploadPage: React.FC = () => {
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4"
         style={{ borderBottom: '1px solid var(--line)' }}
       >
-        <div>
-          <h1
-            className="text-2xl"
-            style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-display)', textShadow: 'var(--photo-text-shadow)' }}
-          >
-            Satellite Imagery Query
+        <div className="flex flex-col items-start gap-1">
+          <h1 className="text-2xl">
+            <PhotoLabel style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-display)' }}>
+              Satellite Imagery Query
+            </PhotoLabel>
           </h1>
-          <p
-            className="text-xs mt-1"
-            style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)', textShadow: 'var(--photo-text-shadow)' }}
-          >
+          <PhotoLabel className="text-xs" style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}>
             Multi-modal earth observation query and analysis pipeline
-          </p>
+          </PhotoLabel>
         </div>
 
         <div
@@ -218,11 +215,10 @@ export const UploadPage: React.FC = () => {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label
-            className="text-[11px] font-medium uppercase tracking-widest"
-            style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)', textShadow: 'var(--photo-text-shadow)' }}
-          >
-            Analysis Query
+          <label className="text-[11px] font-medium uppercase tracking-widest">
+            <PhotoLabel style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}>
+              Analysis Query
+            </PhotoLabel>
           </label>
           <input
             type="text"

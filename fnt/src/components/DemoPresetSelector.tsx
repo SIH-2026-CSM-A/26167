@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { PhotoLabel } from '@/components/PhotoLabel';
 import type { DemoPreset, PresetApplyPayload } from '@/types/manifest';
 import {
   DEFAULT_MANIFEST_URL,
@@ -74,8 +75,8 @@ export const DemoPresetSelector: React.FC<DemoPresetSelectorProps> = ({
 
   if (loading) {
     return (
-      <div className="p-4 text-xs" style={{ color: 'var(--text-low)', textShadow: 'var(--photo-text-shadow)' }}>
-        Loading demo presets...
+      <div className="p-4 text-xs">
+        <PhotoLabel style={{ color: 'var(--text-low)' }}>Loading demo presets...</PhotoLabel>
       </div>
     );
   }
@@ -83,18 +84,14 @@ export const DemoPresetSelector: React.FC<DemoPresetSelectorProps> = ({
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center justify-between">
-        <label
-          className="text-[11px] font-medium uppercase tracking-widest"
-          style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)', textShadow: 'var(--photo-text-shadow)' }}
-        >
-          Curated Demo Presets (F24)
+        <label className="text-[11px] font-medium uppercase tracking-widest">
+          <PhotoLabel style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}>
+            Curated Demo Presets (F24)
+          </PhotoLabel>
         </label>
-        <span
-          className="text-[11px]"
-          style={{ color: 'var(--text-low)', textShadow: 'var(--photo-text-shadow)' }}
-        >
+        <PhotoLabel className="text-[11px]" style={{ color: 'var(--text-low)' }}>
           Auto-populates query &amp; verified imagery
-        </span>
+        </PhotoLabel>
       </div>
 
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 lg:grid-cols-3">

@@ -1,4 +1,5 @@
 import React from 'react';
+import { PhotoLabel } from '@/components/PhotoLabel';
 
 export type PipelineConfigMode = 'single' | 'cross-modal' | 'bi-temporal';
 
@@ -33,11 +34,10 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
 }) => {
   return (
     <div className="flex flex-col gap-2">
-      <label
-        className="text-[11px] font-medium uppercase tracking-widest"
-        style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)', textShadow: 'var(--photo-text-shadow)' }}
-      >
-        Pipeline Configuration
+      <label className="text-[11px] font-medium uppercase tracking-widest">
+        <PhotoLabel style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}>
+          Pipeline Configuration
+        </PhotoLabel>
       </label>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {CONFIG_OPTIONS.map((opt) => {
