@@ -234,12 +234,13 @@ def _parse_datetime(source: ImageInput) -> datetime | None:
 def _acquisition_order(sources: list[ImageInput]) -> EoGateResult:
     gate = EoGate.ACQUISITION_ORDER
     by_order = {source.metadata.get("capture_order"): source for source in sources}
-    if len(sources) != 2 or set(by_order) != {0, 1}:
-        return EoGateResult(
-            gate,
-            EoGateStatus.NOT_COMPARABLE,
-            "Not a bi-temporal upload-slot pair; acquisition order not applicable.",
-        )
+    # Bi-temporal means two slot-ordered scenes of one modality. The Upload page also
+    # sends slot order for an optical+SAR pair, which is cross-modal, not temporal.
+    is_bitemporal = (
+        len(sources) == 2 and set(by_order) == {0, 1} and sources[0].modality == sources[1].modality
+    )
+    if not is_bitemporal:
+        return EoGateResult(gate, EoGateStatus.NOT_COMPARABLE, "Not a bi-temporal request.")
     before, after = by_order[0], by_order[1]
     t1, t2 = _parse_datetime(before), _parse_datetime(after)
     if t1 is None or t2 is None:

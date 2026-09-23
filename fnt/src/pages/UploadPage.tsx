@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { ConfigSelector, PipelineConfigMode } from '../components/Upload/ConfigSelector';
 import { DemoPresetSelector } from '../components/DemoPresetSelector';
 import { SlotUploader, SlotModality } from '../components/Upload/SlotUploader';
-import { QueryResultCard } from '../components/Upload/QueryResultCard';
+import { ExecutionTraceToggle, QueryResultCard } from '../components/Upload/QueryResultCard';
 import { submitImageQuery, QueryApiError } from '@/services/query';
-import type { Answer, Modality } from '../types/contracts';
+import type { Answer, ExecutionTrace, Modality } from '../types/contracts';
 import type { PresetApplyPayload, PresetSlotData } from '../types/manifest';
 
 export type UploadSourceMode = 'manual' | 'preset';
@@ -24,6 +24,8 @@ export const UploadPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestedAction, setSuggestedAction] = useState<string | null>(null);
+  const [reasonCode, setReasonCode] = useState<string | null>(null);
+  const [errorTrace, setErrorTrace] = useState<ExecutionTrace | null>(null);
   const [ambiguousSlots, setAmbiguousSlots] = useState<boolean[]>([]);
   const [result, setResult] = useState<Answer | null>(null);
 
@@ -91,6 +93,8 @@ export const UploadPage: React.FC = () => {
     setLoading(true);
     setError(null);
     setSuggestedAction(null);
+    setReasonCode(null);
+    setErrorTrace(null);
     setResult(null);
 
     // Omitting the whole `modality` override lets the backend classify every image from
@@ -118,6 +122,8 @@ export const UploadPage: React.FC = () => {
       if (err instanceof QueryApiError) {
         setError(err.message);
         setSuggestedAction(err.suggestedAction ?? null);
+        setReasonCode(err.reasonCode ?? null);
+        setErrorTrace(err.trace ?? null);
         // Only 'auto' slots could have been the one the backend couldn't classify —
         // an explicit override can never trigger MODALITY_UNKNOWN.
         setAmbiguousSlots(
@@ -230,8 +236,20 @@ export const UploadPage: React.FC = () => {
 
       {error && (
         <div role="alert" className="p-4 bg-rose-950/30 border border-rose-800 rounded-lg text-xs text-rose-300">
-          <strong>Submission Error:</strong> {error}
+          <div className="flex flex-wrap items-center gap-2">
+            <strong>Submission Error:</strong> {error}
+            {reasonCode && (
+              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-rose-900/60 border border-rose-700 text-rose-200">
+                {reasonCode}
+              </span>
+            )}
+          </div>
           {suggestedAction && <p className="mt-1 text-rose-300/80">{suggestedAction}</p>}
+          {errorTrace && errorTrace.steps.length > 0 && (
+            <div className="mt-3 border-t border-rose-800/60 pt-3">
+              <ExecutionTraceToggle trace={errorTrace} />
+            </div>
+          )}
         </div>
       )}
 

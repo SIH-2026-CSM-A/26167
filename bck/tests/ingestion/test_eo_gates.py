@@ -190,7 +190,28 @@ def test_order_not_comparable_without_dates_keeps_slot_order() -> None:
 
 def test_order_not_comparable_without_capture_order() -> None:
     sources = [_source("a", _geotiff()), _source("b", _geotiff())]
-    assert _gate(sources, EoGate.ACQUISITION_ORDER).status == EoGateStatus.NOT_COMPARABLE
+    result = _gate(sources, EoGate.ACQUISITION_ORDER)
+    assert result.status == EoGateStatus.NOT_COMPARABLE
+    assert result.reason == "Not a bi-temporal request."
+
+
+def test_order_skipped_for_cross_modal_pair_even_with_slot_order() -> None:
+    # The Upload page sends capture_order 0/1 for its optical+SAR slots too; dated
+    # reversed here to prove the gate is skipped, not evaluated.
+    optical = _source("optical", _geotiff(datetime_tag="2024:01:01 00:00:00"), capture_order=0)
+    sar = ingest_raster(
+        RasterUpload(
+            id="sar",
+            filename="sar.tif",
+            content_type="image/tiff",
+            content=_geotiff(datetime_tag="2023:01:01 00:00:00"),
+            modality=Modality.SAR,
+            capture_order=1,
+        )
+    ).source
+    result = _gate([optical, sar], EoGate.ACQUISITION_ORDER)
+    assert result.status == EoGateStatus.NOT_COMPARABLE
+    assert result.reason == "Not a bi-temporal request."
 
 
 # --- Real fixture pairs -------------------------------------------------------

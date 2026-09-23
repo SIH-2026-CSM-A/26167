@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { UploadPage } from '@/pages/UploadPage';
 
@@ -251,4 +251,116 @@ test('MODALITY_UNKNOWN veto surfaces clarification, then resubmit with explicit 
   expect(fetchSpy).toHaveBeenCalledTimes(2);
   const secondRequestBody = fetchSpy.mock.calls[1][1]?.body as FormData;
   expect(secondRequestBody.getAll('modality')).toEqual(['optical']);
+});
+
+function traceStep(module: string, action: string, params: Record<string, unknown>) {
+  return {
+    module,
+    action,
+    params,
+    confidence: null,
+    started_at: '2026-09-23T00:00:00Z',
+    completed_at: '2026-09-23T00:00:00Z',
+    evidence_ids: [],
+  };
+}
+
+async function submitCrossModalPair(user: ReturnType<typeof userEvent.setup>, container: HTMLElement) {
+  await user.click(screen.getByRole('button', { name: /Cross-Modal Pair/i }));
+  const fileInputs = container.querySelectorAll('input[type="file"]');
+  await user.upload(fileInputs[0] as HTMLInputElement, new File(['o'], 'optical.tif', { type: 'image/tiff' }));
+  await user.upload(fileInputs[1] as HTMLInputElement, new File(['s'], 'sar.tif', { type: 'image/tiff' }));
+  await user.type(
+    screen.getByPlaceholderText(/e\.g\. Identify land cover classification/i),
+    'Identify water-covered regions.',
+  );
+  await user.click(screen.getByRole('button', { name: 'Run Pipeline' }));
+}
+
+test('EO gate veto shows the reason code badge and the returned execution trace', async () => {
+  const gates = ['crs_consistency', 'geographic_overlap', 'gsd_match', 'acquisition_order'];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            message: 'Rasters are in different coordinate reference systems.',
+            stage: 'validation',
+            reason_code: 'EO_CRS_MISMATCH',
+            suggested_action: 'Reproject the rasters to a common CRS before uploading.',
+            trace: {
+              trace_id: 'veto-trace',
+              created_at: '2026-09-23T00:00:00Z',
+              steps: [
+                ...gates.map((gate, i) =>
+                  traceStep('validation', 'eo_gates', { gate, status: i === 0 ? 'FAIL' : 'PASS' }),
+                ),
+                traceStep('validation', 'execution_failed', { message: 'CRS mismatch' }),
+              ],
+            },
+          },
+        }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      ),
+    ),
+  );
+  const user = userEvent.setup();
+  const { container } = render(<UploadPage />);
+
+  await submitCrossModalPair(user, container);
+
+  const alert = await screen.findByRole('alert');
+  expect(within(alert).getByText('EO_CRS_MISMATCH')).toBeInTheDocument();
+  expect(within(alert).getByText(/Reproject the rasters/i)).toBeInTheDocument();
+
+  await user.click(within(alert).getByText(/Show Execution Trace/i));
+  expect(within(alert).getAllByText('eo_gates')).toHaveLength(4);
+  expect(within(alert).getByText(/"gate":"crs_consistency","status":"FAIL"/)).toBeInTheDocument();
+});
+
+test('fusion mask evidence renders a summary, never the raw mask arrays', async () => {
+  const mask = Array.from({ length: 64 }, () => Array.from({ length: 64 }, () => false));
+  const fusionAnswer = {
+    ...successfulAnswer,
+    text: 'SAR indicates 40.9% water coverage.',
+    evidence: [
+      {
+        id: 'fusion-clear',
+        tool: 'fusion.reconcile',
+        type: 'mask',
+        payload: {
+          water_mask: mask,
+          region_mask: mask,
+          water_fraction: 0.409,
+          region: 'clear',
+          note: 'SAR indicates 40.9% water coverage in the clear region.',
+        },
+        confidence: 1.0,
+        timing: 0.5,
+      },
+    ],
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(fusionAnswer), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ),
+  );
+  const user = userEvent.setup();
+  const { container } = render(<UploadPage />);
+
+  await submitCrossModalPair(user, container);
+
+  expect(await screen.findByText('Pipeline Result')).toBeInTheDocument();
+  expect(screen.getByText('water 40.9%')).toBeInTheDocument();
+  expect(screen.getByText('clear')).toBeInTheDocument();
+  expect(screen.getByText('100%')).toBeInTheDocument();
+  expect(screen.getByText('SAR indicates 40.9% water coverage in the clear region.')).toBeInTheDocument();
+  expect(screen.getByText('Raw evidence data')).toBeInTheDocument();
+  expect(container.textContent).not.toContain('false,false');
+  expect(container.textContent).toContain('[array of 64 items omitted]');
 });
