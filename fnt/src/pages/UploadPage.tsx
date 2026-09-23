@@ -3,9 +3,9 @@ import { PhotoLabel } from '@/components/PhotoLabel';
 import { ConfigSelector, PipelineConfigMode } from '../components/Upload/ConfigSelector';
 import { DemoPresetSelector } from '../components/DemoPresetSelector';
 import { SlotUploader, SlotModality } from '../components/Upload/SlotUploader';
-import { QueryResultCard } from '../components/Upload/QueryResultCard';
+import { ExecutionTraceToggle, QueryResultCard } from '../components/Upload/QueryResultCard';
 import { submitImageQuery, QueryApiError } from '@/services/query';
-import type { Answer, Modality } from '../types/contracts';
+import type { Answer, ExecutionTrace, Modality } from '../types/contracts';
 import type { PresetApplyPayload, PresetSlotData } from '../types/manifest';
 
 // three.js (and the sphere/texture it loads) is only ever needed on this one page — code-split
@@ -31,6 +31,8 @@ export const UploadPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestedAction, setSuggestedAction] = useState<string | null>(null);
+  const [reasonCode, setReasonCode] = useState<string | null>(null);
+  const [errorTrace, setErrorTrace] = useState<ExecutionTrace | null>(null);
   const [ambiguousSlots, setAmbiguousSlots] = useState<boolean[]>([]);
   const [result, setResult] = useState<Answer | null>(null);
 
@@ -98,6 +100,8 @@ export const UploadPage: React.FC = () => {
     setLoading(true);
     setError(null);
     setSuggestedAction(null);
+    setReasonCode(null);
+    setErrorTrace(null);
     setResult(null);
 
     // Omitting the whole `modality` override lets the backend classify every image from
@@ -125,6 +129,8 @@ export const UploadPage: React.FC = () => {
       if (err instanceof QueryApiError) {
         setError(err.message);
         setSuggestedAction(err.suggestedAction ?? null);
+        setReasonCode(err.reasonCode ?? null);
+        setErrorTrace(err.trace ?? null);
         // Only 'auto' slots could have been the one the backend couldn't classify —
         // an explicit override can never trigger MODALITY_UNKNOWN.
         setAmbiguousSlots(
@@ -258,8 +264,23 @@ export const UploadPage: React.FC = () => {
           className="rounded-lg p-4 text-xs"
           style={{ background: 'rgba(210,87,75,0.12)', border: '1px solid var(--danger)', color: 'var(--danger)' }}
         >
-          <strong>Submission Error:</strong> {error}
+          <div className="flex flex-wrap items-center gap-2">
+            <strong>Submission Error:</strong> {error}
+            {reasonCode && (
+              <span
+                className="rounded px-1.5 py-0.5 text-[10px]"
+                style={{ border: '1px solid var(--danger)', fontFamily: 'var(--font-mono)' }}
+              >
+                {reasonCode}
+              </span>
+            )}
+          </div>
           {suggestedAction && <p className="mt-1" style={{ color: 'var(--text-mid)' }}>{suggestedAction}</p>}
+          {errorTrace && errorTrace.steps.length > 0 && (
+            <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+              <ExecutionTraceToggle trace={errorTrace} />
+            </div>
+          )}
         </div>
       )}
 

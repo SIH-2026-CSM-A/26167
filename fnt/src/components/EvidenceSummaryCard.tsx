@@ -9,6 +9,22 @@ export interface EvidenceSummaryCardProps {
   onViewOnMap?: (id: string) => void;
 }
 
+const RAW_ARRAY_PREVIEW_ITEMS = 8;
+const RAW_TEXT_MAX_CHARS = 2000;
+
+/** Evidence payloads can carry full-resolution rasters (e.g. 512x512 masks); never print them. */
+function truncatedPayloadJson(payload: unknown): string {
+  const json = JSON.stringify(
+    payload,
+    (_key, value: unknown) =>
+      Array.isArray(value) && value.length > RAW_ARRAY_PREVIEW_ITEMS
+        ? `[array of ${value.length} items omitted]`
+        : value,
+    2
+  );
+  return json.length > RAW_TEXT_MAX_CHARS ? `${json.slice(0, RAW_TEXT_MAX_CHARS)}\n… (truncated)` : json;
+}
+
 function readString(payload: Record<string, unknown>, key: string): string | null {
   const value = payload[key];
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -117,7 +133,7 @@ export const EvidenceSummaryCard: React.FC<EvidenceSummaryCardProps> = ({ eviden
         className="mt-1.5 overflow-x-auto rounded p-2 text-[10px] leading-relaxed"
         style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
       >
-        {JSON.stringify(evidence.payload, null, 2)}
+        {truncatedPayloadJson(evidence.payload)}
       </pre>
     </details>
   </div>

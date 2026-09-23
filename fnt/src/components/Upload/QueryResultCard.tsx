@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Answer } from '../../types/contracts';
+import type { Answer, ExecutionTrace } from '../../types/contracts';
 import { downloadEvidenceGeoJson, downloadEvidencePdf } from '../../services/api';
 import { EvidenceSummaryCard } from '@/components/EvidenceSummaryCard';
 import { TraceStepItem } from '@/components/Trace/TraceStepItem';
@@ -10,8 +10,32 @@ interface QueryResultCardProps {
   answer: Answer;
 }
 
-export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
+/** Show/Hide list of TraceStepItems, shared by the result card and the Upload page's veto alert. */
+export const ExecutionTraceToggle: React.FC<{ trace: ExecutionTrace }> = ({ trace }) => {
   const [showTrace, setShowTrace] = useState<boolean>(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setShowTrace(!showTrace)}
+        className="flex cursor-pointer items-center gap-1 text-xs"
+        style={{ color: 'var(--accent)' }}
+      >
+        <span>{showTrace ? 'Hide' : 'Show'} Execution Trace</span>
+        <span style={{ color: 'var(--text-low)' }}>({trace.steps.length} steps)</span>
+      </button>
+      {showTrace && (
+        <div className="mt-2.5 flex flex-col gap-1">
+          {trace.steps.map((step, idx) => (
+            <TraceStepItem key={`${step.module}-${idx}`} step={step} index={idx} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+};
+
+export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
   const [downloadingPdf, setDownloadingPdf] = useState<boolean>(false);
   const [downloadingGeoJson, setDownloadingGeoJson] = useState<boolean>(false);
   const { loadAnswer } = useSatQuery();
@@ -125,22 +149,7 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
 
       {answer.trace?.steps && answer.trace.steps.length > 0 && (
         <div className="pt-3" style={{ borderTop: '1px solid var(--line)' }}>
-          <button
-            type="button"
-            onClick={() => setShowTrace(!showTrace)}
-            className="flex cursor-pointer items-center gap-1 text-xs"
-            style={{ color: 'var(--accent)' }}
-          >
-            <span>{showTrace ? 'Hide' : 'Show'} Execution Trace</span>
-            <span style={{ color: 'var(--text-low)' }}>({answer.trace.steps.length} steps)</span>
-          </button>
-          {showTrace && (
-            <div className="mt-2.5 flex flex-col gap-1">
-              {answer.trace.steps.map((step, idx) => (
-                <TraceStepItem key={`${step.module}-${idx}`} step={step} index={idx} />
-              ))}
-            </div>
-          )}
+          <ExecutionTraceToggle trace={answer.trace} />
         </div>
       )}
     </div>
