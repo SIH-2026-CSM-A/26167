@@ -280,6 +280,7 @@ def _extract_metadata(
             transform.f,
         ],
         "nodata": dataset.nodata,
+        "acquisition_datetime": dataset.tags().get("TIFFTAG_DATETIME"),
         "file_format": dataset.driver,
         "visualization": {
             "band_indexes": band_indexes,

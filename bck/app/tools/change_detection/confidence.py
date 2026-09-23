@@ -6,7 +6,7 @@ import numpy as np
 def compute_confidence(probability: np.ndarray, predicted_mask: np.ndarray) -> float:
     """Mean, over all pixels, of P where predicted "changed" else (1 - P).
 
-    `probability` is BIT's per-pixel sigmoid probability of "changed";
+    `probability` is BIT's per-pixel softmax probability of "changed";
     `predicted_mask` is the already-binarized predicted mask (nonzero means
     changed). Binarizing a raw probability map is the caller's decision — this
     function takes no threshold and invents no default for one.
