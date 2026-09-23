@@ -17,15 +17,18 @@ from app.evidence import assemble_answer, build_bbox_evidence, build_vqa_evidenc
 from app.history import get_sync_session as get_history_session
 from app.history import record_query
 from app.ingestion import (
+    EoGate,
+    EoGateStatus,
     IngestedRaster,
     InvalidRasterError,
     RasterUpload,
     UnsupportedRasterError,
+    evaluate_eo_gates,
     ingest_raster,
 )
 from app.models import InternVLAdapter, InternVLModelError
 from app.pipeline.stages import PipelineError, PipelineUpload, TraceRecorder
-from app.router import DispatchPlan, route
+from app.router import DispatchPlan, VetoReasonCode, route
 from app.tools.change_detection.detector import detect_change
 from app.tools.fusion.cloud_detector import detect_clouds
 from app.tools.fusion.despeckle import lee_filter
@@ -53,6 +56,27 @@ BIT_CHECKPOINT_PATH = os.environ.get("BIT_CHECKPOINT_PATH", _DEFAULT_BIT_CHECKPO
 _SAR_NOISE_VARIANCE = 0.005
 
 _SUPPORTED_TOOLS = frozenset({"vqa_grounding", "change_detection", "fusion"})
+
+# A FAIL from any EO gate vetoes through the same _fail path as a router veto, with
+# one distinct reason code per gate.
+_EO_GATE_VETOES: dict[EoGate, tuple[VetoReasonCode, str]] = {
+    EoGate.CRS_CONSISTENCY: (
+        VetoReasonCode.EO_CRS_MISMATCH,
+        "Reproject the rasters to a common CRS before uploading.",
+    ),
+    EoGate.GEOGRAPHIC_OVERLAP: (
+        VetoReasonCode.EO_INSUFFICIENT_OVERLAP,
+        "Upload rasters that cover the same area of interest.",
+    ),
+    EoGate.GSD_MATCH: (
+        VetoReasonCode.EO_GSD_MISMATCH,
+        "Resample the rasters to a common ground sample distance before uploading.",
+    ),
+    EoGate.ACQUISITION_ORDER: (
+        VetoReasonCode.EO_ACQUISITION_ORDER_REVERSED,
+        "Swap the images: Slot 1 must hold the earlier acquisition, Slot 2 the later one.",
+    ),
+}
 
 
 def _get_default_model() -> InternVLAdapter:
@@ -187,6 +211,33 @@ def run(
             "source_metadata": [item.source.metadata for item in ingested],
         },
     )
+
+    if len(ingested) >= 2:
+        gate_results = evaluate_eo_gates([item.source for item in ingested])
+        for result in gate_results:
+            recorder.record(
+                "validation",
+                "eo_gates",
+                params={
+                    "gate": result.gate.value,
+                    "status": result.status.value,
+                    "reason": result.reason,
+                    **result.details,
+                },
+            )
+        failed = next(
+            (result for result in gate_results if result.status == EoGateStatus.FAIL), None
+        )
+        if failed is not None:
+            reason_code, suggested_action = _EO_GATE_VETOES[failed.gate]
+            _fail(
+                recorder,
+                stage="validation",
+                message=failed.reason,
+                status_code=422,
+                reason_code=reason_code.value,
+                suggested_action=suggested_action,
+            )
 
     # AC3: Compute cloud-cover fraction at most once per optical input and reuse downstream
     for item in ingested:
