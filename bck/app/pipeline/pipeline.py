@@ -5,6 +5,7 @@ verification, evidence, and tracing stages.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 
 import numpy as np
 import rasterio
@@ -184,6 +185,7 @@ def run(
         )
 
     recorder.record("ingestion", "asset_ingestion_started")
+    ingestion_started = datetime.now(UTC)
     try:
         ingested = [
             ingest_raster(
@@ -210,6 +212,7 @@ def run(
             "asset_ids": [item.source.id for item in ingested],
             "source_metadata": [item.source.metadata for item in ingested],
         },
+        started_at=ingestion_started,
     )
 
     if len(ingested) >= 2:
@@ -224,6 +227,8 @@ def run(
                     "reason": result.reason,
                     **result.details,
                 },
+                started_at=result.started_at,
+                completed_at=result.completed_at,
             )
         failed = next(
             (result for result in gate_results if result.status == EoGateStatus.FAIL), None
@@ -258,6 +263,7 @@ def run(
     request = QueryRequest(query=query.strip(), images=[item.source for item in ingested])
 
     recorder.record("router", "routing_started")
+    routing_started = datetime.now(UTC)
     decision = route(request)
     dispatch_plan = decision.dispatch_plan
     route_reason = (
@@ -274,6 +280,7 @@ def run(
             "supported": decision.is_dispatched,
             "reason": route_reason,
         },
+        started_at=routing_started,
     )
     if not decision.is_dispatched or dispatch_plan is None:
         _fail(
@@ -315,6 +322,7 @@ def run(
         candidate_evidence_list = _enrich_mask_evidence(candidate_evidence_list, source.source)
 
     recorder.record("verification", "verification_started")
+    verification_started = datetime.now(UTC)
     decision = verify(
         evidence=candidate_evidence_list,
         raw_query=request.query,
@@ -328,6 +336,7 @@ def run(
         params=verification_trace_params(decision),
         confidence=decision.effective_confidence,
         evidence_ids=[item.id for item in decision.verified_evidence],
+        started_at=verification_started,
     )
     if decision.degradation_notice is not None:
         recorder.record(
@@ -336,6 +345,7 @@ def run(
             params=decision.degradation_notice.model_dump(mode="json"),
         )
 
+    evidence_started = datetime.now(UTC)
     verified_ids = {item.id for item in decision.verified_evidence}
 
     if dispatch_plan.tool_name == "vqa_grounding":
@@ -383,6 +393,7 @@ def run(
             "source_asset_ids": list(dispatch_plan.image_bindings.values()),
         },
         evidence_ids=[item.id for item in evidence_list],
+        started_at=evidence_started,
     )
     recorder.record(
         "pipeline",
@@ -470,6 +481,7 @@ def _run_vqa_tool(
         "internvl_inference_started",
         params={"model_id": active_model.model_id, "device": active_model.device},
     )
+    inference_started = datetime.now(UTC)
     try:
         tool_result = execute_vqa(
             image=source.visual,
@@ -494,6 +506,7 @@ def _run_vqa_tool(
             "raw_answer": tool_result.raw_answer,
             "supporting_observations": list(tool_result.supporting_observations),
         },
+        started_at=inference_started,
     )
 
     candidate_evidence = build_vqa_evidence(
@@ -546,6 +559,7 @@ def _run_change_detection_tool(
             "checkpoint_path": BIT_CHECKPOINT_PATH,
         },
     )
+    inference_started = datetime.now(UTC)
     try:
         # detector.py has no typed exception contract of its own (unlike VQA's
         # InternVLModelError/VqaToolError or fusion's InsufficientValidSupportError)
@@ -573,6 +587,7 @@ def _run_change_detection_tool(
             "changed_percentage": evidence_list[0].payload.get("changed_percentage"),
             "timing_seconds": evidence_list[0].timing,
         },
+        started_at=inference_started,
     )
     return evidence_list
 
@@ -594,6 +609,7 @@ def _run_fusion_tool(
         "fusion_started",
         params={"optical_image_id": optical_image.source.id, "sar_image_id": sar_image.source.id},
     )
+    inference_started = datetime.now(UTC)
 
     band_count = optical_image.source.metadata.get("band_count")
     if band_count not in (10, 13):
@@ -655,6 +671,7 @@ def _run_fusion_tool(
             "support_fraction": evidence_list[0].payload.get("support_fraction"),
             "region_count": len(evidence_list),
         },
+        started_at=inference_started,
     )
     return evidence_list
 

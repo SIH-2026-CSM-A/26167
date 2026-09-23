@@ -67,6 +67,7 @@ def test_reconcile_real_clean_region_has_no_disagreement(clean_region):
     ev = evidence_list[0]
 
     assert ev.payload["region"] == "full_scene"
+    assert ev.payload["label"] == "Water extent — clear sky (optical + SAR agree)"
     assert ev.payload["optical_inconclusive"] is False
     assert np.isclose(ev.payload["cloud_fraction"], 0.0)
     assert np.isclose(ev.confidence, 1.0)
@@ -98,6 +99,10 @@ def test_reconcile_real_region_with_real_cloud_cover_splits_into_two_regions(clo
 
     by_region = {ev.payload["region"]: ev for ev in evidence_list}
     assert set(by_region) == {"clear", "cloud_affected"}
+    assert by_region["clear"].payload["label"] == "Water extent — clear sky (optical + SAR agree)"
+    assert by_region["cloud_affected"].payload["label"] == (
+        "Water extent — cloud-covered (SAR only, reduced confidence)"
+    )
 
     clear_ev = by_region["clear"]
     assert clear_ev.payload["optical_inconclusive"] is False

@@ -49,6 +49,10 @@ _TOOL_NAME = "fusion.reconcile"
 # design itself.
 _SAR_ONLY_CONFIDENCE = 0.75
 
+# Human-readable evidence labels (payload["label"]), shown on the frontend evidence card.
+_CLEAR_LABEL = "Water extent — clear sky (optical + SAR agree)"
+_CLOUD_LABEL = "Water extent — cloud-covered (SAR only, reduced confidence)"
+
 
 def _region_water_fraction(water_mask: np.ndarray, region_mask: np.ndarray) -> float:
     """Water fraction within `region_mask`, or 0.0 if the region is empty."""
@@ -146,6 +150,7 @@ def reconcile_sar_optical(
                 "cloud_fraction": 0.0,
                 "optical_inconclusive": False,
                 "region": "full_scene",
+                "label": _CLEAR_LABEL,
                 "note": note,
                 **common_support_payload,
             },
@@ -180,6 +185,7 @@ def reconcile_sar_optical(
                     "cloud_fraction": 0.0,
                     "optical_inconclusive": False,
                     "region": "clear",
+                    "label": _CLEAR_LABEL,
                     "region_area_fraction": clear_area_fraction,
                     "note": clear_note,
                     **common_support_payload,
@@ -214,6 +220,7 @@ def reconcile_sar_optical(
                     "cloud_fraction": cloud_fraction,
                     "optical_inconclusive": True,
                     "region": "cloud_affected",
+                    "label": _CLOUD_LABEL,
                     "region_area_fraction": cloud_area_fraction,
                     "note": cloud_note,
                     **common_support_payload,

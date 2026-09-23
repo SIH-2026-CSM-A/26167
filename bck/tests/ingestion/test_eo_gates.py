@@ -70,6 +70,15 @@ def _utm_twin() -> bytes:
     return _geotiff(crs="EPSG:32643", transform=from_bounds(*utm_bounds, 4, 4))
 
 
+def test_each_gate_is_timed_in_order() -> None:
+    results = evaluate_eo_gates([_source("a", _geotiff()), _source("b", _geotiff())])
+    for result in results:
+        assert result.started_at is not None and result.completed_at is not None
+        assert result.completed_at >= result.started_at
+    for earlier, later in zip(results, results[1:], strict=False):
+        assert later.started_at >= earlier.completed_at
+
+
 def test_requires_two_rasters() -> None:
     with pytest.raises(ValueError, match="at least two"):
         evaluate_eo_gates([_source("a", _geotiff())])

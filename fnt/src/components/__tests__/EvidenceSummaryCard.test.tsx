@@ -47,3 +47,20 @@ test('raw evidence data is capped at 2,000 characters', async () => {
   expect(raw.endsWith('… (truncated)')).toBe(true);
   expect(raw.length).toBe(2000 + '\n… (truncated)'.length);
 });
+
+test('mask evidence shows the tool-supplied label instead of the generic fallback', () => {
+  const evidence: Evidence = {
+    id: 'fusion-cloud',
+    tool: 'fusion.reconcile',
+    type: 'mask',
+    payload: { label: 'Water extent — cloud-covered (SAR only, reduced confidence)', region: 'cloud_affected' },
+    confidence: 0.75,
+    timing: 0.5,
+  };
+  render(<EvidenceSummaryCard evidence={evidence} />);
+
+  expect(
+    screen.getByText('Water extent — cloud-covered (SAR only, reduced confidence)'),
+  ).toBeInTheDocument();
+  expect(screen.queryByText('Spatial mask layer')).not.toBeInTheDocument();
+});

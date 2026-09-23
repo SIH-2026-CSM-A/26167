@@ -61,3 +61,10 @@ def test_crs_mismatch_is_vetoed_before_routing() -> None:
     ]
     assert gate_steps[0].params["status"] == "FAIL"
     assert not any(step.module == "router" for step in steps)
+
+    # Stages that do work span it: ingestion decodes two GeoTIFFs, each gate is timed itself.
+    ingested = next(step for step in steps if step.action == "asset_ingested")
+    assert ingested.completed_at > ingested.started_at
+    for step in gate_steps:
+        assert step.completed_at >= step.started_at
+    assert gate_steps[0].started_at >= ingested.completed_at

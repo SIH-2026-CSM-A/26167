@@ -11,8 +11,8 @@ job; this module only evaluates.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from rasterio.crs import CRS
@@ -62,18 +62,20 @@ class EoGateResult:
     status: EoGateStatus
     reason: str
     details: dict[str, object] = field(default_factory=dict)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 def evaluate_eo_gates(sources: list[ImageInput]) -> list[EoGateResult]:
     """Run all four gates over a request with two or more rasters, in fixed order."""
     if len(sources) < 2:
         raise ValueError("EO gates compare rasters and need at least two")
-    return [
-        _crs_consistency(sources),
-        _geographic_overlap(sources),
-        _gsd_match(sources),
-        _acquisition_order(sources),
-    ]
+    results = []
+    for gate in (_crs_consistency, _geographic_overlap, _gsd_match, _acquisition_order):
+        started = datetime.now(UTC)
+        result = gate(sources)
+        results.append(replace(result, started_at=started, completed_at=datetime.now(UTC)))
+    return results
 
 
 def _parse_crs(source: ImageInput) -> CRS | None:
