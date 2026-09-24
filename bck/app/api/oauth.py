@@ -11,6 +11,7 @@ from __future__ import annotations
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from fastapi import APIRouter, Cookie, HTTPException
 from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import DBAPIError, OperationalError
 
 from app.api.auth import REFRESH_COOKIE_NAME
 from app.auth import (
@@ -18,6 +19,7 @@ from app.auth import (
     create_access_token,
     create_refresh_token,
     create_user,
+    get_fallback_session,
     get_sync_session,
     get_user_by_email,
     get_user_by_provider_subject,
@@ -106,26 +108,48 @@ def _redirect_with_tokens(settings: Settings, user: User) -> RedirectResponse:
 
 
 def _find_or_create_oauth_user(*, email: str, subject: str, auth_provider: str) -> User:
-    with get_sync_session() as session:
-        user = get_user_by_provider_subject(session, subject)
-        if user is None:
-            existing = get_user_by_email(session, email)
-            if existing is not None and existing.hashed_password is not None:
-                # Reject rather than silently link: an OAuth provider proving control of an
-                # email address does not prove the caller knows the existing account's
-                # password. Silently linking here would let anyone who controls that email's
-                # Google/ISRO account take over a pre-existing password account.
-                raise HTTPException(status_code=409, detail=_EMAIL_REGISTERED_WITH_PASSWORD_DETAIL)
-            user = create_user(
-                session,
-                email=email,
-                hashed_password=None,
-                auth_provider=auth_provider,
-                provider_subject=subject,
-                is_verified=True,  # the provider already verified this email
-            )
-        session.expunge(user)
-    return user
+    try:
+        with get_sync_session() as session:
+            user = get_user_by_provider_subject(session, subject)
+            if user is None:
+                existing = get_user_by_email(session, email)
+                if existing is not None and existing.hashed_password is not None:
+                    # Reject rather than silently link: an OAuth provider proving control of an
+                    # email address does not prove the caller knows the existing account's
+                    # password. Silently linking here would let anyone who controls that email's
+                    # Google/ISRO account take over a pre-existing password account.
+                    raise HTTPException(
+                        status_code=409, detail=_EMAIL_REGISTERED_WITH_PASSWORD_DETAIL
+                    )
+                user = create_user(
+                    session,
+                    email=email,
+                    hashed_password=None,
+                    auth_provider=auth_provider,
+                    provider_subject=subject,
+                    is_verified=True,  # the provider already verified this email
+                )
+            session.expunge(user)
+        return user
+    except (OperationalError, DBAPIError):
+        with get_fallback_session() as session:
+            user = get_user_by_provider_subject(session, subject)
+            if user is None:
+                existing = get_user_by_email(session, email)
+                if existing is not None and existing.hashed_password is not None:
+                    raise HTTPException(
+                        status_code=409, detail=_EMAIL_REGISTERED_WITH_PASSWORD_DETAIL
+                    ) from None
+                user = create_user(
+                    session,
+                    email=email,
+                    hashed_password=None,
+                    auth_provider=auth_provider,
+                    provider_subject=subject,
+                    is_verified=True,
+                )
+            session.expunge(user)
+        return user
 
 
 @router.get("/google/login")
