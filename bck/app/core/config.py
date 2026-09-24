@@ -5,8 +5,16 @@ environment (or a local .env file for dev) via pydantic-settings.
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import Field, PostgresDsn, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+
+def normalize_database_url(url: str) -> str:
+    """Normalize DATABASE_URL for SQLAlchemy 2.0 usage, mapping postgres:// to postgresql://."""
+    url = url.strip()
+    if url.startswith("postgres://"):
+        return "postgresql://" + url[len("postgres://") :]
+    return url
 
 
 class Settings(BaseSettings):
@@ -22,7 +30,17 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: PostgresDsn
+    database_url: str = Field(
+        default="postgresql+psycopg://satquery:satquery_local_dev@localhost:5432/satquery"
+    )
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_database_url(cls, value: object) -> object:
+        if isinstance(value, str):
+            return normalize_database_url(value)
+        return str(value)
+
     cost_ceiling: float = Field(gt=0)
     log_level: str = "INFO"
     titiler_base_url: str = "http://localhost:8001"

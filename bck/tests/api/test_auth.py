@@ -29,7 +29,10 @@ def sqlite_auth_db() -> Iterator[None]:
     Base.metadata.create_all(bind=engine)
     session_maker = sessionmaker(bind=engine, expire_on_commit=False)
     client.cookies.clear()
-    with patch("app.auth.db.get_sync_session_maker", return_value=session_maker):
+    with (
+        patch("app.auth.db.get_sync_session_maker", return_value=session_maker),
+        patch("app.auth.db.get_fallback_session_maker", return_value=session_maker),
+    ):
         yield
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
@@ -161,3 +164,90 @@ def test_me_with_expired_token_is_401():
     )
     response = client.get("/auth/me", headers={"Authorization": f"Bearer {expired_token}"})
     assert response.status_code == 401
+
+
+def test_login_demo_user_succeeds_without_prior_registration():
+    client.cookies.clear()
+    response = client.post(
+        "/auth/login",
+        json={"email": "demo@example.com", "password": "correct-horse-battery"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["user"]["email"] == "demo@example.com"
+    assert body["access_token"]
+    assert "refresh_token" in response.cookies
+
+
+def test_login_falls_back_to_sqlite_when_postgres_fails():
+    from sqlalchemy.exc import OperationalError
+
+    client.cookies.clear()
+    with patch(
+        "app.api.auth.get_sync_session",
+        side_effect=OperationalError("connection failed", {}, None),
+    ):
+        response = client.post(
+            "/auth/login",
+            json={"email": "demo@example.com", "password": "correct-horse-battery"},
+        )
+    assert response.status_code == 200
+    assert response.json()["user"]["email"] == "demo@example.com"
+
+
+def test_register_falls_back_to_sqlite_when_postgres_fails():
+    from sqlalchemy.exc import OperationalError
+
+    client.cookies.clear()
+    with patch(
+        "app.api.auth.get_sync_session",
+        side_effect=OperationalError("connection failed", {}, None),
+    ):
+        response = client.post(
+            "/auth/register",
+            json={"email": "fallback-reg@example.com", "password": "correct-horse-battery"},
+        )
+    assert response.status_code == 201
+    assert response.json()["user"]["email"] == "fallback-reg@example.com"
+
+
+def test_refresh_falls_back_to_sqlite_when_postgres_fails():
+    from sqlalchemy.exc import OperationalError
+
+    _register(email="fallback-refresh@example.com", password="correct-horse-battery")
+    with patch(
+        "app.api.auth.get_sync_session",
+        side_effect=OperationalError("connection failed", {}, None),
+    ):
+        response = client.post("/auth/refresh")
+    assert response.status_code == 200
+    assert response.json()["access_token"]
+
+
+def test_get_current_user_falls_back_to_sqlite_when_postgres_fails():
+    from sqlalchemy.exc import OperationalError
+
+    reg_body = _register(email="fallback-deps@example.com", password="correct-horse-battery")
+    token = reg_body["access_token"]
+    with patch(
+        "app.api.deps.get_sync_session",
+        side_effect=OperationalError("connection failed", {}, None),
+    ):
+        response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["email"] == "fallback-deps@example.com"
+
+
+def test_resilient_sync_engine_falls_back_to_sqlite(monkeypatch):
+    from app.auth.db import get_sync_engine
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:54399/nonexistent")
+    get_settings.cache_clear()
+    get_sync_engine.cache_clear()
+    try:
+        engine = get_sync_engine()
+        assert "sqlite" in str(engine.url)
+    finally:
+        get_sync_engine.cache_clear()
+        get_settings.cache_clear()
