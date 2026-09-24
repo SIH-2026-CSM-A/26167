@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
+from starlette.types import Scope
 
 from app.api import auth as auth_routes
 from app.api import history as history_routes
@@ -168,11 +169,24 @@ FRONTEND_DIST_DIR = _resolve_frontend_dist()
 
 
 class DynamicStaticFiles(StaticFiles):
+    async def check_config(self) -> None:
+        return
+
     def lookup_path(self, path: str) -> tuple[str, os.stat_result | None]:
         assets_dir = _resolve_frontend_dist() / "assets"
         self.directory = str(assets_dir)
         self.all_directories = [assets_dir.resolve()]
+        if not assets_dir.exists():
+            return "", None
         return super().lookup_path(path)
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        assets_dir = _resolve_frontend_dist() / "assets"
+        self.directory = str(assets_dir)
+        self.all_directories = [assets_dir.resolve()]
+        if self.directory is None or not Path(self.directory).exists():
+            return Response("Not Found", status_code=404)
+        return await super().get_response(path, scope)
 
 
 app.mount(

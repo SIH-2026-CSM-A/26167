@@ -16,6 +16,9 @@ def client() -> TestClient:
 
 
 def test_serve_root_returns_index_html(client: TestClient) -> None:
+    dist_dir = _resolve_frontend_dist()
+    if dist_dir is None or not (dist_dir / "index.html").exists():
+        pytest.skip("Frontend build not present in headless CI environment")
     response = client.get("/")
     assert response.status_code == 200
     assert "text/html" in response.headers.get("content-type", "")
@@ -23,6 +26,9 @@ def test_serve_root_returns_index_html(client: TestClient) -> None:
 
 
 def test_serve_spa_client_routes(client: TestClient) -> None:
+    dist_dir = _resolve_frontend_dist()
+    if dist_dir is None or not (dist_dir / "index.html").exists():
+        pytest.skip("Frontend build not present in headless CI environment")
     for route in ["/upload", "/chat", "/login", "/auth/callback"]:
         response = client.get(route)
         assert response.status_code == 200
@@ -32,9 +38,12 @@ def test_serve_spa_client_routes(client: TestClient) -> None:
 
 def test_serve_static_assets(client: TestClient) -> None:
     dist_dir = _resolve_frontend_dist()
-    js_file = next((dist_dir / "assets").glob("*.js"), None)
+    assets_dir = dist_dir / "assets" if dist_dir is not None else None
+    if assets_dir is None or not assets_dir.is_dir():
+        pytest.skip("Frontend build not present in headless CI environment")
+    js_file = next(assets_dir.glob("*.js"), None)
     if js_file is None:
-        pytest.skip("No compiled JS assets found in frontend dist")
+        pytest.skip("Frontend build not present in headless CI environment")
     response = client.get(f"/assets/{js_file.name}")
     assert response.status_code == 200
     assert "javascript" in response.headers.get(
@@ -76,7 +85,7 @@ def test_missing_frontend_build_returns_404(
 
 
 def test_dynamic_frontend_dist_serves_custom_files(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     custom_dist = tmp_path / "custom_dist"
     custom_dist.mkdir()
