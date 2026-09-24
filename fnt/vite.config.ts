@@ -59,6 +59,10 @@ function serveDemoData(): Plugin {
 
 export default defineConfig({
   plugins: [react(), serveDemoData()],
+  base: '/',
+  define: {
+    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL ?? ''),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

@@ -1,0 +1,13 @@
+{
+  "name": "satquery-fullstack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SatQuery AI unified full-stack single-service deployment",
+  "scripts": {
+    "build:frontend": "npm --prefix fnt ci && npm --prefix fnt run build",
+    "build:backend": "cd bck && uv sync --no-dev",
+    "build": "npm run build:frontend && npm run build:backend",
+    "start": "cd bck && uv run uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000}",
+    "serve": "npm run build && npm run start"
+  }
+}

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import uuid
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from app.api import auth as auth_routes
@@ -140,3 +143,77 @@ async def export_evidence_geojson(payload: Answer) -> Response:
         media_type="application/geo+json",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+app.post("/api/query", response_model=Answer, include_in_schema=False)(submit_query)
+
+
+def _resolve_frontend_dist() -> Path:
+    env_dist = os.environ.get("FRONTEND_DIST_DIR")
+    if env_dist:
+        return Path(env_dist).resolve()
+    repo_root = Path(__file__).resolve().parents[3]
+    for candidate in [
+        repo_root / "fnt" / "dist",
+        repo_root / "frontend" / "dist",
+        Path.cwd() / "fnt" / "dist",
+        Path.cwd() / "dist",
+    ]:
+        if candidate.is_dir():
+            return candidate.resolve()
+    return (repo_root / "fnt" / "dist").resolve()
+
+
+FRONTEND_DIST_DIR = _resolve_frontend_dist()
+
+
+class DynamicStaticFiles(StaticFiles):
+    def lookup_path(self, path: str) -> tuple[str, os.stat_result | None]:
+        assets_dir = _resolve_frontend_dist() / "assets"
+        self.directory = str(assets_dir)
+        self.all_directories = [assets_dir.resolve()]
+        return super().lookup_path(path)
+
+
+app.mount(
+    "/assets",
+    DynamicStaticFiles(directory=str(FRONTEND_DIST_DIR / "assets"), check_dir=False),
+    name="assets",
+)
+
+
+@app.get("/", include_in_schema=False)
+async def serve_root() -> FileResponse:
+    dist_dir = _resolve_frontend_dist()
+    index_file = dist_dir / "index.html"
+    if not index_file.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Frontend build not found. Run 'npm run build' in fnt/.",
+        )
+    return FileResponse(index_file)
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_spa(full_path: str) -> FileResponse:
+    if full_path == "api" or full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+
+    dist_dir = _resolve_frontend_dist()
+    if full_path:
+        candidate_file = (dist_dir / full_path).resolve()
+        try:
+            candidate_file.relative_to(dist_dir.resolve())
+            if candidate_file.is_file():
+                return FileResponse(candidate_file)
+        except ValueError:
+            pass
+
+    index_file = dist_dir / "index.html"
+    if not index_file.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Frontend build not found. Run 'npm run build' in fnt/.",
+        )
+    return FileResponse(index_file)
+
