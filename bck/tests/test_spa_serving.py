@@ -37,10 +37,9 @@ def test_serve_static_assets(client: TestClient) -> None:
         pytest.skip("No compiled JS assets found in frontend dist")
     response = client.get(f"/assets/{js_file.name}")
     assert response.status_code == 200
-    assert (
-        "javascript" in response.headers.get("content-type", "")
-        or "text/" in response.headers.get("content-type", "")
-    )
+    assert "javascript" in response.headers.get(
+        "content-type", ""
+    ) or "text/" in response.headers.get("content-type", "")
 
 
 def test_unknown_api_routes_return_404(client: TestClient) -> None:
@@ -87,9 +86,7 @@ def test_dynamic_frontend_dist_serves_custom_files(
     (custom_dist / "index.html").write_text(
         "<!doctype html><html>Custom SPA</html>", encoding="utf-8"
     )
-    (assets_dir / "custom.js").write_text(
-        "console.log('custom');", encoding="utf-8"
-    )
+    (assets_dir / "custom.js").write_text("console.log('custom');", encoding="utf-8")
 
     monkeypatch.setenv("FRONTEND_DIST_DIR", str(custom_dist))
     custom_client = TestClient(app)
@@ -101,4 +98,3 @@ def test_dynamic_frontend_dist_serves_custom_files(
     response_asset = custom_client.get("/assets/custom.js")
     assert response_asset.status_code == 200
     assert "console.log('custom');" in response_asset.text
-

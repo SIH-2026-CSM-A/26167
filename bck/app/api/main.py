@@ -216,4 +216,3 @@ async def serve_spa(full_path: str) -> FileResponse:
             detail="Frontend build not found. Run 'npm run build' in fnt/.",
         )
     return FileResponse(index_file)
-
