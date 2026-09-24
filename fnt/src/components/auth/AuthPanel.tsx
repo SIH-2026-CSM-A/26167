@@ -48,7 +48,11 @@ export const AuthPanel: React.FC = () => {
         ))}
       </div>
 
-      <AuthForm mode={mode} onSuccess={() => navigate('/upload')} />
+      <AuthForm
+        mode={mode}
+        onModeChange={setMode}
+        onSuccess={() => navigate('/upload')}
+      />
 
       <div className="mt-6">
         <OAuthButtons />

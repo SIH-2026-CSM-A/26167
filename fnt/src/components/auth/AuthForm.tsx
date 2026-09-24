@@ -2,8 +2,20 @@ import React, { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthApiError } from '@/services/auth';
+import { DemoCredentialsBanner } from './DemoCredentialsBanner';
+import {
+  DEFAULT_DEMO_CREDENTIALS,
+  isDemoCredentialsVisible,
+  type DemoCredentials,
+} from '@/utils/demoCredentials';
 
 type Mode = 'login' | 'register';
+
+export interface AuthFormProps {
+  mode: Mode;
+  onSuccess: () => void;
+  onModeChange?: (mode: Mode) => void;
+}
 
 interface FieldErrors {
   email?: string;
@@ -25,7 +37,7 @@ function validate(mode: Mode, email: string, password: string): FieldErrors {
   return errors;
 }
 
-export const AuthForm: React.FC<{ mode: Mode; onSuccess: () => void }> = ({ mode, onSuccess }) => {
+export const AuthForm: React.FC<AuthFormProps> = ({ mode, onSuccess, onModeChange }) => {
   const { login, register } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,6 +47,18 @@ export const AuthForm: React.FC<{ mode: Mode; onSuccess: () => void }> = ({ mode
   const [formError, setFormError] = useState<string | null>(null);
   const [suggestedAction, setSuggestedAction] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const showDemoBanner = isDemoCredentialsVisible();
+
+  const handleAutoFill = (credentials: DemoCredentials = DEFAULT_DEMO_CREDENTIALS) => {
+    setEmail(credentials.email);
+    setPassword(credentials.password);
+    setFieldErrors({});
+    setFormError(null);
+    if (mode !== 'login' && onModeChange) {
+      onModeChange('login');
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -66,6 +90,8 @@ export const AuthForm: React.FC<{ mode: Mode; onSuccess: () => void }> = ({ mode
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5" style={{ fontFamily: 'var(--font-sans)' }}>
+      {showDemoBanner && <DemoCredentialsBanner onAutoFill={handleAutoFill} />}
+
       {formError && (
         <div
           role="alert"
