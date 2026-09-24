@@ -5,7 +5,7 @@ from app.auth.crud import (
     get_user_by_id,
     get_user_by_provider_subject,
 )
-from app.auth.db import get_sync_session
+from app.auth.db import get_fallback_session, get_sync_session
 from app.auth.models import RevokedToken, User
 from app.auth.password import hash_password, verify_password
 from app.auth.revocation import is_token_revoked, revoke_token
@@ -26,6 +26,7 @@ __all__ = [
     "create_refresh_token",
     "create_user",
     "decode_token",
+    "get_fallback_session",
     "get_sync_session",
     "get_token_claims",
     "get_user_by_email",
