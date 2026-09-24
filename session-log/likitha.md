@@ -177,11 +177,34 @@ Built via Antigravity (single-agent, Windows).
     - Frontend: `npm test` (all 35 tests passed, 0 failures), `npm run lint` (0 errors, 0 warnings), `npm run build` (clean exit 0).
     - Backend: `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run pytest` (210 passed, 10 skipped).
 
+## 2026-09-08 — Demo Credentials Banner and One-Click Auto-Fill on Login Page
+
+Built via Antigravity.
+
+**Did:**
+- Created `fnt/src/utils/demoCredentials.ts`:
+  - Defined canonical test credentials `DEFAULT_DEMO_CREDENTIALS` (`demo@example.com` / `correct-horse-battery`) matching integration test fixtures in `bck/tests/api/test_auth.py`.
+  - Implemented `isDemoCredentialsVisible()` environment guard supporting `EXPOSE_DEMO_CREDS` / `VITE_EXPOSE_DEMO_CREDS` flags and deployed/non-development environments (`process.env.NODE_ENV !== 'development'`, `import.meta.env.MODE !== 'development'`, `import.meta.env.PROD`).
+- Implemented `fnt/src/components/auth/DemoCredentialsBanner.tsx`:
+  - Renders "Demo Credentials" mission-control styled banner adhering to console-v2 design tokens.
+  - Displays default test credentials in monospace font.
+  - Provides a one-click "Auto-fill" button.
+- Updated `fnt/src/components/auth/AuthForm.tsx`:
+  - Conditionally renders `DemoCredentialsBanner` when `isDemoCredentialsVisible()` is true.
+  - Implemented `handleAutoFill` populating `email` and `password` controlled inputs, clearing validation errors, and switching mode to `login` if on `register`.
+- Updated `fnt/src/components/auth/AuthPanel.tsx`:
+  - Passed `onModeChange={setMode}` into `AuthForm` for coordinated mode switching.
+- Added comprehensive test suites:
+  - `fnt/src/utils/__tests__/demoCredentials.test.ts` (7 tests covering default credentials and all environment combinations).
+  - `fnt/src/components/auth/__tests__/DemoCredentialsBanner.test.tsx` (3 tests covering banner rendering, custom credentials, and auto-fill invocation).
+  - `fnt/src/components/auth/__tests__/AuthFormDemo.test.tsx` (4 tests covering form auto-fill integration, validation clearing, mode switching, and conditional rendering).
+- Maintained code standards: all files well under 300 lines (AuthForm: 225, AuthPanel: 70, DemoCredentialsBanner: 81, demoCredentials: 62), all functions under 48 lines, max parameters <= 4, 1 primary export per file, zero fake/stub data in production components, zero TODO comments.
+
 **Important Decisions & Rationale:**
-- Chose an amber/gold halo (`#f59e0b`) for hover geometry feedback on the map to provide high visual contrast distinct from cyan (`#22d3ee`) selection halos across both satellite and dark basemaps.
-- Decomposed paragraphs inside `CitationText.tsx` using a lightweight `CitingParagraph` component with `useMemo` tag extraction and `useEffect` smooth scrolling to isolate DOM side effects per paragraph without re-rendering the whole message list.
+- Configured `isDemoCredentialsVisible()` to display by default in both local development and deployed demo environments, while honoring explicit suppression via `EXPOSE_DEMO_CREDS=false` or `VITE_EXPOSE_DEMO_CREDS=false`. Created `fnt/.env` (`VITE_EXPOSE_DEMO_CREDS=true`) for explicit Vite environment configuration.
+- Default credentials match the existing backend authentication test credentials (`demo@example.com` / `correct-horse-battery`), ensuring consistent authentication across tiers without fabricated accounts.
 
 **Rejected along the way:**
-- Rejected creating synthetic or separate layers for hover fill that could intercept pointer events over `evidence-mask-fill`.
-- Rejected altering backend contract files (`bck/app/contracts/`), keeping changes strictly within frontend scope.
+- Rejected hardcoding credentials directly inside component JSX; abstracted into `fnt/src/utils/demoCredentials.ts` to adhere to React Refresh pure-component export rules.
+- Rejected mutating form DOM nodes directly; updated React state (`setEmail`, `setPassword`) so validation errors and dirty tracking clear reactively.
 

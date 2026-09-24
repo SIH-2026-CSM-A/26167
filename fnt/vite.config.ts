@@ -59,6 +59,10 @@ function serveDemoData(): Plugin {
 
 export default defineConfig({
   plugins: [react(), serveDemoData()],
+  base: '/',
+  define: {
+    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL ?? ''),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -93,6 +97,10 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/history': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },

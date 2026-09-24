@@ -1,15 +1,45 @@
 import React, { useState } from 'react';
-import type { Answer } from '../../types/contracts';
+import { useNavigate } from 'react-router-dom';
+import type { Answer, ExecutionTrace } from '../../types/contracts';
 import { downloadEvidenceGeoJson, downloadEvidencePdf } from '../../services/api';
+import { EvidenceSummaryCard } from '@/components/EvidenceSummaryCard';
+import { TraceStepItem } from '@/components/Trace/TraceStepItem';
+import { useSatQuery } from '@/hooks/useSatQuery';
 
 interface QueryResultCardProps {
   answer: Answer;
 }
 
-export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
+/** Show/Hide list of TraceStepItems, shared by the result card and the Upload page's veto alert. */
+export const ExecutionTraceToggle: React.FC<{ trace: ExecutionTrace }> = ({ trace }) => {
   const [showTrace, setShowTrace] = useState<boolean>(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setShowTrace(!showTrace)}
+        className="flex cursor-pointer items-center gap-1 text-xs"
+        style={{ color: 'var(--accent)' }}
+      >
+        <span>{showTrace ? 'Hide' : 'Show'} Execution Trace</span>
+        <span style={{ color: 'var(--text-low)' }}>({trace.steps.length} steps)</span>
+      </button>
+      {showTrace && (
+        <div className="mt-2.5 flex flex-col gap-1">
+          {trace.steps.map((step, idx) => (
+            <TraceStepItem key={`${step.module}-${idx}`} step={step} index={idx} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+};
+
+export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
   const [downloadingPdf, setDownloadingPdf] = useState<boolean>(false);
   const [downloadingGeoJson, setDownloadingGeoJson] = useState<boolean>(false);
+  const { loadAnswer } = useSatQuery();
+  const navigate = useNavigate();
 
   const handleDownloadPdf = async () => {
     try {
@@ -33,18 +63,31 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
     }
   };
 
+  // Upload has no map panel of its own — "View on map" hands this result to the shared
+  // chat/query context and opens Chat, whose map hero already fits to all of its bounds.
+  const handleViewOnMap = () => {
+    loadAnswer(answer);
+    navigate('/chat');
+  };
+
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/90 p-5 flex flex-col gap-4 shadow-lg">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-        <h3 className="font-semibold text-sm text-slate-100">Pipeline Result</h3>
+    <div
+      className="flex flex-col gap-4 rounded-lg p-5 shadow-lg"
+      style={{ background: 'var(--bg-1)', border: '1px solid var(--line)' }}
+    >
+      <div className="flex items-center justify-between pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
+        <h3 className="text-sm" style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-display)' }}>
+          Pipeline Result
+        </h3>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Confidence:</span>
+          <span className="text-xs" style={{ color: 'var(--text-low)' }}>Confidence:</span>
           <span
-            className={`font-mono text-xs px-2 py-0.5 rounded font-bold ${
+            className="rounded px-2 py-0.5 text-xs font-bold"
+            style={
               answer.confidence >= 0.75
-                ? 'bg-emerald-950 border border-emerald-800 text-emerald-300'
-                : 'bg-amber-950 border border-amber-800 text-amber-300'
-            }`}
+                ? { background: 'var(--success-dim)', border: '1px solid var(--success)', color: 'var(--success)' }
+                : { background: 'rgba(199,123,58,0.16)', border: '1px solid var(--thermal)', color: '#e3a66c' }
+            }
           >
             {(answer.confidence * 100).toFixed(0)}%
           </span>
@@ -52,7 +95,8 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
             type="button"
             onClick={handleDownloadPdf}
             disabled={downloadingPdf}
-            className="ml-2 rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition disabled:opacity-50"
+            className="ml-2 rounded px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--text-mid)' }}
           >
             {downloadingPdf ? 'Exporting...' : 'PDF Report'}
           </button>
@@ -60,7 +104,8 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
             type="button"
             onClick={handleDownloadGeoJson}
             disabled={downloadingGeoJson}
-            className="rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition disabled:opacity-50"
+            className="rounded px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--text-mid)' }}
           >
             {downloadingGeoJson ? 'Exporting...' : 'Export GeoJSON'}
           </button>
@@ -68,71 +113,43 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
       </div>
 
       {answer.abstained && (
-        <div className="p-3 bg-amber-950/40 border border-amber-800/80 rounded-md text-amber-300 text-xs">
+        <div
+          className="rounded-md p-3 text-xs"
+          style={{ background: 'rgba(199,123,58,0.16)', border: '1px solid var(--thermal)', color: '#e3a66c' }}
+        >
           <strong>Pipeline Abstained:</strong> {answer.abstention_reason || 'Confidence threshold unmet.'}
         </div>
       )}
 
       <div>
-        <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Answer</label>
-        <p className="mt-1 text-sm text-slate-200 leading-relaxed font-sans">{answer.text}</p>
+        <label
+          className="text-[11px] font-medium uppercase tracking-widest"
+          style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+        >
+          Answer
+        </label>
+        <p className="mt-1 text-sm leading-relaxed" style={{ color: 'var(--text-hi)' }}>{answer.text}</p>
       </div>
 
       {answer.evidence && answer.evidence.length > 0 && (
         <div>
-          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+          <label
+            className="text-[11px] font-medium uppercase tracking-widest"
+            style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+          >
             Grounded Evidence ({answer.evidence.length})
           </label>
           <div className="mt-1.5 flex flex-col gap-1.5">
-            {answer.evidence.map((ev, i) => {
-              const desc =
-                ev.payload && typeof ev.payload === 'object' && 'description' in ev.payload
-                  ? String((ev.payload as Record<string, unknown>).description)
-                  : JSON.stringify(ev.payload);
-              return (
-                <div key={ev.id || i} className="p-2 rounded bg-slate-950/60 border border-slate-800 text-xs text-slate-300">
-                  <span className="font-mono text-cyan-400 mr-2">[{ev.type.toUpperCase()}]</span>
-                  <span className="text-slate-400 mr-2">({ev.tool})</span>
-                  <span>{desc}</span>
-                </div>
-              );
-            })}
+            {answer.evidence.map((ev) => (
+              <EvidenceSummaryCard key={ev.id} evidence={ev} onViewOnMap={handleViewOnMap} />
+            ))}
           </div>
         </div>
       )}
 
       {answer.trace?.steps && answer.trace.steps.length > 0 && (
-        <div className="border-t border-slate-800 pt-3">
-          <button
-            type="button"
-            onClick={() => setShowTrace(!showTrace)}
-            className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
-          >
-            <span>{showTrace ? 'Hide' : 'Show'} Execution Trace</span>
-            <span className="text-slate-500">({answer.trace.steps.length} steps)</span>
-          </button>
-          {showTrace && (
-            <div className="mt-2.5 flex flex-col gap-1 font-mono text-[11px] bg-slate-950 p-3 rounded border border-slate-800">
-              {answer.trace.steps.map((step, idx) => (
-                <div key={idx} className="flex flex-col gap-0.5 text-slate-400 py-1 border-b border-slate-800/50 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-600">{idx + 1}.</span>
-                    <span className="text-cyan-400 font-semibold">{step.module}</span>
-                    <span className="text-slate-500">→</span>
-                    <span className="text-amber-300">{step.action}</span>
-                    {step.confidence !== null && (
-                      <span className="text-emerald-400 text-[10px]">({Math.round(step.confidence * 100)}%)</span>
-                    )}
-                  </div>
-                  {step.params && Object.keys(step.params).length > 0 && (
-                    <div className="text-slate-500 text-[10px] pl-4 truncate">
-                      {JSON.stringify(step.params)}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+          <ExecutionTraceToggle trace={answer.trace} />
         </div>
       )}
     </div>

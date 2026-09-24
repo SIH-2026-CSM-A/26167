@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronRight, ChevronDown, CheckCircle, Clock, Link as LinkIcon } from 'lucide-react';
 import type { TraceStep } from '@/types/contracts';
-import { formatDuration } from '@/utils/evidenceGeoJson';
+import { durationSeconds, formatDuration } from '@/utils/evidenceGeoJson';
 
 export interface TraceStepItemProps {
   step: TraceStep;
@@ -46,7 +46,7 @@ const StepHeaderRow: React.FC<{
     </div>
     <div className="flex items-center gap-3 text-[11px] text-slate-400">
       {confidence !== null && (
-        <span className="flex items-center gap-1 text-emerald-400 font-mono">
+        <span className="flex items-center gap-1 font-mono" style={{ color: 'var(--success)' }}>
           <CheckCircle className="h-3 w-3" />
           {(confidence * 100).toFixed(0)}%
         </span>
@@ -62,9 +62,7 @@ const StepHeaderRow: React.FC<{
 );
 
 export const TraceStepItem: React.FC<TraceStepItemProps> = ({ step, index, onSelectEvidence }) => {
-  const durationSec = step.completed_at
-    ? (new Date(step.completed_at).getTime() - new Date(step.started_at).getTime()) / 1000
-    : null;
+  const durationSec = step.completed_at ? durationSeconds(step.started_at, step.completed_at) : null;
 
   return (
     <div className="relative pl-6 pb-4 border-l border-slate-800 last:border-l-0 last:pb-0">

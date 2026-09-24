@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
+import { PhotoLabel } from '@/components/PhotoLabel';
 import { ConfigSelector, PipelineConfigMode } from '../components/Upload/ConfigSelector';
 import { DemoPresetSelector } from '../components/DemoPresetSelector';
 import { SlotUploader, SlotModality } from '../components/Upload/SlotUploader';
-import { QueryResultCard } from '../components/Upload/QueryResultCard';
+import { ExecutionTraceToggle, QueryResultCard } from '../components/Upload/QueryResultCard';
 import { submitImageQuery, QueryApiError } from '@/services/query';
-import type { Answer, Modality } from '../types/contracts';
+import type { Answer, ExecutionTrace, Modality } from '../types/contracts';
 import type { PresetApplyPayload, PresetSlotData } from '../types/manifest';
+
+// three.js (and the sphere/texture it loads) is only ever needed on this one page — code-split
+// it into its own chunk instead of paying for it on every route's initial load.
+const RotatingEarthBackdrop = lazy(() =>
+  import('@/components/RotatingEarthBackdrop').then((m) => ({ default: m.RotatingEarthBackdrop }))
+);
 
 export type UploadSourceMode = 'manual' | 'preset';
 
@@ -24,6 +31,8 @@ export const UploadPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestedAction, setSuggestedAction] = useState<string | null>(null);
+  const [reasonCode, setReasonCode] = useState<string | null>(null);
+  const [errorTrace, setErrorTrace] = useState<ExecutionTrace | null>(null);
   const [ambiguousSlots, setAmbiguousSlots] = useState<boolean[]>([]);
   const [result, setResult] = useState<Answer | null>(null);
 
@@ -91,6 +100,8 @@ export const UploadPage: React.FC = () => {
     setLoading(true);
     setError(null);
     setSuggestedAction(null);
+    setReasonCode(null);
+    setErrorTrace(null);
     setResult(null);
 
     // Omitting the whole `modality` override lets the backend classify every image from
@@ -118,6 +129,8 @@ export const UploadPage: React.FC = () => {
       if (err instanceof QueryApiError) {
         setError(err.message);
         setSuggestedAction(err.suggestedAction ?? null);
+        setReasonCode(err.reasonCode ?? null);
+        setErrorTrace(err.trace ?? null);
         // Only 'auto' slots could have been the one the backend couldn't classify —
         // an explicit override can never trigger MODALITY_UNKNOWN.
         setAmbiguousSlots(
@@ -133,30 +146,40 @@ export const UploadPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
+    <>
+      <Suspense fallback={null}>
+        <RotatingEarthBackdrop />
+      </Suspense>
+      <div className="relative max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
       <div
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4"
         style={{ borderBottom: '1px solid var(--line)' }}
       >
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: 'var(--text-hi)' }}>
-            Satellite Imagery Query
+        <div className="flex flex-col items-start gap-1">
+          <h1 className="text-2xl">
+            <PhotoLabel style={{ color: 'var(--text-hi)', fontFamily: 'var(--font-display)' }}>
+              Satellite Imagery Query
+            </PhotoLabel>
           </h1>
-          <p className="text-xs mt-1" style={{ color: 'var(--text-mid)' }}>
+          <PhotoLabel className="text-xs" style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}>
             Multi-modal earth observation query and analysis pipeline
-          </p>
+          </PhotoLabel>
         </div>
 
-        <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-lg shrink-0">
+        <div
+          className="flex items-center gap-1.5 rounded-lg p-1 shrink-0"
+          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
+        >
           <button
             type="button"
             disabled={loading}
             onClick={() => handleSourceChange('manual')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+            className="rounded-md px-3 py-1.5 text-xs font-semibold transition-all"
+            style={
               sourceMode === 'manual'
-                ? 'bg-cyan-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
+                ? { background: 'var(--accent)', color: 'var(--bg-0)' }
+                : { color: 'var(--text-low)' }
+            }
           >
             Manual Upload
           </button>
@@ -164,11 +187,12 @@ export const UploadPage: React.FC = () => {
             type="button"
             disabled={loading}
             onClick={() => handleSourceChange('preset')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+            className="rounded-md px-3 py-1.5 text-xs font-semibold transition-all"
+            style={
               sourceMode === 'preset'
-                ? 'bg-cyan-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
+                ? { background: 'var(--accent)', color: 'var(--bg-0)' }
+                : { color: 'var(--text-low)' }
+            }
           >
             Demo Presets
           </button>
@@ -204,38 +228,64 @@ export const UploadPage: React.FC = () => {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">Analysis Query</label>
+          <label className="text-[11px] font-medium uppercase tracking-widest">
+            <PhotoLabel style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}>
+              Analysis Query
+            </PhotoLabel>
+          </label>
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             disabled={loading}
             placeholder="e.g. Identify land cover classification or detect changes"
-            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+            className="w-full rounded-lg px-3.5 py-2.5 text-sm outline-none transition-colors"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--text-hi)' }}
           />
         </div>
 
         <button
           type="submit"
           disabled={!canSubmit}
-          className={`py-2.5 px-5 rounded-lg text-xs font-semibold tracking-wider uppercase transition-all ${
+          className="rounded-lg px-5 py-2.5 text-xs font-semibold uppercase tracking-wider transition-all disabled:cursor-not-allowed"
+          style={
             canSubmit
-              ? 'bg-cyan-600 hover:bg-cyan-500 text-white cursor-pointer shadow-md'
-              : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-          }`}
+              ? { background: 'var(--accent)', color: 'var(--bg-0)' }
+              : { background: 'var(--bg-2)', color: 'var(--text-low)' }
+          }
         >
           {loading ? 'Processing via Backend...' : 'Run Pipeline'}
         </button>
       </form>
 
       {error && (
-        <div role="alert" className="p-4 bg-rose-950/30 border border-rose-800 rounded-lg text-xs text-rose-300">
-          <strong>Submission Error:</strong> {error}
-          {suggestedAction && <p className="mt-1 text-rose-300/80">{suggestedAction}</p>}
+        <div
+          role="alert"
+          className="rounded-lg p-4 text-xs"
+          style={{ background: 'rgba(210,87,75,0.12)', border: '1px solid var(--danger)', color: 'var(--danger)' }}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <strong>Submission Error:</strong> {error}
+            {reasonCode && (
+              <span
+                className="rounded px-1.5 py-0.5 text-[10px]"
+                style={{ border: '1px solid var(--danger)', fontFamily: 'var(--font-mono)' }}
+              >
+                {reasonCode}
+              </span>
+            )}
+          </div>
+          {suggestedAction && <p className="mt-1" style={{ color: 'var(--text-mid)' }}>{suggestedAction}</p>}
+          {errorTrace && errorTrace.steps.length > 0 && (
+            <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+              <ExecutionTraceToggle trace={errorTrace} />
+            </div>
+          )}
         </div>
       )}
 
       {result && <QueryResultCard answer={result} />}
-    </div>
+      </div>
+    </>
   );
 };

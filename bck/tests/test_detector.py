@@ -76,3 +76,4 @@ def test_detect_change_real_pair_with_change_matches_ground_truth_closely():
     assert np.isclose(accuracy, 0.9548, atol=0.001)
     assert np.isclose(ev.confidence, 0.9523, atol=0.001)
     assert "41.3%" in ev.payload["description"]
+    assert ev.payload["label"] == "Changed area (BIT change mask)"

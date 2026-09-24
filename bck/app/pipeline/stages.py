@@ -69,8 +69,12 @@ class TraceRecorder:
         confidence: float | None = None,
         evidence_ids: list[str] | None = None,
         started_at: datetime | None = None,
+        completed_at: datetime | None = None,
     ) -> None:
-        """Append one completed event containing only supplied execution facts."""
+        """Append one step. Pass the real `started_at` of the work a step covers; a step
+        recorded without one is an instant event. `completed_at` defaults to now, and is
+        only passed for work that finished before it could be recorded.
+        """
         event_started = started_at or datetime.now(UTC)
         self._steps.append(
             TraceStep(
@@ -79,7 +83,7 @@ class TraceRecorder:
                 params=params or {},
                 confidence=confidence,
                 started_at=event_started,
-                completed_at=datetime.now(UTC),
+                completed_at=completed_at or datetime.now(UTC),
                 evidence_ids=evidence_ids or [],
             )
         )

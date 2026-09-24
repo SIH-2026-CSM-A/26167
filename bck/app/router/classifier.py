@@ -15,15 +15,15 @@ from app.router.schemas import IntentClassification, TaskType
 # 5. VQA (Default single-image visual question answering)
 
 _ARCHIVE_SEARCH_PATTERN = re.compile(
-    r"\b(archive|catalog)\b.*\b(search|find|retriev|query)\b|"
-    r"\b(search|query|retriev|find)\b.*\b(archive|catalog)\b",
+    r"\b(archive|catalog)\b.*\b(search|find|retriev\w*|query)\b|"
+    r"\b(search|query|retriev\w*|find)\b.*\b(archive|catalog)\b",
     re.IGNORECASE,
 )
 
 _FUSION_PATTERNS = [
     re.compile(r"\b(optical\s+and\s+sar|sar\s+and\s+optical)\b", re.IGNORECASE),
     re.compile(r"\b(cross[- ]modal|joint\s+analysis)\b", re.IGNORECASE),
-    re.compile(r"\b(fuse|fusion)\b", re.IGNORECASE),
+    re.compile(r"\bfus(e|ed|ing|ion)\b", re.IGNORECASE),
     re.compile(r"\btogether\s+to\s+(identify|detect|analyze|classify)\b", re.IGNORECASE),
 ]
 

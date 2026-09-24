@@ -1,20 +1,38 @@
 /* Central design tokens — the single source both the login page and workspace pages import.
-   SEMANTIC COLOR RULE: --ndvi/--water/--thermal are data-meaning colors only (satellite
-   analysis categories), never decorative or interactive. --accent is the only interactive
-   color (buttons, links, focus rings). Do not reuse the data colors as UI accents.
+   SEMANTIC COLOR RULE, three distinct meanings, no double duty:
+     --accent   — the only interactive color (buttons, links, focus rings, brand mark,
+                  active tabs/selection, inline emphasized terms). Currently a warm orange.
+     --success  — confidence-high / "this succeeded" signal only (confidence badges, status
+                  dots, trace-step confidence readouts). Never used for anything interactive.
+     --thermal  — warning / low-confidence signal only.
+   --ndvi/--water/--thermal below that point aren't --success or --accent are reserved,
+   data-meaning colors (satellite analysis categories) with no current live consumer —
+   never decorative or interactive.
+
+   Visual system (console-v2): serif display type ("Source Serif 4") for headings/turn
+   text, plain sans body ("Inter") for UI chrome, small all-caps tracked "IBM Plex Mono"
+   for labels/readouts — matched against docs/mockups/console-v2-reference-{1,2}.png via
+   pixel sampling, not guessed.
 */
 :root {
-  --bg-0: #0a0e12;
-  --bg-1: #0f151b;
-  --bg-2: #141c24;
-  --bg-3: #1a2530;
+  /* Panels (--bg-1/--bg-2, used as solid card/panel backgrounds throughout) are mixed down
+     from this single opacity knob — default 1 (fully solid, current look unchanged). Turning
+     it down lets full-bleed page photos (ChatPage/UploadPage/LoginPage) show faintly through
+     every panel at once, without touching any component. */
+  --panel-bg-opacity: 1;
+  --bg-0: #0d0e0c;
+  --bg-1-solid: #111210;
+  --bg-2-solid: #17181a;
+  --bg-1: color-mix(in srgb, var(--bg-1-solid) calc(var(--panel-bg-opacity) * 100%), transparent);
+  --bg-2: color-mix(in srgb, var(--bg-2-solid) calc(var(--panel-bg-opacity) * 100%), transparent);
+  --bg-3: #1e201f;
 
-  --line: #233040;
-  --line-soft: #1b2733;
+  --line: #2a2b28;
+  --line-soft: #202220;
 
-  --text-hi: #e8edf2;
-  --text-mid: #9aacbc;
-  --text-low: #5e6e7d;
+  --text-hi: #f2f0ec;
+  --text-mid: #b8b6b0;
+  --text-low: #8c8c8c;
 
   --ndvi: #4a7c59;
   --ndvi-fill: rgba(74, 124, 89, 0.18);
@@ -23,10 +41,20 @@
   --thermal: #c77b3a;
   --thermal-fill: rgba(199, 123, 58, 0.16);
 
-  --accent: #3ddbd9;
-  --accent-dim: rgba(61, 219, 217, 0.14);
+  --accent: #e8935a;
+  --accent-dim: rgba(232, 147, 90, 0.14);
+  --success: #8fc79e;
+  --success-dim: rgba(74, 124, 89, 0.18);
+  --observer: #f2867e;
+  --observer-dim: rgba(242, 134, 126, 0.14);
   --danger: #d2574b;
 
-  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  /* For text that sits directly on a full-bleed page photo (LoginPage/UploadPage) with no
+     solid panel behind it — strong enough to hold contrast over the brightest city-light
+     clusters in the image, not just its darker corners. */
+  --photo-text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 14px rgba(13, 14, 12, 0.9);
+
+  --font-display: 'Source Serif 4', 'Georgia', serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 }

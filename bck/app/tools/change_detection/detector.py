@@ -90,6 +90,7 @@ def detect_change(
         payload={
             "change_mask": effective_mask,
             "raw_mask": predicted_mask,
+            "label": "Changed area (BIT change mask)",
             "description": summary.description,
             "bbox": summary.bbox,
             "relative_position": summary.relative_position,

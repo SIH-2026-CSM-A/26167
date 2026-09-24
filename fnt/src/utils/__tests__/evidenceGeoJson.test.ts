@@ -9,6 +9,7 @@ import {
   getCollectionBounds,
   isOutsideViewport,
   normalizeBoundsForFit,
+  durationSeconds,
   formatDuration,
 } from '../evidenceGeoJson';
 
@@ -324,9 +325,23 @@ describe('evidenceGeoJson', () => {
     });
   });
 
+  describe('durationSeconds', () => {
+    it('keeps the microseconds that Date would truncate', () => {
+      // A real EO-gate step from the live veto run: 0.436 ms, inside one millisecond.
+      expect(durationSeconds('2026-09-23T17:16:07.431000Z', '2026-09-23T17:16:07.431436Z')).toBeCloseTo(0.000436, 9);
+      expect(durationSeconds('2026-09-23T17:16:07.115257Z', '2026-09-23T17:16:07.425213Z')).toBeCloseTo(0.309956, 9);
+    });
+
+    it('handles timestamps with millisecond or no fractional part', () => {
+      expect(durationSeconds('2026-09-23T00:00:00Z', '2026-09-23T00:00:01.5Z')).toBeCloseTo(1.5, 9);
+    });
+  });
+
   describe('formatDuration', () => {
     it('formats millisecond and second durations correctly', () => {
       expect(formatDuration(0.045)).toBe('45ms');
+      expect(formatDuration(0.00026)).toBe('0.26ms');
+      expect(formatDuration(0.0012)).toBe('1ms');
       expect(formatDuration(1.234)).toBe('1.23s');
     });
   });

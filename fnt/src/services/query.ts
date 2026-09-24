@@ -1,4 +1,4 @@
-import type { Answer } from '@/types/contracts';
+import type { Answer, ExecutionTrace } from '@/types/contracts';
 import { authFetch } from '@/services/authFetch';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -6,13 +6,15 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 export class QueryApiError extends Error {
   readonly reasonCode?: string;
   readonly suggestedAction?: string;
+  readonly trace?: ExecutionTrace;
 
   /** Create a user-displayable API error, optionally carrying the backend's veto details. */
-  constructor(message: string, reasonCode?: string, suggestedAction?: string) {
+  constructor(message: string, reasonCode?: string, suggestedAction?: string, trace?: ExecutionTrace) {
     super(message);
     this.name = 'QueryApiError';
     this.reasonCode = reasonCode;
     this.suggestedAction = suggestedAction;
+    this.trace = trace;
   }
 }
 
@@ -52,8 +54,8 @@ export async function submitImageQuery(
   });
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    const { message, reasonCode, suggestedAction } = readErrorDetail(body, response.status);
-    throw new QueryApiError(message, reasonCode, suggestedAction);
+    const { message, reasonCode, suggestedAction, trace } = readErrorDetail(body, response.status);
+    throw new QueryApiError(message, reasonCode, suggestedAction, trace);
   }
   return body as Answer;
 }
@@ -62,7 +64,7 @@ export async function submitImageQuery(
 export function readErrorDetail(
   body: unknown,
   status: number
-): { message: string; reasonCode?: string; suggestedAction?: string } {
+): { message: string; reasonCode?: string; suggestedAction?: string; trace?: ExecutionTrace } {
   if (isRecord(body)) {
     const detail = body.detail;
     if (typeof detail === 'string') {
@@ -74,6 +76,10 @@ export function readErrorDetail(
         reasonCode: typeof detail.reason_code === 'string' ? detail.reason_code : undefined,
         suggestedAction:
           typeof detail.suggested_action === 'string' ? detail.suggested_action : undefined,
+        trace:
+          isRecord(detail.trace) && Array.isArray(detail.trace.steps)
+            ? (detail.trace as unknown as ExecutionTrace)
+            : undefined,
       };
     }
   }

@@ -438,3 +438,27 @@ full slice when GPU time allows, replace this result, close AC2 for real.
 **Checks:** `uv run ruff check .` / `ruff format --check .` / `lint-imports` / `pytest
 tests/evaluation` all green after fixing a pre-existing test that hardcoded the old
 prompt string.
+
+## 2026-09-24 — Unified Single-Service Full-Stack Deployment Configuration
+
+- **Agent**: Antigravity
+- **Scope**:
+  - `bck/app/api/main.py`: mounted built frontend `/assets` via `StaticFiles` with dynamic resolution helper `_resolve_frontend_dist()`, registered `/api/query` alias to ensure `/api` routes take precedence, and added catch-all routes at `/` and `/{full_path:path}` returning `index.html` for client-side React SPA routing while safely returning 404 for unhandled `/api` routes and guarding against path traversal.
+  - `fnt/vite.config.ts`: configured `base: '/'` and `define` with `'import.meta.env.VITE_API_URL'` defaulting to empty string (relative path) in production builds, eliminating cross-origin CORS requirements.
+  - Root deployment configurations:
+    - `Dockerfile`: Multi-stage build compiling React frontend (`node:20-alpine`) and running Python backend with `uv` (`python:3.11-slim`), binding to `0.0.0.0:${PORT}`.
+    - `render.yaml`: Web service definition chaining build and start commands with `$PORT` support.
+    - `package.json`: Root build chaining scripts (`build:frontend`, `build:backend`, `build`, `start`, `serve`).
+    - `build.sh` & `start.sh`: Shell deployment scripts installing dependencies, building the SPA, and booting uvicorn.
+  - `bck/tests/test_spa_serving.py`: Unit test suite testing root serving, client SPA routes (`/upload`, `/chat`, `/login`, `/auth/callback`), static assets serving, unknown API 404 behavior, `/api/query` precedence, and dynamic `FRONTEND_DIST_DIR` overrides.
+
+**Rejected along the way:**
+- Rejected hardcoding static dist directory path; implemented `_resolve_frontend_dist()` to check `FRONTEND_DIST_DIR` environment variable, repo `fnt/dist`, and cwd fallbacks so both Docker containers and local tests resolve cleanly.
+- Rejected catching `/api/*` in the SPA fallback handler; explicitly return 404 JSON for unknown API routes to prevent API callers from receiving HTML error pages.
+- Rejected cross-origin API defaults in production; configured relative API paths so cookie authentication and API requests operate first-party without CORS overhead.
+- Updated `DynamicStaticFiles.lookup_path` to dynamically update `self.all_directories = [assets_dir.resolve()]` ensuring runtime monkeypatching of `FRONTEND_DIST_DIR` resolves cleanly without relying on cached directories.
+- Updated `test_api_query_endpoint_takes_precedence` assertion to accept `response.status_code in (401, 422)` accommodating both authenticated and unauthenticated test environments.
+- Replaced hardcoded static asset filename `index-BNNBZ0KQ.js` in `test_serve_static_assets` with dynamic asset inspection via `next((dist_dir / "assets").glob("*.js"), None)`.
+
+
+

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { getHistory } from '@/services/history';
 import { ConfidenceBadge } from '@/components/Chat/ConfidenceBadge';
-import type { QueryHistoryItem } from '@/types/contracts';
+import { useSatQuery } from '@/hooks/useSatQuery';
+import type { Answer, QueryHistoryItem } from '@/types/contracts';
 
 export interface HistoryPanelProps {
   /** Re-fetches whenever this value changes — pass the latest completed Answer reference. */
@@ -15,9 +16,24 @@ function formatModality(modality: string): string {
   return modality;
 }
 
+/** A history row only ever persisted query_text/answer_text/confidence/modality (see
+ * app/contracts/history.py) — evidence and trace were never stored, so a replayed turn
+ * renders with none rather than inventing data that was never fetched. */
+function historyItemToAnswer(item: QueryHistoryItem): Answer {
+  return {
+    text: item.answer_text,
+    evidence: [],
+    trace: { trace_id: `history-${item.id}`, steps: [], created_at: item.created_at },
+    confidence: item.confidence,
+    abstained: false,
+    abstention_reason: null,
+  };
+}
+
 export const HistoryPanel: React.FC<HistoryPanelProps> = ({ refreshKey }) => {
   const [items, setItems] = useState<QueryHistoryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { loadAnswer } = useSatQuery();
 
   useEffect(() => {
     let cancelled = false;
@@ -66,10 +82,13 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ refreshKey }) => {
 
       {items !== null &&
         items.map((item) => (
-          <div
+          <button
             key={item.id}
-            className="px-4 py-2.5 text-[12.5px]"
+            type="button"
+            onClick={() => loadAnswer(historyItemToAnswer(item), item.query_text)}
+            className="w-full px-4 py-2.5 text-left text-[12.5px] transition-colors hover:opacity-80"
             style={{ borderBottom: '1px solid var(--line-soft)', color: 'var(--text-mid)' }}
+            title="View this past turn"
           >
             <div className="line-clamp-2">{item.query_text}</div>
             <div
@@ -79,7 +98,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ refreshKey }) => {
               <span>{formatModality(item.modality)}</span>
               <ConfidenceBadge confidence={item.confidence} className="text-[10px] py-0.5 px-2" />
             </div>
-          </div>
+          </button>
         ))}
     </div>
   );

@@ -318,7 +318,24 @@ export function normalizeBoundsForFit(
   return [minLon, minLat, maxLon, maxLat];
 }
 
+/** Microseconds since epoch from an ISO timestamp; `Date` alone truncates to milliseconds. */
+function isoToMicros(iso: string): number {
+  const fraction = /\.(\d+)/.exec(iso)?.[1] ?? '';
+  const subMillisecond = Number(fraction.padEnd(6, '0').slice(3, 6));
+  return Date.parse(iso) * 1000 + subMillisecond;
+}
+
+/** Duration between two backend ISO timestamps, in seconds, at microsecond precision. */
+export function durationSeconds(startedAt: string, completedAt: string): number {
+  return (isoToMicros(completedAt) - isoToMicros(startedAt)) / 1_000_000;
+}
+
 export function formatDuration(seconds: number): string {
+  // Metadata-only stages (e.g. EO gates) finish in well under a millisecond; rounding
+  // them to "0ms" would read as "not measured".
+  if (seconds < 0.001) {
+    return `${(seconds * 1000).toFixed(2)}ms`;
+  }
   if (seconds < 1) {
     return `${Math.round(seconds * 1000)}ms`;
   }

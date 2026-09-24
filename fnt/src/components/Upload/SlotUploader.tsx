@@ -65,13 +65,31 @@ export const SlotUploader: React.FC<SlotUploaderProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-2 p-3.5 rounded-lg border border-slate-800 bg-slate-900/50">
+    <div
+      className="flex flex-col gap-2 rounded-lg p-3.5"
+      style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
+    >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">{label}</span>
+        <span
+          className="text-[11px] font-medium uppercase tracking-widest"
+          style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}
+        >
+          {label}
+        </span>
         <div className="flex items-center gap-1.5">
-          <label className="text-[11px] text-slate-400">Modality:</label>
+          <label className="text-[11px]" style={{ color: 'var(--text-low)' }}>
+            Modality:
+          </label>
           {isModalityLocked ? (
-            <span className="px-2 py-0.5 text-xs font-mono rounded bg-slate-800 border border-slate-700 text-cyan-400">
+            <span
+              className="rounded px-2 py-0.5 text-xs"
+              style={{
+                background: 'var(--bg-1)',
+                border: '1px solid var(--line)',
+                color: 'var(--accent)',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
               {modality} (locked)
             </span>
           ) : (
@@ -79,9 +97,12 @@ export const SlotUploader: React.FC<SlotUploaderProps> = ({
               value={modality}
               disabled={disabled}
               onChange={(e) => onModalityChange(e.target.value as SlotModality)}
-              className={`bg-slate-950 border rounded px-2 py-0.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none ${
-                needsClarification ? 'border-amber-500' : 'border-slate-700'
-              }`}
+              className="rounded px-2 py-0.5 text-xs outline-none"
+              style={{
+                background: 'var(--bg-1)',
+                border: `1px solid ${needsClarification ? '#e3a66c' : 'var(--line)'}`,
+                color: 'var(--text-mid)',
+              }}
             >
               <option value="auto">auto-detect</option>
               <option value="optical">optical</option>
@@ -92,8 +113,8 @@ export const SlotUploader: React.FC<SlotUploaderProps> = ({
       </div>
 
       {needsClarification && (
-        <p className="text-[11px] text-amber-400">
-          ⚠ Could be the image the backend couldn't classify — pick Optical or SAR.
+        <p className="text-[11px]" style={{ color: '#e3a66c' }}>
+          ⚠ Could be the image the backend couldn&apos;t classify — pick Optical or SAR.
         </p>
       )}
 
@@ -115,27 +136,28 @@ export const SlotUploader: React.FC<SlotUploaderProps> = ({
             handleFileChange(e.dataTransfer.files[0]);
           }
         }}
-        className={`border-2 border-dashed rounded-md p-4 text-center cursor-pointer transition-colors ${
+        className="cursor-pointer rounded-md border-2 border-dashed p-4 text-center transition-colors"
+        style={
           error
-            ? 'border-rose-700/60 bg-rose-950/20'
+            ? { borderColor: 'rgba(210,87,75,0.6)', background: 'rgba(210,87,75,0.08)' }
             : file
-            ? 'border-emerald-700/60 bg-emerald-950/20'
-            : 'border-slate-800 hover:border-slate-700 bg-slate-950/40'
-        }`}
+            ? { borderColor: 'rgba(94,234,212,0.5)', background: 'var(--accent-dim)' }
+            : { borderColor: 'var(--line)', background: 'var(--bg-1)' }
+        }
       >
         {file ? (
-          <div className="flex items-center justify-between text-xs text-emerald-400">
-            <span className="truncate font-mono">{file.name}</span>
-            <span className="text-slate-500 text-[10px]">{(file.size / 1024).toFixed(1)} KB</span>
+          <div className="flex items-center justify-between text-xs" style={{ color: 'var(--accent)' }}>
+            <span className="truncate" style={{ fontFamily: 'var(--font-mono)' }}>{file.name}</span>
+            <span className="text-[10px]" style={{ color: 'var(--text-low)' }}>{(file.size / 1024).toFixed(1)} KB</span>
           </div>
         ) : (
-          <div className="text-xs text-slate-400">
-            <span className="text-cyan-400 font-medium">Click to browse</span> or drag satellite image here
+          <div className="text-xs" style={{ color: 'var(--text-low)' }}>
+            <span className="font-medium" style={{ color: 'var(--accent)' }}>Click to browse</span> or drag satellite image here
           </div>
         )}
       </div>
 
-      {error && <p className="text-[11px] text-rose-400 leading-tight">{error}</p>}
+      {error && <p className="text-[11px] leading-tight" style={{ color: 'var(--danger)' }}>{error}</p>}
     </div>
   );
 };

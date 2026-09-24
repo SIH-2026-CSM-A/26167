@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { PhotoLabel } from '@/components/PhotoLabel';
 import type { DemoPreset, PresetApplyPayload } from '@/types/manifest';
 import {
   DEFAULT_MANIFEST_URL,
@@ -62,59 +63,97 @@ export const DemoPresetSelector: React.FC<DemoPresetSelectorProps> = ({
 
   if (error) {
     return (
-      <div role="alert" className="p-4 bg-rose-950/30 border border-rose-800 rounded-lg text-xs text-rose-300">
+      <div
+        role="alert"
+        className="rounded-lg p-4 text-xs"
+        style={{ background: 'rgba(210,87,75,0.12)', border: '1px solid var(--danger)', color: 'var(--danger)' }}
+      >
         {error}
       </div>
     );
   }
 
   if (loading) {
-    return <div className="p-4 text-xs text-slate-400">Loading demo presets...</div>;
+    return (
+      <div className="p-4 text-xs">
+        <PhotoLabel style={{ color: 'var(--text-low)' }}>Loading demo presets...</PhotoLabel>
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Curated Demo Presets (F24)
+        <label className="text-[11px] font-medium uppercase tracking-widest">
+          <PhotoLabel style={{ color: 'var(--text-low)', fontFamily: 'var(--font-mono)' }}>
+            Curated Demo Presets (F24)
+          </PhotoLabel>
         </label>
-        <span className="text-[11px] text-slate-500">Auto-populates query & verified imagery</span>
+        <PhotoLabel className="text-[11px]" style={{ color: 'var(--text-low)' }}>
+          Auto-populates query &amp; verified imagery
+        </PhotoLabel>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 lg:grid-cols-3">
         {presets.map((preset) => {
           const isSelected = selectedPresetId === preset.id;
           const isLoadingThis = loadingPresetId === preset.id;
+          const isDisabled = disabled || loadingPresetId !== null;
           return (
             <button
               key={preset.id}
               type="button"
-              disabled={disabled || loadingPresetId !== null}
+              disabled={isDisabled}
               onClick={() => handleSelectPreset(preset)}
-              className={`text-left p-3 rounded-lg border transition-all flex flex-col justify-between ${
+              className={`flex flex-col justify-between rounded-lg border p-3 text-left transition-all ${
+                isDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+              }`}
+              style={
                 isSelected
-                  ? 'border-cyan-500 bg-cyan-950/40 text-cyan-200 shadow-sm shadow-cyan-950 ring-1 ring-cyan-500'
-                  : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
-              } ${disabled || loadingPresetId !== null ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                  ? { borderColor: 'var(--accent)', background: 'var(--bg-2)', color: 'var(--text-hi)' }
+                  : { borderColor: 'var(--line)', background: 'var(--bg-2)', color: 'var(--text-mid)' }
+              }
             >
               <div>
-                <div className="flex items-center justify-between gap-1.5 mb-1">
-                  <span className="font-semibold text-xs text-slate-100 truncate">{preset.label}</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded uppercase font-mono bg-slate-800 text-cyan-400 border border-slate-700 shrink-0">
+                <div className="mb-1 flex items-center justify-between gap-1.5">
+                  <span
+                    className="truncate text-xs font-semibold"
+                    style={{ color: isSelected ? 'var(--accent)' : 'var(--text-hi)' }}
+                  >
+                    {preset.label}
+                  </span>
+                  <span
+                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase"
+                    style={{
+                      background: 'var(--bg-1)',
+                      border: '1px solid var(--line)',
+                      color: 'var(--accent)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
                     {preset.scenario.replace(/_/g, ' ')}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 line-clamp-2 leading-snug italic">"{preset.query}"</p>
+                <p className="line-clamp-2 text-[11px] italic leading-snug" style={{ color: 'var(--text-low)' }}>
+                  &quot;{preset.query}&quot;
+                </p>
               </div>
 
-              <div className="mt-2.5 flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-800/80 pt-1.5">
-                <span>{preset.assets.length} {preset.assets.length === 1 ? 'asset' : 'assets'}</span>
+              <div
+                className="mt-2.5 flex items-center justify-between pt-1.5 text-[10px]"
+                style={{ color: 'var(--text-low)', borderTop: '1px solid var(--line-soft)' }}
+              >
+                <span>
+                  {preset.assets.length} {preset.assets.length === 1 ? 'asset' : 'assets'}
+                </span>
                 {isLoadingThis ? (
-                  <span className="text-cyan-400 animate-pulse font-medium">Loading files...</span>
+                  <span className="animate-pulse font-medium" style={{ color: 'var(--accent)' }}>
+                    Loading files...
+                  </span>
                 ) : isSelected ? (
-                  <span className="text-emerald-400 font-medium">Active</span>
+                  <span className="font-medium" style={{ color: 'var(--success)' }}>Active</span>
                 ) : (
-                  <span className="text-slate-500">Select preset</span>
+                  <span>Select preset</span>
                 )}
               </div>
             </button>
