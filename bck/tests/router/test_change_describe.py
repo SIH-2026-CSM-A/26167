@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from app.contracts import ImageInput, Modality, QueryRequest
 from app.router import (
     MAX_TOOL_CALLS,
+    PLANNED_TOOL_SEQUENCE,
     DispatchPlan,
     TaskType,
     ToolStep,
@@ -107,3 +108,17 @@ def test_missing_capture_order_is_vetoed():
     decision = route(request)
     assert decision.is_vetoed
     assert decision.veto.reason_code == VetoReasonCode.TEMPORAL_ORDER_MISSING
+
+
+def test_planned_sequence_table_matches_what_the_planner_builds():
+    images = [_optical("pre", 0), _optical("post", 1)]
+    cases = {
+        TaskType.VQA: ("What is in this image?", images[:1]),
+        TaskType.GROUNDING: ("Highlight the river.", images[:1]),
+        TaskType.CHANGE_VQA: ("What changed between these two images?", images),
+        TaskType.CHANGE_DESCRIBE: (COMPOSITE_PARAPHRASES[0], images),
+    }
+    for task_type, (query, request_images) in cases.items():
+        decision = route(QueryRequest(query=query, images=request_images))
+        assert decision.intent.task_type == task_type
+        assert decision.dispatch_plan.tool_sequence == PLANNED_TOOL_SEQUENCE[task_type]

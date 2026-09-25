@@ -35,7 +35,13 @@ from app.ingestion import (
 )
 from app.pipeline.cached_demo import find_cached_answer
 from app.pipeline.stages import PipelineError, PipelineUpload, TraceRecorder
-from app.router import MAX_TOOL_CALLS, DispatchPlan, VetoReasonCode, route
+from app.router import (
+    MAX_TOOL_CALLS,
+    PLANNED_TOOL_SEQUENCE,
+    DispatchPlan,
+    VetoReasonCode,
+    route,
+)
 from app.tools.change_detection.bit_io import (
     decode_mask_png,
     decode_probability_png,
@@ -326,6 +332,7 @@ def _run_live(
             "intent": decision.intent.task_type.value,
             "tool": dispatch_plan.tool_name if dispatch_plan is not None else None,
             "tool_sequence": dispatch_plan.tool_sequence if dispatch_plan is not None else [],
+            "planned_sequence": PLANNED_TOOL_SEQUENCE.get(decision.intent.task_type, []),
             "supported": decision.is_dispatched,
             "reason": route_reason,
         },

@@ -13,6 +13,18 @@ from app.router.schemas import (
     VetoReasonCode,
 )
 
+# The tool sequence each intent plans, known before any feasibility check. The pipeline records
+# it on vetoed requests too, so a refused composite query still shows what would have run.
+# tests/router/test_change_describe.py keeps this equal to what build_dispatch_plan builds.
+PLANNED_TOOL_SEQUENCE: dict[TaskType, list[str]] = {
+    TaskType.VQA: ["vqa_grounding"],
+    TaskType.GROUNDING: ["vqa_grounding"],
+    TaskType.CHANGE_VQA: ["change_detection"],
+    TaskType.CHANGE_DESCRIBE: ["change_detection", "vqa_grounding"],
+    TaskType.FUSION: ["fusion"],
+    TaskType.ARCHIVE_SEARCH_BONUS: ["archive_search"],
+}
+
 
 def build_dispatch_plan(
     intent: IntentClassification,

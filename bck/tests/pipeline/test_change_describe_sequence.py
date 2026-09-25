@@ -189,6 +189,10 @@ def test_bad_inputs_are_vetoed_before_either_tool_runs(levir, uploads_kwargs, re
     assert calls == []
     assert excinfo.value.status_code == 422
     assert excinfo.value.reason_code == reason_code
+    route_step = next(s for s in excinfo.value.trace.steps if s.action == "route_selected")
+    assert route_step.params["planned_sequence"] == ["change_detection", "vqa_grounding"]
+    assert route_step.params["supported"] is False
+    assert route_step.params["tool_sequence"] == []
     actions = [step.action for step in excinfo.value.trace.steps]
     assert not any(
         action in actions
