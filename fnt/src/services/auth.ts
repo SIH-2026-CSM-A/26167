@@ -29,7 +29,13 @@ export class AuthApiError extends Error {
   }
 }
 
+export const AUTH_UNAVAILABLE_MESSAGE =
+  'Sign-in service is unavailable right now. Try again in a minute.';
+
 async function parseAuthResponse(response: Response): Promise<AuthResponse> {
+  if (response.status >= 500) {
+    throw new AuthApiError(AUTH_UNAVAILABLE_MESSAGE);
+  }
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const { message, reasonCode, suggestedAction } = readErrorDetail(body, response.status);
@@ -38,24 +44,32 @@ async function parseAuthResponse(response: Response): Promise<AuthResponse> {
   return body as AuthResponse;
 }
 
-export async function loginRequest(email: string, password: string): Promise<AuthResponse> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
+async function postCredentials(
+  path: '/auth/login' | '/auth/register',
+  email: string,
+  password: string
+): Promise<AuthResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    // fetch only rejects on network failure (server down, DNS, CORS), never on HTTP status.
+    throw new AuthApiError(AUTH_UNAVAILABLE_MESSAGE);
+  }
   return parseAuthResponse(response);
 }
 
-export async function registerRequest(email: string, password: string): Promise<AuthResponse> {
-  const response = await fetch(`${API_BASE_URL}/auth/register`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  return parseAuthResponse(response);
+export function loginRequest(email: string, password: string): Promise<AuthResponse> {
+  return postCredentials('/auth/login', email, password);
+}
+
+export function registerRequest(email: string, password: string): Promise<AuthResponse> {
+  return postCredentials('/auth/register', email, password);
 }
 
 /** Returns null (rather than throwing) on a 401 — a missing/expired refresh cookie is the
