@@ -180,7 +180,7 @@ def test_change_detection_without_a_configured_space_fails_cleanly_with_a_reason
         pytest.skip(f"real LEVIR-CD fixtures not present under {FIXTURES_DIR}")
     from app.core.config import get_settings
 
-    monkeypatch.delenv("INFERENCE_SPACE", raising=False)
+    monkeypatch.setenv("INFERENCE_SPACE", "")
     get_settings.cache_clear()
     try:
         with pytest.raises(PipelineError) as excinfo:

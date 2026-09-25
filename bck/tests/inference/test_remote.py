@@ -156,7 +156,7 @@ def test_client_creation_failure_is_inference_unavailable():
 
 
 def test_not_configured_raises_without_contacting_anything(monkeypatch):
-    monkeypatch.delenv("INFERENCE_SPACE")
+    monkeypatch.setenv("INFERENCE_SPACE", "")
     get_settings.cache_clear()
     with patch.object(remote, "Client") as client_cls:
         with pytest.raises(remote.InferenceUnavailable, match="INFERENCE_SPACE unset"):

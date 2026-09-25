@@ -38,7 +38,7 @@ def isolated(monkeypatch, tmp_path) -> Iterator[None]:
     )
     Base.metadata.create_all(bind=engine)
     session_maker = sessionmaker(bind=engine, expire_on_commit=False)
-    monkeypatch.delenv("INFERENCE_SPACE", raising=False)
+    monkeypatch.setenv("INFERENCE_SPACE", "")
     monkeypatch.setattr(cached_demo, "CACHED_DIR", tmp_path)
     monkeypatch.setattr(remote, "_last_model_identity", None)
     get_settings.cache_clear()
