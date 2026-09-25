@@ -14,6 +14,7 @@ from app.router import (
     classify_intent,
     route,
 )
+from app.router.planner import CHANGE_REGION_PROMPT
 
 # A change cue AND a cue asking what the changed area contains.
 COMPOSITE_PARAPHRASES = [
@@ -68,7 +69,7 @@ def test_change_describe_plans_change_detection_then_vqa_on_the_post_image():
     (step,) = plan.followups
     assert step.image_bindings == {"image": "post"}
     assert step.input_from_previous == "largest_change_component"
-    assert COMPOSITE_PARAPHRASES[0] in step.task_parameters["prompt"]
+    assert step.task_parameters["prompt"] == CHANGE_REGION_PROMPT
 
 
 def test_single_tool_plans_have_no_followups():
@@ -124,15 +125,8 @@ def test_planned_sequence_table_matches_what_the_planner_builds():
         assert decision.dispatch_plan.tool_sequence == PLANNED_TOOL_SEQUENCE[task_type]
 
 
-def test_region_prompt_prefix_does_not_trigger_the_spatial_bbox_pass():
-    from app.router.planner import CHANGE_REGION_PROMPT_PREFIX
+def test_region_prompt_is_content_only_and_not_spatial():
     from app.tools.vqa_grounding.tool import SPATIAL_TRIGGER_PATTERN
 
-    assert SPATIAL_TRIGGER_PATTERN.search(CHANGE_REGION_PROMPT_PREFIX) is None
-    non_spatial = route(
-        QueryRequest(
-            query=COMPOSITE_PARAPHRASES[0], images=[_optical("pre", 0), _optical("post", 1)]
-        )
-    )
-    prompt = non_spatial.dispatch_plan.followups[0].task_parameters["prompt"]
-    assert SPATIAL_TRIGGER_PATTERN.search(prompt) is None
+    assert SPATIAL_TRIGGER_PATTERN.search(CHANGE_REGION_PROMPT) is None
+    assert not {"new", "change", "changed", "dates"} & set(CHANGE_REGION_PROMPT.lower().split())
