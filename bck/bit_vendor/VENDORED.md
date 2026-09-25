@@ -51,3 +51,5 @@ verified during ROHAN-001.
 
 Excluded from linting/formatting via `[tool.ruff] extend-exclude` — this is upstream
 third-party code we did not write and should not reformat.
+
+Local patch: `networks.py` `is` string comparisons (`with_pos`, `pool_mode`) changed to `==`; nothing else modified.

@@ -263,7 +263,7 @@ class BASE_Transformer(ResNet):
         mlp_dim = 2*dim
 
         self.with_pos = with_pos
-        if with_pos is 'learned':
+        if with_pos == 'learned':
             self.pos_embedding = nn.Parameter(torch.randn(1, self.token_len*2, 32))
         decoder_pos_size = 256//4
         self.with_decoder_pos = with_decoder_pos
@@ -294,9 +294,9 @@ class BASE_Transformer(ResNet):
 
     def _forward_reshape_tokens(self, x):
         # b,c,h,w = x.shape
-        if self.pool_mode is 'max':
+        if self.pool_mode == 'max':
             x = F.adaptive_max_pool2d(x, [self.pooling_size, self.pooling_size])
-        elif self.pool_mode is 'ave':
+        elif self.pool_mode == 'ave':
             x = F.adaptive_avg_pool2d(x, [self.pooling_size, self.pooling_size])
         else:
             x = x
