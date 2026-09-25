@@ -3,9 +3,23 @@
 from __future__ import annotations
 
 from fastapi import Header, HTTPException
+from sqlalchemy.exc import DBAPIError, OperationalError
 
-from app.auth import InvalidTokenError, User, decode_token, get_sync_session, get_user_by_id
+from app.auth import (
+    InvalidTokenError,
+    User,
+    decode_token,
+    get_fallback_session,
+    get_sync_session,
+    get_user_by_id,
+)
 from app.core.config import get_settings
+
+_DATABASE_UNAVAILABLE_DETAIL = {
+    "message": "Database connection failed. Ensure PostgreSQL is running on port 5432.",
+    "reason_code": "DATABASE_UNAVAILABLE",
+    "suggested_action": "Start the database container with: cd infra && docker-compose up -d",
+}
 
 _UNAUTHORIZED_DETAIL = {
     "message": "Missing or invalid access token.",
@@ -30,9 +44,19 @@ def get_current_user(authorization: str | None = Header(default=None)) -> User |
     except InvalidTokenError as error:
         raise HTTPException(status_code=401, detail=_UNAUTHORIZED_DETAIL) from error
 
-    with get_sync_session() as session:
-        user = get_user_by_id(session, user_id)
-        if user is None:
-            raise HTTPException(status_code=401, detail=_UNAUTHORIZED_DETAIL)
-        session.expunge(user)
+    try:
+        with get_sync_session() as session:
+            user = get_user_by_id(session, user_id)
+            if user is None:
+                raise HTTPException(status_code=401, detail=_UNAUTHORIZED_DETAIL)
+            session.expunge(user)
+    except (OperationalError, DBAPIError):
+        try:
+            with get_fallback_session() as session:
+                user = get_user_by_id(session, user_id)
+                if user is None:
+                    raise HTTPException(status_code=401, detail=_UNAUTHORIZED_DETAIL)
+                session.expunge(user)
+        except (OperationalError, DBAPIError) as error:
+            raise HTTPException(status_code=503, detail=_DATABASE_UNAVAILABLE_DETAIL) from error
     return user

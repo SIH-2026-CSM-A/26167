@@ -3,6 +3,7 @@ environment (or a local .env file for dev) via pydantic-settings.
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import Field, field_validator
@@ -40,6 +41,11 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return normalize_database_url(value)
         return str(value)
+
+    auth_fallback_db_path: Path = Path(__file__).resolve().parents[2] / "data" / "auth_fallback.db"
+    """SQLite file app.auth falls back to when Postgres is unreachable. Defaults under bck/data/
+    (gitignored) so a local demo can log in without the database container.
+    """
 
     cost_ceiling: float = Field(gt=0)
     log_level: str = "INFO"

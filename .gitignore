@@ -33,3 +33,6 @@ bck/checkpoints/
 bck/app/training/checkpoints/*
 !bck/app/training/checkpoints/yash004_mlp1_vision_lora
 !bck/app/training/checkpoints/yash004_mlp1_vision_lora/adapter_model.safetensors
+
+# Local SQLite auth fallback (app.auth.db)
+bck/data/*.db
