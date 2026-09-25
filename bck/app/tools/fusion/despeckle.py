@@ -46,10 +46,14 @@ def _local_mean_and_variance_masked(
     padded_valid = np.pad(effective_valid.astype(np.float64), pad, mode="reflect")
     windows_vals = sliding_window_view(padded_vals, (window_size, window_size))
     windows_valid = sliding_window_view(padded_valid, (window_size, window_size))
+    # Square before windowing: `windows_vals**2` would materialise every window
+    # (H*W*window_size**2 floats, ~98 MiB for 512x512) just to sum it. Same values,
+    # same reduction, identical result (tests/test_fusion_despeckle_memory.py).
+    windows_sq = sliding_window_view(padded_vals**2, (window_size, window_size))
 
     counts = windows_valid.sum(axis=(-2, -1))
     sum_vals = windows_vals.sum(axis=(-2, -1))
-    sum_sq = (windows_vals**2).sum(axis=(-2, -1))
+    sum_sq = windows_sq.sum(axis=(-2, -1))
     has_support = counts > 0
     with np.errstate(invalid="ignore", divide="ignore"):
         local_mean = np.where(has_support, sum_vals / counts, 0.0)
