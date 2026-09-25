@@ -40,9 +40,12 @@ WEIGHTS_REVISION = os.environ.get("WEIGHTS_REVISION", "main")
 EXPECTED_ADAPTER_SHA256 = "796d3c25d883d7798c3d7634f855c86f5ae2c0107922c7d5d80f216298dde405"
 EXPECTED_BIT_SHA256 = "c159ba76143447f58c9f367ce8126a0014f2e4ba218cdb97cca173952c38cb3b"
 
-# PLACEHOLDER: set from the first measured Space timings before switching to ZeroGPU.
-# No-op on CPU Basic; on ZeroGPU it caps each call's GPU allocation.
-VQA_GPU_DURATION_S = 120
+# Measured on this Space (cpu-upgrade, fp32, MAX_NEW_TOKENS=128, 2026-09-25): a spatial
+# question (answer + grounding + bbox passes) took 121.1 s and 117.6 s in-Space; a
+# non-spatial one (two passes) 42.3 s and 41.7 s. 125 s covers the measured worst case.
+# These are CPU times, so on ZeroGPU they are an upper bound: re-measure there and lower it.
+# No-op off ZeroGPU; on ZeroGPU it caps each call's GPU allocation.
+VQA_GPU_DURATION_S = 125
 
 torch.set_num_threads(os.cpu_count() or 1)
 

@@ -33,7 +33,7 @@ settings only; this README deliberately has no `hardware` line.
 - Device is `cuda` if `torch.cuda.is_available()`, otherwise `cpu`. InternVL uses bf16 on cuda
   and fp32 on CPU.
 - `vqa_ground` is decorated with `@spaces.GPU(duration=VQA_GPU_DURATION_S)`. It's a no-op off
-  ZeroGPU. `VQA_GPU_DURATION_S` in `app.py` is a **placeholder** until measured on this Space.
+  ZeroGPU. `VQA_GPU_DURATION_S` in `app.py` is 125 s, the measured CPU worst case (see the comment there). It's an upper bound for ZeroGPU; re-measure after switching hardware.
 - BIT always runs on CPU (small, and keeps parity with the local path). `change_detect` holds
   no GPU allocation.
 - Models load once at module level (`low_cpu_mem_usage=True`),
