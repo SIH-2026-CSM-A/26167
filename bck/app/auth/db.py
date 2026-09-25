@@ -18,7 +18,7 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.models import Base as AuthBase
-from app.core.config import get_settings
+from app.core.config import get_settings, sync_database_url
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +38,7 @@ def get_sync_engine() -> Engine:
     """Postgres engine, or the SQLite fallback engine if a connect probe fails."""
     settings = get_settings()
     url = str(settings.database_url)
-    sync_url = url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
-    if sync_url.startswith("postgresql://"):
-        sync_url = sync_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    sync_url = sync_database_url(url)
     if not sync_url.startswith("postgresql"):
         return create_engine(sync_url)
     engine = create_engine(sync_url, connect_args={"connect_timeout": 2})

@@ -18,6 +18,20 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
+def sync_database_url(url: str) -> str:
+    """Return the synchronous psycopg (v3) URL for DATABASE_URL.
+
+    psycopg2 is not installed, so a bare postgresql:// or postgres:// (SQLAlchemy's psycopg2
+    default) and the async postgresql+asyncpg:// scheme are all mapped to postgresql+psycopg://.
+    Non-Postgres URLs (e.g. sqlite) are returned unchanged.
+    """
+    url = normalize_database_url(url)
+    for prefix in ("postgresql+asyncpg://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix) :]
+    return url
+
+
 class Settings(BaseSettings):
     """Process-wide configuration.
 
