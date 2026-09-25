@@ -1,6 +1,6 @@
 """Serve demo presets from recorded real runs.
 
-A recording (data/demo/cached/<preset_id>.json) is the full Answer of a real live run of that
+A recording (data/demo/cached/<preset_id>.json.gz) is the full Answer of a real live run of that
 preset, written by scripts/record_demo_answers.py. It's served only when the uploaded files are
 byte-identical to the preset's assets (sha256) and the question is the preset's question, so a
 recording can never be passed off as the answer for other images or another question.
@@ -8,6 +8,7 @@ recording can never be passed off as the answer for other images or another ques
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 from datetime import datetime
@@ -48,10 +49,10 @@ def _preset_index(demo_root: Path) -> dict[tuple[str, frozenset[str]], str]:
 
 
 def load_recording(preset_id: str, cached_dir: Path) -> dict[str, Any] | None:
-    path = cached_dir / f"{preset_id}.json"
+    path = cached_dir / f"{preset_id}.json.gz"
     if not path.is_file():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(gzip.decompress(path.read_bytes()))
 
 
 def find_cached_answer(

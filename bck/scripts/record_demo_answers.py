@@ -2,18 +2,19 @@
 
 Posts every preset in data/demo/manifest.json to a running backend with run_live=true, so VQA
 and change detection go through the configured inference Space. Writes
-data/demo/cached/<preset_id>.json only when the response is a live run; a cached or failed
+data/demo/cached/<preset_id>.json.gz only when the response is a live run; a cached or failed
 response is never written. Nothing in a recording is typed by hand.
 
     uv run python scripts/record_demo_answers.py --base-url http://localhost:8000 \
         --email you@example.com --password '...'
 
-Re-run after changing model weights or pipeline logic; commit the JSON files it writes.
+Re-run after changing model weights or pipeline logic; commit the .json.gz files it writes.
 """
 
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import sys
@@ -22,7 +23,10 @@ from pathlib import Path
 
 import httpx
 
-from app.core.demo_manifest import DEMO_ROOT, load_demo_manifest
+# Same as scripts/run_benchmarks.py: running a file puts scripts/, not bck/, on sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.core.demo_manifest import DEMO_ROOT, load_demo_manifest  # noqa: E402
 
 CACHED_DIR = DEMO_ROOT / "cached"
 _ROLE_ORDER = {"pre_image": 0, "post_image": 1}
@@ -87,8 +91,11 @@ def main() -> int:
                 "model_identity": _model_identity(answer),
                 "answer": answer,
             }
-            path = CACHED_DIR / f"{preset.id}.json"
-            path.write_text(json.dumps(recording, indent=2) + "\n", encoding="utf-8")
+            # Compact + gzip: answers embed full mask arrays (tens of MB as indented JSON).
+            path = CACHED_DIR / f"{preset.id}.json.gz"
+            path.write_bytes(
+                gzip.compress(json.dumps(recording, separators=(",", ":")).encode(), mtime=0)
+            )
             print(f"OK   {preset.id} -> {path}")
     return 1 if failures else 0
 

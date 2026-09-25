@@ -5,6 +5,7 @@ test fixture written to a temp dir (never the committed recordings), so these te
 depend on whether real recordings exist yet.
 """
 
+import gzip
 import json
 import logging
 from collections.abc import Iterator
@@ -61,7 +62,7 @@ def _write_recording(tmp_dir, identity=None) -> None:
         "model_identity": identity if identity is not None else dict(EXPECTED_MODEL_IDENTITY),
         "answer": answer.model_dump(mode="json"),
     }
-    (tmp_dir / f"{PRESET_ID}.json").write_text(json.dumps(recording), encoding="utf-8")
+    (tmp_dir / f"{PRESET_ID}.json.gz").write_bytes(gzip.compress(json.dumps(recording).encode()))
 
 
 def _uploads(after_bytes: bytes | None = None) -> list[PipelineUpload]:
