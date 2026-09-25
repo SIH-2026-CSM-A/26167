@@ -159,9 +159,15 @@ def assemble_answer(
     trace: ExecutionTrace,
     abstained: bool,
     abstention_reason: str | None,
+    confidence: float | None = None,
 ) -> Answer:
-    """Map verified text, canonical evidence, and trace into the existing response contract."""
-    confidence = sum(item.confidence for item in evidence) / len(evidence) if evidence else 0.0
+    """Map verified text, canonical evidence, and trace into the existing response contract.
+
+    Confidence defaults to the mean of the evidence confidences; a caller with its own
+    aggregation rule (the change -> describe sequence uses the minimum) passes it in.
+    """
+    if confidence is None:
+        confidence = sum(item.confidence for item in evidence) / len(evidence) if evidence else 0.0
     return Answer(
         text=text,
         evidence=evidence,

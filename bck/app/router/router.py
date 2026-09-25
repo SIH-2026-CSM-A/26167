@@ -72,6 +72,7 @@ def router_trace_params(decision: RouterDecision) -> dict[str, Any]:
             "status": decision.status,
             "task_type": decision.intent.task_type.value,
             "tool_name": decision.dispatch_plan.tool_name,
+            "tool_sequence": decision.dispatch_plan.tool_sequence,
             "image_bindings": decision.dispatch_plan.image_bindings,
         }
 

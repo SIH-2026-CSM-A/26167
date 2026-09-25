@@ -8,6 +8,7 @@ from app.router.schemas import (
     InputInventory,
     IntentClassification,
     TaskType,
+    ToolStep,
     VetoDecision,
     VetoReasonCode,
 )
@@ -54,7 +55,7 @@ def build_dispatch_plan(
             task_parameters={"prompt": raw_query, "grounding": True},
         )
 
-    if task == TaskType.CHANGE_VQA:
+    if task in (TaskType.CHANGE_VQA, TaskType.CHANGE_DESCRIBE):
         capture_orders = {image.metadata.get("capture_order") for image in images}
         if capture_orders != {0, 1}:
             return VetoDecision(
@@ -70,10 +71,27 @@ def build_dispatch_plan(
             )
         pre_id = next(image.id for image in images if image.metadata.get("capture_order") == 0)
         post_id = next(image.id for image in images if image.metadata.get("capture_order") == 1)
+        followups: tuple[ToolStep, ...] = ()
+        if task == TaskType.CHANGE_DESCRIBE:
+            # VQA sees only a crop of the post image, so the prompt says what the crop is.
+            followups = (
+                ToolStep(
+                    tool_name="vqa_grounding",
+                    image_bindings={"image": post_id},
+                    task_parameters={
+                        "prompt": (
+                            "This image region is where a change was detected between two "
+                            f"acquisition dates. {raw_query.strip()}"
+                        )
+                    },
+                    input_from_previous="largest_change_component",
+                ),
+            )
         return DispatchPlan(
             tool_name="change_detection",
             image_bindings={"pre_image": pre_id, "post_image": post_id},
             task_parameters={"prompt": raw_query},
+            followups=followups,
         )
 
     if task == TaskType.FUSION:

@@ -14,6 +14,7 @@ DEFAULT_REGISTRY_CAPABILITIES: dict[TaskType, bool] = {
     TaskType.VQA: True,
     TaskType.GROUNDING: True,
     TaskType.CHANGE_VQA: True,
+    TaskType.CHANGE_DESCRIBE: True,
     TaskType.FUSION: True,
     TaskType.ARCHIVE_SEARCH_BONUS: False,
 }
@@ -82,7 +83,7 @@ def evaluate_veto(
     # 3. TaskType-derived structural inventory feasibility rules
     task = intent.task_type
 
-    if task == TaskType.CHANGE_VQA:
+    if task in (TaskType.CHANGE_VQA, TaskType.CHANGE_DESCRIBE):
         if inventory.total_images < 2:
             count_str = (
                 f"{inventory.total_images} was"

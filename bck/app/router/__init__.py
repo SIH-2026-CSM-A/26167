@@ -5,11 +5,13 @@ from app.router.inventory import extract_inventory
 from app.router.planner import build_dispatch_plan
 from app.router.router import create_router_trace_step, route, router_trace_params
 from app.router.schemas import (
+    MAX_TOOL_CALLS,
     DispatchPlan,
     InputInventory,
     IntentClassification,
     RouterDecision,
     TaskType,
+    ToolStep,
     VetoDecision,
     VetoReasonCode,
 )
@@ -17,11 +19,13 @@ from app.router.veto import DEFAULT_REGISTRY_CAPABILITIES, evaluate_veto
 
 __all__ = [
     "DEFAULT_REGISTRY_CAPABILITIES",
+    "MAX_TOOL_CALLS",
     "DispatchPlan",
     "InputInventory",
     "IntentClassification",
     "RouterDecision",
     "TaskType",
+    "ToolStep",
     "VetoDecision",
     "VetoReasonCode",
     "build_dispatch_plan",
