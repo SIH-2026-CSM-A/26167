@@ -1,0 +1,14 @@
+# gradio itself comes from README sdk_version (5.50.0); spaces is provided on ZeroGPU hardware.
+# Pins match bck/pyproject.toml except torch/torchvision (ZeroGPU requires torch >= 2.8).
+torch>=2.8
+torchvision>=0.23
+transformers==4.44.2
+tokenizers==0.19.1
+huggingface-hub==0.36.2
+accelerate==0.34.2
+peft>=0.13
+timm==1.0.29
+einops==0.8.2
+sentencepiece==0.2.2
+safetensors>=0.8.0
+numpy>=2.1
