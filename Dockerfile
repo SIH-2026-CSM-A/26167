@@ -27,7 +27,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 # Install Python backend dependencies
 WORKDIR /app/bck
 COPY bck/pyproject.toml bck/uv.lock* /app/bck/
-RUN uv sync --no-dev
+RUN uv sync --no-dev --frozen
 
 # Copy backend application source
 COPY bck/ /app/bck/
@@ -41,4 +41,4 @@ ENV FRONTEND_DIST_DIR=/app/fnt/dist
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uv run uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "exec .venv/bin/uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT}"]
