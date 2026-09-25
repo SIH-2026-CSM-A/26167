@@ -13,7 +13,12 @@ from app.verification.schemas import (
     VerificationPolicy,
 )
 
-CLAIM_BOUNDARY = re.compile(r"(?<=[.!?;])\s+|\s+(and|but|while|whereas)\s+", re.IGNORECASE)
+# A line break is a claim boundary too: models often answer as markdown lists, and a heading
+# line ("**New Structures:**") must not be glued to the list item under it.
+CLAIM_BOUNDARY = re.compile(r"(?<=[.!?;])\s+|\s*\n\s*|\s+(and|but|while|whereas)\s+", re.IGNORECASE)
+# Markdown list numbering ("1.", "2)") and emphasis markers carry no claim content.
+LIST_NUMBERING = re.compile(r"^\d+[.)]\s*")
+MARKDOWN_EMPHASIS = re.compile(r"\*\*|__|\*|`")
 WORD_PATTERN = re.compile(r"[a-z0-9]+")
 NON_EVIDENTIAL_WORDS = frozenset(
     {
@@ -701,7 +706,9 @@ def _split_claims(answer: str) -> tuple[tuple[str, str | None], ...]:
     delimiters: list[str] = []
     for i, part in enumerate(parts):
         if i % 2 == 0:
-            claims.append(part.strip().strip("-• \t\r\n.!?;:"))
+            claim = MARKDOWN_EMPHASIS.sub("", part or "").strip().strip("-• \t\r\n#")
+            claim = LIST_NUMBERING.sub("", claim)
+            claims.append(claim.strip().strip("-• \t\r\n.!?;:"))
         else:
             delimiters.append(part.lower() if part else "sentence")
 
