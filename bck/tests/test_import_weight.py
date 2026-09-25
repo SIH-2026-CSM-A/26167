@@ -6,15 +6,19 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 _CHECK = (
-    "import app.api.main, sys; print(any(m.split('.')[0] in "
-    "{'torch','transformers','torchvision','peft','timm'} for m in sys.modules))"
+    "import {module}, sys; print(any(m.split('.')[0] in "
+    "{{'torch','transformers','torchvision','peft','timm'}} for m in sys.modules))"
 )
 
 
-def test_api_import_does_not_load_ml_libraries():
+# app.pipeline is imported on the first /query; fusion and vetoed queries must stay torch-free.
+@pytest.mark.parametrize("module", ["app.api.main", "app.pipeline"])
+def test_import_does_not_load_ml_libraries(module):
     result = subprocess.run(
-        [sys.executable, "-c", _CHECK],
+        [sys.executable, "-c", _CHECK.format(module=module)],
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,

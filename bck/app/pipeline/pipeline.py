@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import numpy as np
 import rasterio
@@ -27,10 +28,8 @@ from app.ingestion import (
     evaluate_eo_gates,
     ingest_raster,
 )
-from app.models import InternVLAdapter, InternVLModelError
 from app.pipeline.stages import PipelineError, PipelineUpload, TraceRecorder
 from app.router import DispatchPlan, VetoReasonCode, route
-from app.tools.change_detection.detector import detect_change
 from app.tools.fusion.cloud_detector import detect_clouds
 from app.tools.fusion.despeckle import lee_filter
 from app.tools.fusion.guards import InsufficientValidSupportError
@@ -39,6 +38,11 @@ from app.tools.fusion.sar_scale import SarScale
 from app.tools.fusion.sar_water_mask import otsu_water_mask
 from app.tools.vqa_grounding import VqaModel, VqaToolError, VqaToolResult, execute_vqa
 from app.verification import VerificationPolicy, verification_trace_params, verify
+
+# app.models and the BIT detector import torch (~500 MiB resident). They are imported
+# inside the VQA/change-detection paths so fusion-only and vetoed queries never load it.
+if TYPE_CHECKING:
+    from app.models import InternVLAdapter
 
 logger = get_logger(__name__)
 
@@ -81,6 +85,8 @@ _EO_GATE_VETOES: dict[EoGate, tuple[VetoReasonCode, str]] = {
 
 
 def _get_default_model() -> InternVLAdapter:
+    from app.models import InternVLAdapter
+
     global _default_model
     if _default_model is None:
         _default_model = InternVLAdapter()
@@ -469,6 +475,8 @@ def _run_vqa_tool(
     model: VqaModel | None,
 ) -> tuple[list[Evidence], tuple[str, ...], VqaToolResult]:
     """Single-image VQA/grounding: unchanged behavior from the original single-tool pipeline."""
+    from app.models import InternVLModelError
+
     active_model = model or _get_default_model()
     source = _find_ingested(ingested, dispatch_plan.image_bindings["image"], role="image")
     recorder.record(
@@ -544,6 +552,8 @@ def _run_change_detection_tool(
     dispatch_plan: DispatchPlan,
 ) -> list[Evidence]:
     """Bi-temporal BIT change detection (ROHAN-002), mirroring the VQA dispatch shape."""
+    from app.tools.change_detection.detector import detect_change
+
     pre_image = _find_ingested(
         ingested, dispatch_plan.image_bindings["pre_image"], role="pre_image"
     )
