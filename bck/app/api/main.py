@@ -26,7 +26,6 @@ from app.evidence.report import (
     generate_evidence_geojson,
     generate_evidence_pdf,
 )
-from app.pipeline import PipelineError, PipelineUpload, run
 
 app = FastAPI(title="SatQuery AI")
 
@@ -76,6 +75,9 @@ async def submit_query(
         raise HTTPException(
             status_code=422, detail="images and capture_order must have the same length"
         )
+
+    # Lazy: app.pipeline pulls in torch/transformers; keep them out of API boot.
+    from app.pipeline import PipelineError, PipelineUpload, run
 
     uploads: list[PipelineUpload] = []
     for image, image_modality, image_capture_order in zip(
