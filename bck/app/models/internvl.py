@@ -14,6 +14,10 @@ import torch
 from PIL import Image
 
 DEFAULT_MODEL_ID = "OpenGVLab/InternVL3-2B"
+# Exact commit of the model repo. trust_remote_code=True executes Python from that repo, so an
+# unpinned load would silently run whatever upstream pushes next. This is the snapshot the
+# adapter was trained and verified against (== upstream main as of 2026-09-25).
+INTERNVL_REVISION = "899155015275a9b7338c7f4677e19c784e0e5a21"
 DEFAULT_ADAPTER_PATH = "app/training/checkpoints/yash004_mlp1_vision_lora"
 ADAPTER_PATH = os.environ.get("ADAPTER_PATH", DEFAULT_ADAPTER_PATH)
 ADAPTER_NAME = "yash004-mlp1-vision-lora"
@@ -233,19 +237,23 @@ class InternVLAdapter:
 
                 # Remote code omits this attribute on newer Transformers releases.
                 chat_cls = get_class_from_dynamic_module(
-                    "modeling_internvl_chat.InternVLChatModel", self.model_id
+                    "modeling_internvl_chat.InternVLChatModel",
+                    self.model_id,
+                    revision=INTERNVL_REVISION,
                 )
                 if not hasattr(chat_cls, "all_tied_weights_keys"):
                     chat_cls.all_tied_weights_keys = {}
 
                 tokenizer = AutoTokenizer.from_pretrained(
                     self.model_id,
+                    revision=INTERNVL_REVISION,
                     trust_remote_code=True,
                     use_fast=False,
                 )
                 with windows_cpu_safetensors_compat(self.device):
                     model = AutoModel.from_pretrained(
                         self.model_id,
+                        revision=INTERNVL_REVISION,
                         torch_dtype=self._dtype,
                         low_cpu_mem_usage=True,
                         trust_remote_code=True,
