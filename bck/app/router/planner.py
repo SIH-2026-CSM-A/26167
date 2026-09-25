@@ -13,6 +13,11 @@ from app.router.schemas import (
     VetoReasonCode,
 )
 
+CHANGE_REGION_PROMPT_PREFIX = (
+    "This image region is the part of the scene in which a change was detected between two "
+    "acquisition dates."
+)
+
 # The tool sequence each intent plans, known before any feasibility check. The pipeline records
 # it on vetoed requests too, so a refused composite query still shows what would have run.
 # tests/router/test_change_describe.py keeps this equal to what build_dispatch_plan builds.
@@ -85,16 +90,15 @@ def build_dispatch_plan(
         post_id = next(image.id for image in images if image.metadata.get("capture_order") == 1)
         followups: tuple[ToolStep, ...] = ()
         if task == TaskType.CHANGE_DESCRIBE:
-            # VQA sees only a crop of the post image, so the prompt says what the crop is.
+            # VQA sees only a crop of the post image, so the prompt says what the crop is. The
+            # prefix must not contain a spatial trigger word ("where", "locate", ...): those
+            # would add the VQA bbox pass (~45-60 s on the Space) to every composite query.
             followups = (
                 ToolStep(
                     tool_name="vqa_grounding",
                     image_bindings={"image": post_id},
                     task_parameters={
-                        "prompt": (
-                            "This image region is where a change was detected between two "
-                            f"acquisition dates. {raw_query.strip()}"
-                        )
+                        "prompt": f"{CHANGE_REGION_PROMPT_PREFIX} {raw_query.strip()}"
                     },
                     input_from_previous="largest_change_component",
                 ),

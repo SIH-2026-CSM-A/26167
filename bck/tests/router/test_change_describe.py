@@ -122,3 +122,17 @@ def test_planned_sequence_table_matches_what_the_planner_builds():
         decision = route(QueryRequest(query=query, images=request_images))
         assert decision.intent.task_type == task_type
         assert decision.dispatch_plan.tool_sequence == PLANNED_TOOL_SEQUENCE[task_type]
+
+
+def test_region_prompt_prefix_does_not_trigger_the_spatial_bbox_pass():
+    from app.router.planner import CHANGE_REGION_PROMPT_PREFIX
+    from app.tools.vqa_grounding.tool import SPATIAL_TRIGGER_PATTERN
+
+    assert SPATIAL_TRIGGER_PATTERN.search(CHANGE_REGION_PROMPT_PREFIX) is None
+    non_spatial = route(
+        QueryRequest(
+            query=COMPOSITE_PARAPHRASES[0], images=[_optical("pre", 0), _optical("post", 1)]
+        )
+    )
+    prompt = non_spatial.dispatch_plan.followups[0].task_parameters["prompt"]
+    assert SPATIAL_TRIGGER_PATTERN.search(prompt) is None
