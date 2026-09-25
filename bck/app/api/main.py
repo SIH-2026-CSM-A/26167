@@ -21,6 +21,7 @@ from app.api.deps import get_current_user
 from app.auth import User
 from app.contracts import Answer, Modality
 from app.core.config import get_settings
+from app.core.demo_manifest import DEMO_ROOT
 from app.evidence.report import (
     NotGeoreferencedError,
     generate_evidence_geojson,
@@ -49,6 +50,8 @@ async def submit_query(
     images: Annotated[list[UploadFile], File()],
     modality: Annotated[list[Modality] | None, Form()] = None,
     capture_order: Annotated[list[int] | None, Form()] = None,
+    demo_preset_id: Annotated[str | None, Form()] = None,
+    run_live: Annotated[bool, Form()] = False,
     _user: User | None = Depends(get_current_user),
 ) -> Answer:
     """Validate multipart shape, retain bytes, and delegate all processing to the pipeline."""
@@ -110,6 +113,8 @@ async def submit_query(
             uploads=uploads,
             model=model,
             user_id=_user.id if _user is not None else None,
+            # A demo preset is answered from its recorded run unless the user asks for live.
+            prefer_cached=demo_preset_id is not None and not run_live,
         )
     except PipelineError as error:
         raise HTTPException(
@@ -198,6 +203,15 @@ app.mount(
 )
 
 
+# Demo preset manifest and assets, read-only. StaticFiles never lists directories and
+# rejects paths that resolve outside DEMO_ROOT; nothing else under data/ is served.
+app.mount(
+    "/data/demo",
+    StaticFiles(directory=str(DEMO_ROOT), check_dir=False),
+    name="demo-data",
+)
+
+
 @app.get("/", include_in_schema=False)
 async def serve_root() -> FileResponse:
     dist_dir = _resolve_frontend_dist()
@@ -214,6 +228,8 @@ async def serve_root() -> FileResponse:
 async def serve_spa(full_path: str) -> FileResponse:
     if full_path == "api" or full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="API endpoint not found")
+    if full_path == "data" or full_path.startswith("data/"):
+        raise HTTPException(status_code=404, detail="Not found")
 
     dist_dir = _resolve_frontend_dist()
     if full_path:

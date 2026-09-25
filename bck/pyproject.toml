@@ -12,22 +12,10 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
     "pydantic-settings>=2.5",
-    "transformers==4.44.2",
-    "safetensors>=0.8.0",
-    "torch>=2.4",
-    "accelerate==0.34.2",
-    "bitsandbytes>=0.44",
-    "peft>=0.13",
     "rasterio>=1.4",
     "numpy>=2.1",
     "pillow>=11.0",
-    "sentencepiece==0.2.2",
-    "einops==0.8.2",
-    "timm==1.0.29",
-    "tokenizers==0.19.1",
     "huggingface-hub==0.36.2",
-    "datasets>=5.0.1",
-    "torchvision>=0.29.0",
     "scikit-image>=0.26.0",
     "s2cloudless>=1.7.3",
     "reportlab>=5.0.1",
@@ -36,6 +24,26 @@ dependencies = [
     "pyjwt>=2.9",
     "authlib>=1.3",
     "httpx>=0.27",
+    "gradio-client==1.14.0",
+]
+
+[project.optional-dependencies]
+# Local model execution: training, evaluation, benchmarks and the model tests. The deployed
+# API does not install this (Dockerfile: uv sync --no-dev); VQA and change detection run in
+# the inference Space (inference_space/). Install with: uv sync --extra inference
+inference = [
+    "torch>=2.4",
+    "torchvision>=0.29.0",
+    "transformers==4.44.2",
+    "tokenizers==0.19.1",
+    "safetensors>=0.8.0",
+    "accelerate==0.34.2",
+    "bitsandbytes>=0.44",
+    "peft>=0.13",
+    "timm==1.0.29",
+    "einops==0.8.2",
+    "sentencepiece==0.2.2",
+    "datasets>=5.0.1",
 ]
 
 [dependency-groups]
@@ -77,6 +85,7 @@ modules = [
     "app.db",
     "app.auth",
     "app.history",
+    "app.inference",
 ]
 
 [[tool.importlinter.contracts]]
@@ -85,9 +94,23 @@ type = "layers"
 layers = [
     "app.api",
     "app.pipeline",
-    "app.router | app.verification | app.evidence | app.ingestion | app.models | app.training | app.tools.vqa_grounding | app.tools.change_detection | app.tools.fusion | app.db | app.auth | app.history",
+    "app.router | app.verification | app.evidence | app.ingestion | app.models | app.training | app.tools.vqa_grounding | app.tools.change_detection | app.tools.fusion | app.db | app.auth | app.history | app.inference",
     "app.core",
     "app.contracts",
+]
+
+[[tool.importlinter.contracts]]
+name = "API and pipeline never load local models or torch"
+type = "forbidden"
+source_modules = ["app.api", "app.pipeline"]
+forbidden_modules = [
+    "app.models",
+    "app.tools.change_detection.bit_model",
+    "torch",
+    "torchvision",
+    "transformers",
+    "peft",
+    "timm",
 ]
 
 [[tool.importlinter.contracts]]
@@ -97,5 +120,5 @@ source_modules = ["app.contracts"]
 forbidden_modules = [
     "app.core", "app.pipeline", "app.api", "app.models", "app.training",
     "app.tools", "app.router", "app.verification", "app.evidence", "app.ingestion",
-    "app.db", "app.auth", "app.history",
+    "app.db", "app.auth", "app.history", "app.inference",
 ]

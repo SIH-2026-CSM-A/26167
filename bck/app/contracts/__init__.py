@@ -2,6 +2,7 @@ from app.contracts.auth import AuthResponse, LoginRequest, RegisterRequest, User
 from app.contracts.history import QueryHistoryItem
 from app.contracts.schemas import (
     Answer,
+    CachedRunInfo,
     DegradationNotice,
     Evidence,
     EvidenceType,
@@ -14,6 +15,7 @@ from app.contracts.schemas import (
 
 __all__ = [
     "Answer",
+    "CachedRunInfo",
     "AuthResponse",
     "DegradationNotice",
     "Evidence",

@@ -15,7 +15,7 @@ describe('submitQuery', () => {
 
     const request = submitQuery({ query: 'test query', images: [new File(['image'], 'scene.tif')], modalities: ['optical'] });
     const rejection = expect(request).rejects.toThrow('Query timed out. Check the backend and retry.');
-    await vi.advanceTimersByTimeAsync(180_000);
+    await vi.advanceTimersByTimeAsync(210_000);
 
     await rejection;
   });

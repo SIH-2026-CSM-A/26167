@@ -32,6 +32,9 @@ RUN uv sync --no-dev --frozen
 # Copy backend application source
 COPY bck/ /app/bck/
 
+# Demo presets and their recorded answers (served at /data/demo, read by app.core.demo_manifest)
+COPY data/demo/ /app/data/demo/
+
 # Copy built frontend assets from frontend-builder stage
 COPY --from=frontend-builder /app/fnt/dist /app/fnt/dist
 

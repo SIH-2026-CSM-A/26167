@@ -105,6 +105,18 @@ class Settings(BaseSettings):
     /auth/google/* returns a clean 503 when any is unset rather than failing at startup.
     """
 
+    inference_space: str | None = None
+    """Hugging Face Space ID of the inference service (e.g. `owner/satquery-inference`). Unset
+    means no live VQA/change detection: matching demo presets are served from recorded runs,
+    anything else returns INFERENCE_UNAVAILABLE.
+    """
+    hf_token: str | None = None
+    """Token with read access to the (private) inference Space. Server-to-server calls without
+    one are rate-limited as anonymous.
+    """
+    inference_timeout_s: int = Field(default=180, gt=0)
+    """Per-call timeout for the inference Space. 180 s is sized for CPU Basic hardware."""
+
     isro_client_id: str | None = None
     isro_client_secret: str | None = None
     isro_auth_url: str | None = None

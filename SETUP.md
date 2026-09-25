@@ -32,6 +32,12 @@ uv run ruff check . && uv run ruff format --check . && uv run lint-imports && uv
 All four must pass on a clean clone. If `lint-imports` finishes suspiciously fast, the package
 isn't installed and it's checking nothing — re-run `uv sync`.
 
+`--all-extras` includes the `inference` extra (torch, transformers, peft, timm, …), which the
+model tests, training, evaluation and `scripts/run_benchmarks.py` need. The deployed API does
+not install it (`uv sync --no-dev`): VQA and change detection run in the inference Space
+(`inference_space/`), configured with `INFERENCE_SPACE` / `HF_TOKEN`. To run only training or
+evaluation locally: `uv sync --extra inference`.
+
 ## 4. Frontend
 ```bash
 cd fnt

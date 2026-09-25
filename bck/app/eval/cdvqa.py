@@ -441,7 +441,7 @@ class CDVQABitPipeline:
     ) -> ChangeSummary:
         """Run BIT change detection on bi-temporal images or deterministic fallback."""
         if self.checkpoint_path and Path(self.checkpoint_path).is_file():
-            from app.tools.change_detection.detector import detect_change
+            from app.tools.change_detection.local import detect_change
 
             input_a = ImageInput(id="img_t1", path=image_a_path, modality=Modality.OPTICAL)
             input_b = ImageInput(id="img_t2", path=image_b_path, modality=Modality.OPTICAL)

@@ -3,7 +3,9 @@ import { readErrorDetail } from '@/services/query';
 import { authFetch } from '@/services/authFetch';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
-const QUERY_TIMEOUT_MS = 180_000;
+// Above the backend's INFERENCE_TIMEOUT_S default (180 s) so a slow live CPU run reports its
+// own error instead of being cut off here first.
+const QUERY_TIMEOUT_MS = 210_000;
 
 export interface SubmitQueryOptions {
   query: string;

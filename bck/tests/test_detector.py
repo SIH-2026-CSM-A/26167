@@ -5,7 +5,7 @@ import pytest
 from PIL import Image
 
 from app.contracts import EvidenceType, ImageInput, Modality
-from app.tools.change_detection.detector import detect_change
+from app.tools.change_detection.local import detect_change
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 CHECKPOINT_PATH = Path(__file__).resolve().parents[1] / "checkpoints" / "BIT_LEVIR" / "best_ckpt.pt"

@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 from app.contracts import Modality
 from app.db.models import Base
 from app.pipeline import PipelineError, PipelineUpload, run
+from tests.helpers import DeterministicVqaModel
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 S1_PATH = FIXTURES_DIR / "Bolivia_103757_S1Hand.tif"
@@ -114,7 +115,10 @@ def test_client_supplied_modality_override_is_recorded_in_trace_metadata():
         modality=Modality.OPTICAL,
     )
 
-    answer = run(query="What is visible in this image?", uploads=[override_upload])
+    # VQA runs in the inference Space; a deterministic in-process model keeps this test on
+    # its subject (modality provenance) without a network call.
+    model = DeterministicVqaModel(answer="Open fields.", grounding="Open fields.")
+    answer = run(query="What is visible in this image?", uploads=[override_upload], model=model)
 
     ingested_step = next(step for step in answer.trace.steps if step.action == "asset_ingested")
     assert ingested_step.params["source_metadata"][0]["modality_source"] == "client_override"

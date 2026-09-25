@@ -20,6 +20,8 @@ fnt/.vite/
 data/*
 !data/.gitkeep
 !data/*.md
+# Demo presets, assets and recorded demo answers ship with the app (Dockerfile COPY data/demo)
+!data/demo/
 
 # Model weights
 *.safetensors

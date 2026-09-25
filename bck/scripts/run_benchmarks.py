@@ -25,6 +25,8 @@ Before scoring, the loaded active-record counts are checked against the verified
 expectation (100 images / 10,004 questions) and the run aborts loudly if they don't
 match -- never silently reporting a score against an unverified slice.
 
+Needs the `inference` extra (torch/transformers): `uv sync --extra inference`.
+
 Run from bck/, for the real AC2 score (full active slice, no --slice-size):
     uv run python scripts/run_benchmarks.py
 

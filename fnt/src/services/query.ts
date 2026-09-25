@@ -23,7 +23,8 @@ export async function submitImageQuery(
   files: File | File[],
   query: string,
   modalities?: string[],
-  captureOrder?: number[]
+  captureOrder?: number[],
+  demo?: { presetId: string; runLive: boolean }
 ): Promise<Answer> {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {
@@ -47,6 +48,11 @@ export async function submitImageQuery(
       form.append('capture_order', String(captureOrder[index]));
     }
   });
+  // A demo preset is answered from its recorded run unless the user explicitly asks for live.
+  if (demo) {
+    form.append('demo_preset_id', demo.presetId);
+    form.append('run_live', String(demo.runLive));
+  }
 
   const response = await authFetch(`${API_BASE_URL}/query`, {
     method: 'POST',

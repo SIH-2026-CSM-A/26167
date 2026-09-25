@@ -22,7 +22,8 @@ from app.tools.change_detection.bit_io import (
     encode_probability_png,
     to_bit_input,
 )
-from app.tools.change_detection.detector import build_change_evidence, detect_change
+from app.tools.change_detection.detector import build_change_evidence
+from app.tools.change_detection.local import detect_change
 from app.tools.vqa_grounding.tool import to_vqa_input
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
