@@ -49,8 +49,9 @@ torch.set_num_threads(os.cpu_count() or 1)
 weights_dir = Path(
     snapshot_download(WEIGHTS_REPO, revision=WEIGHTS_REVISION, token=os.environ.get("HF_TOKEN"))
 )
-adapter_dir = weights_dir / "adapter"
-bit_checkpoint = weights_dir / "BIT_LEVIR" / "best_ckpt.pt"
+# Layout of ybaddam8/satquery-weights as uploaded.
+adapter_dir = weights_dir / "lora-adapter"
+bit_checkpoint = weights_dir / "bit" / "best_ckpt.pt"
 os.environ["ADAPTER_PATH"] = str(adapter_dir)  # read by satquery_infer.internvl at import
 
 from satquery_infer.bit_io import encode_mask_png, encode_probability_png  # noqa: E402

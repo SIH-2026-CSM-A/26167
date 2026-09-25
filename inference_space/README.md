@@ -48,8 +48,8 @@ settings only; this README deliberately has no `hardware` line.
 | `WEIGHTS_REPO` | Variable | Default `ybaddam8/satquery-weights` |
 | `MAX_NEW_TOKENS` | Variable | Cap on generated tokens per VQA pass (default `128`) |
 
-The weights repo layout is `adapter/adapter_config.json`, `adapter/adapter_model.safetensors`
-and `BIT_LEVIR/best_ckpt.pt`. At startup the Space logs whether the sha256 of each file matches
+The weights repo layout is `lora-adapter/adapter_config.json`,
+`lora-adapter/adapter_model.safetensors` and `bit/best_ckpt.pt`. At startup the Space logs whether the sha256 of each file matches
 the expected values:
 
 - adapter `796d3c25d883d7798c3d7634f855c86f5ae2c0107922c7d5d80f216298dde405`
