@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -116,6 +116,24 @@ class DegradationNotice(BaseModel):
     affected_image_ids: list[str] = Field(default_factory=list)
 
 
+class CachedRunInfo(BaseModel):
+    """Provenance of an Answer replayed from a recorded real run instead of computed now.
+
+    `reason` is "demo_default" when a demo preset was served from its recording by default,
+    or the inference reason code (e.g. INFERENCE_UNAVAILABLE) when a live run fell back to it.
+    `identity_mismatch` is True when the recording's model identity differs from the
+    identity currently expected, i.e. the recording may be stale.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    recorded_at: datetime
+    preset_id: str
+    reason: str
+    model_identity: dict[str, Any] | None = None
+    identity_mismatch: bool = False
+
+
 class Answer(BaseModel):
     """Final response shape returned to the API layer.
 
@@ -133,6 +151,8 @@ class Answer(BaseModel):
     abstained: bool = False
     abstention_reason: str | None = None
     degradation_notice: DegradationNotice | None = None
+    served_from: Literal["live", "cached_demo"] = "live"
+    cached_run: CachedRunInfo | None = None
 
     @model_validator(mode="after")
     def _abstention_reason_matches_flag(self) -> Answer:
@@ -140,4 +160,6 @@ class Answer(BaseModel):
             raise ValueError("abstention_reason is required when abstained is True")
         if not self.abstained and self.abstention_reason is not None:
             raise ValueError("abstention_reason must be null when abstained is False")
+        if (self.served_from == "cached_demo") != (self.cached_run is not None):
+            raise ValueError("cached_run is required exactly when served_from is 'cached_demo'")
         return self

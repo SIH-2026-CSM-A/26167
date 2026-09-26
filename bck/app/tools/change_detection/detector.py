@@ -1,76 +1,40 @@
-"""BIT change-detection entry point: the Evidence-assembling tool for F6.
+"""BIT change-detection Evidence for F6, built from BIT's probability map and mask.
 
-Loads two co-registered images from their `ImageInput.path` (already
-persisted to disk by ingestion via `tempfile.NamedTemporaryFile(delete=False,
-...)` — read now, do not delete; cleanup is a separate, not-yet-built
-concern), runs the vendored BIT model (`bit_vendor/`) to produce a predicted
-change mask, and constructs `list[Evidence]` directly — matching
-`fusion/reconcile.py`'s exact construction pattern. There is no `stub_tool`
-seam anywhere in this codebase to plug into instead (verified directly
-against source, not assumed).
+Torch-free: BIT's forward pass runs elsewhere (the inference Space via
+app.inference.remote, or in-process via change_detection.local). This module applies the
+confounder gate to the images at their `ImageInput.path`, computes confidence and the
+change summary, and constructs `list[Evidence]` directly, matching
+`fusion/reconcile.py`'s construction pattern.
 """
 
 import time
 import uuid
-from types import SimpleNamespace
 
 import numpy as np
-import torch
-from PIL import Image
 
 from app.contracts import Evidence, EvidenceType, ImageInput
 from app.tools.change_detection.change_summary import summarize_change
 from app.tools.change_detection.confidence import compute_confidence
 from app.tools.change_detection.confounder_gate import evaluate_confounder_gate
-from bit_vendor.networks import define_G
 
 _TOOL_NAME = "change_detection.bit"
-_NET_G = "base_transformer_pos_s4_dd8_dedim8"
-_IMG_SIZE = 256
-_NORMALIZE_MEAN = 0.5
-_NORMALIZE_STD = 0.5
 
 
-def _load_and_preprocess(path: str) -> torch.Tensor:
-    """Load an RGB image from disk and prepare it as BIT expects: 256x256, [-1, 1]."""
-    image = Image.open(path).convert("RGB").resize((_IMG_SIZE, _IMG_SIZE))
-    array = np.asarray(image, dtype=np.float32) / 255.0
-    normalized = (array - _NORMALIZE_MEAN) / _NORMALIZE_STD
-    return torch.from_numpy(normalized).permute(2, 0, 1).unsqueeze(0).float()
-
-
-def _load_bit_model(checkpoint_path: str) -> torch.nn.Module:
-    """Build BIT's network and load its pretrained LEVIR-CD weights."""
-    net = define_G(SimpleNamespace(net_G=_NET_G))
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    net.load_state_dict(checkpoint["model_G_state_dict"])
-    net.eval()
-    return net
-
-
-def detect_change(
+def build_change_evidence(
+    *,
+    probability_changed: np.ndarray,
+    predicted_mask: np.ndarray,
     image_a: ImageInput,
     image_b: ImageInput,
-    checkpoint_path: str,
+    started: float,
     cloud_mask: np.ndarray | None = None,
 ) -> list[Evidence]:
-    """Run BIT on a co-registered bi-temporal pair and return change-detection Evidence.
+    """Gate, score and summarise BIT output into change-detection Evidence.
 
-    `checkpoint_path` is a required parameter, not an invented default — the
-    pretrained weight file's location is a deployment concern, not something
-    this function should guess.
+    Torch-free: the BIT forward pass may have run locally (bit_model) or remotely.
+    `started` is the time.perf_counter() value taken before BIT ran, so Evidence.timing
+    covers preprocessing, inference and this post-processing.
     """
-    started = time.perf_counter()
-
-    tensor_a = _load_and_preprocess(image_a.path)
-    tensor_b = _load_and_preprocess(image_b.path)
-    net = _load_bit_model(checkpoint_path)
-
-    with torch.no_grad():
-        logits = net(tensor_a, tensor_b)
-        probability_changed = torch.softmax(logits, dim=1)[0, 1].numpy()
-        predicted_mask = torch.argmax(logits, dim=1)[0].numpy().astype(bool)
-
     gate_result = evaluate_confounder_gate(
         raw_mask=predicted_mask,
         path_a=image_a.path,

@@ -75,6 +75,16 @@ export interface ExecutionTrace {
   created_at: string;
 }
 
+/** Provenance of an answer replayed from a recorded real run (backend CachedRunInfo). */
+export interface CachedRunInfo {
+  recorded_at: string;
+  preset_id: string;
+  /** "demo_default", or the inference reason code a live run fell back from. */
+  reason: string;
+  model_identity: Record<string, unknown> | null;
+  identity_mismatch: boolean;
+}
+
 export interface Answer {
   text: string;
   evidence: Evidence[];
@@ -82,6 +92,8 @@ export interface Answer {
   confidence: number;
   abstained: boolean;
   abstention_reason: string | null;
+  served_from?: 'live' | 'cached_demo';
+  cached_run?: CachedRunInfo | null;
 }
 
 export interface QueryHistoryItem {

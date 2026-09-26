@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Answer, ExecutionTrace } from '../../types/contracts';
 import { downloadEvidenceGeoJson, downloadEvidencePdf } from '../../services/api';
+import { CachedRunBadge } from '@/components/CachedRunBadge';
 import { EvidenceSummaryCard } from '@/components/EvidenceSummaryCard';
 import { TraceStepItem } from '@/components/Trace/TraceStepItem';
 import { useSatQuery } from '@/hooks/useSatQuery';
 
 interface QueryResultCardProps {
   answer: Answer;
+  /** Offered only for cached demo answers: re-run the same preset through the live models. */
+  onRunLive?: () => void;
 }
 
 /** Show/Hide list of TraceStepItems, shared by the result card and the Upload page's veto alert. */
@@ -35,7 +38,7 @@ export const ExecutionTraceToggle: React.FC<{ trace: ExecutionTrace }> = ({ trac
   );
 };
 
-export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
+export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer, onRunLive }) => {
   const [downloadingPdf, setDownloadingPdf] = useState<boolean>(false);
   const [downloadingGeoJson, setDownloadingGeoJson] = useState<boolean>(false);
   const { loadAnswer } = useSatQuery();
@@ -111,6 +114,10 @@ export const QueryResultCard: React.FC<QueryResultCardProps> = ({ answer }) => {
           </button>
         </div>
       </div>
+
+      {answer.served_from === 'cached_demo' && answer.cached_run && (
+        <CachedRunBadge cachedRun={answer.cached_run} onRunLive={onRunLive} />
+      )}
 
       {answer.abstained && (
         <div

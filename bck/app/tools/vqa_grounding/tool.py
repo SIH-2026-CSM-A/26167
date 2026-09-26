@@ -43,6 +43,12 @@ BOX_TAG_PATTERN = re.compile(
 )
 _INTERNVL_BOX_SCALE = 1000
 
+# InternVL3's single-tile input size. app.models.internvl.prepare_pixel_values resizes to this
+# with bicubic; to_vqa_input does the same resize without torch so the image can be sent to a
+# remote model already at input size (tests/tools/test_inference_equivalence.py proves the
+# model sees identical pixels either way).
+VQA_INPUT_SIZE = 448
+
 
 class VqaModel(Protocol):
     """Structural model interface that keeps the tool independent from app.models."""
@@ -77,6 +83,101 @@ class VqaToolResult:
     raw_bbox_output: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class VqaPasses:
+    """Raw model text from each VQA pass, with that pass's own wall-clock timing.
+
+    This is the only part of VQA that needs the model; it is what a remote inference service
+    returns. Everything derived from it (parsing, bbox scaling, Otsu fallback) runs in
+    build_vqa_result against the original image.
+    """
+
+    raw_answer: str
+    raw_grounding_output: str
+    raw_bbox_output: str | None
+    answer_seconds: float
+    grounding_seconds: float
+    bbox_seconds: float | None
+
+
+def run_vqa_passes(*, image: Image.Image, question: str, model: VqaModel) -> VqaPasses:
+    """Run the answer, claim-grounding and (for spatial questions) bbox passes."""
+    if not question.strip():
+        raise ValueError("question is required")
+
+    started = time.perf_counter()
+    raw_answer = model.generate(image, question.strip()).strip()
+    if not raw_answer:
+        raise VqaToolError("VQA model returned an empty answer")
+    answer_done = time.perf_counter()
+    grounding_prompt = GROUNDING_PROMPT.format(
+        question=question.strip(), candidate_answer=raw_answer
+    )
+    raw_grounding_output = model.generate(image, grounding_prompt).strip()
+    grounding_done = time.perf_counter()
+
+    raw_bbox_output: str | None = None
+    bbox_seconds: float | None = None
+    if SPATIAL_TRIGGER_PATTERN.search(question):
+        bbox_prompt = BBOX_GROUNDING_PROMPT.format(expression=raw_answer)
+        raw_bbox_output = model.generate(image, bbox_prompt).strip()
+        bbox_seconds = time.perf_counter() - grounding_done
+
+    return VqaPasses(
+        raw_answer=raw_answer,
+        raw_grounding_output=raw_grounding_output,
+        raw_bbox_output=raw_bbox_output,
+        answer_seconds=answer_done - started,
+        grounding_seconds=grounding_done - answer_done,
+        bbox_seconds=bbox_seconds,
+    )
+
+
+def build_vqa_result(
+    *,
+    passes: VqaPasses,
+    image: Image.Image,
+    source_asset_id: str,
+    model_id: str,
+    device: str,
+    started: float,
+) -> VqaToolResult:
+    """Turn raw pass output into a VqaToolResult, scaling boxes to `image`'s pixel size.
+
+    `started` is the time.perf_counter() value taken before the passes ran; timing_seconds
+    covers the passes plus this post-processing.
+    """
+    if not source_asset_id.strip():
+        raise ValueError("source_asset_id is required")
+
+    bbox: list[int] | None = None
+    bbox_label: str | None = None
+    bbox_source: str | None = None
+    if passes.raw_bbox_output is not None:
+        bbox_label = passes.raw_answer
+        bbox = _parse_native_bbox(passes.raw_bbox_output, image.size)
+        if bbox is not None:
+            bbox_source = "internvl_native"
+        else:
+            bbox = _otsu_fallback_bbox(image)
+            if bbox is not None:
+                bbox_source = "otsu_fallback"
+
+    return VqaToolResult(
+        source_asset_id=source_asset_id,
+        raw_answer=passes.raw_answer,
+        supporting_observations=_parse_supporting_observations(passes.raw_grounding_output),
+        raw_grounding_output=passes.raw_grounding_output,
+        model_id=model_id,
+        device=device,
+        timing_seconds=time.perf_counter() - started,
+        bbox=bbox,
+        bbox_label=bbox_label,
+        bbox_source=bbox_source,
+        raw_bbox_output=passes.raw_bbox_output,
+    )
+
+
 def execute_vqa(
     *,
     image: Image.Image,
@@ -91,43 +192,21 @@ def execute_vqa(
         raise ValueError("source_asset_id is required")
 
     started = time.perf_counter()
-    raw_answer = model.generate(image, question.strip()).strip()
-    if not raw_answer:
-        raise VqaToolError("VQA model returned an empty answer")
-    grounding_prompt = GROUNDING_PROMPT.format(
-        question=question.strip(), candidate_answer=raw_answer
-    )
-    raw_grounding_output = model.generate(image, grounding_prompt).strip()
-    observations = _parse_supporting_observations(raw_grounding_output)
-
-    bbox: list[int] | None = None
-    bbox_label: str | None = None
-    bbox_source: str | None = None
-    raw_bbox_output: str | None = None
-    if SPATIAL_TRIGGER_PATTERN.search(question):
-        bbox_label = raw_answer
-        bbox_prompt = BBOX_GROUNDING_PROMPT.format(expression=raw_answer)
-        raw_bbox_output = model.generate(image, bbox_prompt).strip()
-        bbox = _parse_native_bbox(raw_bbox_output, image.size)
-        if bbox is not None:
-            bbox_source = "internvl_native"
-        else:
-            bbox = _otsu_fallback_bbox(image)
-            if bbox is not None:
-                bbox_source = "otsu_fallback"
-
-    return VqaToolResult(
+    passes = run_vqa_passes(image=image, question=question, model=model)
+    return build_vqa_result(
+        passes=passes,
+        image=image,
         source_asset_id=source_asset_id,
-        raw_answer=raw_answer,
-        supporting_observations=observations,
-        raw_grounding_output=raw_grounding_output,
         model_id=model.active_model_identity or model.model_id,
         device=model.device,
-        timing_seconds=time.perf_counter() - started,
-        bbox=bbox,
-        bbox_label=bbox_label,
-        bbox_source=bbox_source,
-        raw_bbox_output=raw_bbox_output,
+        started=started,
+    )
+
+
+def to_vqa_input(image: Image.Image) -> Image.Image:
+    """RGB at InternVL's 448x448 input size, resized exactly as prepare_pixel_values does."""
+    return image.convert("RGB").resize(
+        (VQA_INPUT_SIZE, VQA_INPUT_SIZE), resample=Image.Resampling.BICUBIC
     )
 
 

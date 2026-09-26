@@ -18,6 +18,20 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
+def sync_database_url(url: str) -> str:
+    """Return the synchronous psycopg (v3) URL for DATABASE_URL.
+
+    psycopg2 is not installed, so a bare postgresql:// or postgres:// (SQLAlchemy's psycopg2
+    default) and the async postgresql+asyncpg:// scheme are all mapped to postgresql+psycopg://.
+    Non-Postgres URLs (e.g. sqlite) are returned unchanged.
+    """
+    url = normalize_database_url(url)
+    for prefix in ("postgresql+asyncpg://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix) :]
+    return url
+
+
 class Settings(BaseSettings):
     """Process-wide configuration.
 
@@ -90,6 +104,18 @@ class Settings(BaseSettings):
     """Google OAuth. All three optional/None-default: the app must boot without them, and
     /auth/google/* returns a clean 503 when any is unset rather than failing at startup.
     """
+
+    inference_space: str | None = None
+    """Hugging Face Space ID of the inference service (e.g. `owner/satquery-inference`). Unset
+    means no live VQA/change detection: matching demo presets are served from recorded runs,
+    anything else returns INFERENCE_UNAVAILABLE.
+    """
+    hf_token: str | None = None
+    """Token with read access to the (private) inference Space. Server-to-server calls without
+    one are rate-limited as anonymous.
+    """
+    inference_timeout_s: int = Field(default=180, gt=0)
+    """Per-call timeout for the inference Space. 180 s is sized for CPU Basic hardware."""
 
     isro_client_id: str | None = None
     isro_client_secret: str | None = None

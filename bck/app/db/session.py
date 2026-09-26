@@ -13,7 +13,7 @@ from functools import lru_cache
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.config import get_settings
+from app.core.config import get_settings, sync_database_url
 
 
 @lru_cache
@@ -21,7 +21,7 @@ def get_sync_engine() -> Engine:
     """Create or return the cached synchronous SQLAlchemy Engine."""
     settings = get_settings()
     url = str(settings.database_url)
-    sync_url = url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
+    sync_url = sync_database_url(url)
     return create_engine(sync_url)
 
 

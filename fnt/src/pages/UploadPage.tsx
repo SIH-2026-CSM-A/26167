@@ -29,6 +29,7 @@ export const UploadPage: React.FC = () => {
   const [mode, setMode] = useState<PipelineConfigMode>('single');
   const [query, setQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [liveRun, setLiveRun] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestedAction, setSuggestedAction] = useState<string | null>(null);
   const [reasonCode, setReasonCode] = useState<string | null>(null);
@@ -89,7 +90,13 @@ export const UploadPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    await runQuery(false);
+  };
+
+  // Demo presets come back from their recorded run immediately; runLive asks for a real run.
+  const runQuery = async (runLive: boolean) => {
     if (!canSubmit) return;
+    const demoPresetId = sourceMode === 'preset' ? selectedPresetId : null;
 
     const selectedFiles = slots.map((slot) => slot.file).filter((file): file is File => file !== null);
     if (selectedFiles.length !== slots.length) {
@@ -98,6 +105,7 @@ export const UploadPage: React.FC = () => {
     }
 
     setLoading(true);
+    setLiveRun(runLive || demoPresetId === null);
     setError(null);
     setSuggestedAction(null);
     setReasonCode(null);
@@ -121,7 +129,8 @@ export const UploadPage: React.FC = () => {
         selectedFiles,
         query.trim(),
         modalityOverride,
-        captureOrder
+        captureOrder,
+        demoPresetId ? { presetId: demoPresetId, runLive } : undefined
       );
       setResult(response);
       setAmbiguousSlots([]);
@@ -254,8 +263,13 @@ export const UploadPage: React.FC = () => {
               : { background: 'var(--bg-2)', color: 'var(--text-low)' }
           }
         >
-          {loading ? 'Processing via Backend...' : 'Run Pipeline'}
+          {loading ? (liveRun ? 'Running live inference...' : 'Loading recorded demo run...') : 'Run Pipeline'}
         </button>
+        {loading && liveRun && (
+          <p role="status" className="text-xs" style={{ color: 'var(--text-mid)' }}>
+            Running the models live. On the free CPU tier this can take up to 3 minutes.
+          </p>
+        )}
       </form>
 
       {error && (
@@ -284,7 +298,12 @@ export const UploadPage: React.FC = () => {
         </div>
       )}
 
-      {result && <QueryResultCard answer={result} />}
+      {result && (
+        <QueryResultCard
+          answer={result}
+          onRunLive={result.served_from === 'cached_demo' && !loading ? () => void runQuery(true) : undefined}
+        />
+      )}
       </div>
     </>
   );

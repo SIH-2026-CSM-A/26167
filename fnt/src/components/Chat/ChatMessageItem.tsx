@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { ChatMessage, Answer, StatsPayload } from '@/types/contracts';
 import { CitationText } from './CitationText';
 import { CitationChip } from './CitationChip';
+import { CachedRunBadge } from '@/components/CachedRunBadge';
 import { EvidenceSummaryCard } from '@/components/EvidenceSummaryCard';
 import { downloadEvidencePdf } from '@/services/api';
 
@@ -160,6 +161,9 @@ const IntelligenceTurn: React.FC<{
         onHoverEvidence={onHover}
       />
     </div>
+    {answer?.served_from === 'cached_demo' && answer.cached_run && (
+      <CachedRunBadge cachedRun={answer.cached_run} />
+    )}
     {answer && <InlineTraceSequence answer={answer} />}
     {answer && <EvidenceMetadataGrid answer={answer} />}
     {answer && answer.evidence.length > 0 && (

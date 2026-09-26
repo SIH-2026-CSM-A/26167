@@ -4,11 +4,12 @@ verification, evidence, and tracing stages.
 
 from __future__ import annotations
 
-import os
-from datetime import UTC, datetime
+import time
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import rasterio
+from PIL import Image
 
 from app.contracts import Answer, Evidence, Modality, QueryRequest
 from app.core.logging import get_logger
@@ -17,6 +18,9 @@ from app.db import persist_trace
 from app.evidence import assemble_answer, build_bbox_evidence, build_vqa_evidence
 from app.history import get_sync_session as get_history_session
 from app.history import record_query
+from app.inference import remote
+from app.inference.identity import EXPECTED_MODEL_IDENTITY
+from app.inference.remote import InferenceError
 from app.ingestion import (
     EoGate,
     EoGateStatus,
@@ -27,28 +31,44 @@ from app.ingestion import (
     evaluate_eo_gates,
     ingest_raster,
 )
-from app.models import InternVLAdapter, InternVLModelError
+from app.pipeline.cached_demo import find_cached_answer
 from app.pipeline.stages import PipelineError, PipelineUpload, TraceRecorder
 from app.router import DispatchPlan, VetoReasonCode, route
-from app.tools.change_detection.detector import detect_change
+from app.tools.change_detection.bit_io import (
+    decode_mask_png,
+    decode_probability_png,
+    to_bit_input,
+)
+from app.tools.change_detection.detector import build_change_evidence
 from app.tools.fusion.cloud_detector import detect_clouds
 from app.tools.fusion.despeckle import lee_filter
 from app.tools.fusion.guards import InsufficientValidSupportError
 from app.tools.fusion.reconcile import reconcile_sar_optical
 from app.tools.fusion.sar_scale import SarScale
 from app.tools.fusion.sar_water_mask import otsu_water_mask
-from app.tools.vqa_grounding import VqaModel, VqaToolError, VqaToolResult, execute_vqa
+from app.tools.vqa_grounding import (
+    VqaModel,
+    VqaPasses,
+    VqaToolError,
+    VqaToolResult,
+    build_vqa_result,
+    execute_vqa,
+)
+from app.tools.vqa_grounding.tool import to_vqa_input
 from app.verification import VerificationPolicy, verification_trace_params, verify
 
+# InternVL and BIT run in the inference Space (app.inference.remote); this process never
+# imports torch. An injected `model` (tests) still runs VQA in-process.
 logger = get_logger(__name__)
 
-_default_model: InternVLAdapter | None = None
-
-# Matches the fixture path convention already used by tests/test_detector.py and
-# tests/change_detection/test_change_summary.py. Overridable for real deployment,
-# same pattern as app.models.internvl.ADAPTER_PATH.
-_DEFAULT_BIT_CHECKPOINT_PATH = "checkpoints/BIT_LEVIR/best_ckpt.pt"
-BIT_CHECKPOINT_PATH = os.environ.get("BIT_CHECKPOINT_PATH", _DEFAULT_BIT_CHECKPOINT_PATH)
+_INFERENCE_STATUS = {"INFERENCE_UNAVAILABLE": 503, "INFERENCE_QUOTA": 429}
+_INFERENCE_SUGGESTED_ACTION = {
+    "INFERENCE_UNAVAILABLE": (
+        "The model service is unavailable or still waking up. Try again in a minute, "
+        "or pick a demo preset."
+    ),
+    "INFERENCE_QUOTA": "The GPU quota for the model service is used up. Try again later.",
+}
 
 # Matches the value used throughout tests/test_fusion_*.py. A real per-sensor
 # noise-equivalent sigma-zero belongs in calibration metadata this pipeline has
@@ -78,13 +98,6 @@ _EO_GATE_VETOES: dict[EoGate, tuple[VetoReasonCode, str]] = {
         "Swap the images: Slot 1 must hold the earlier acquisition, Slot 2 the later one.",
     ),
 }
-
-
-def _get_default_model() -> InternVLAdapter:
-    global _default_model
-    if _default_model is None:
-        _default_model = InternVLAdapter()
-    return _default_model
 
 
 def _find_ingested(ingested: list[IngestedRaster], image_id: str, *, role: str) -> IngestedRaster:
@@ -148,6 +161,39 @@ def run(
     model: VqaModel | None = None,
     policy: VerificationPolicy | None = None,
     user_id: str | None = None,
+    prefer_cached: bool = False,
+) -> Answer:
+    """Answer a query: a demo preset's recorded run, or a live run of the pipeline.
+
+    `prefer_cached` (a demo preset without an explicit "run live") returns the preset's
+    recorded answer immediately when the uploads and question match it exactly. A live run
+    that fails only because inference is unavailable or over quota falls back to the same
+    recording, marked with that reason; with no matching recording the error stands.
+    """
+    contents = [upload.content for upload in uploads]
+    if prefer_cached and model is None:
+        cached = find_cached_answer(query=query, upload_contents=contents, reason="demo_default")
+        if cached is not None:
+            return cached
+    try:
+        return _run_live(query=query, uploads=uploads, model=model, policy=policy, user_id=user_id)
+    except PipelineError as error:
+        if error.reason_code not in _INFERENCE_STATUS:
+            raise
+        cached = find_cached_answer(query=query, upload_contents=contents, reason=error.reason_code)
+        if cached is None:
+            raise
+        logger.warning("Live inference failed (%s); serving the recorded demo run.", error)
+        return cached
+
+
+def _run_live(
+    *,
+    query: str,
+    uploads: list[PipelineUpload],
+    model: VqaModel | None,
+    policy: VerificationPolicy | None,
+    user_id: str | None,
 ) -> Answer:
     """Run the real vertical slice for whichever tool the router dispatches to."""
     recorder = TraceRecorder()
@@ -468,34 +514,39 @@ def _run_vqa_tool(
     dispatch_plan: DispatchPlan,
     model: VqaModel | None,
 ) -> tuple[list[Evidence], tuple[str, ...], VqaToolResult]:
-    """Single-image VQA/grounding: unchanged behavior from the original single-tool pipeline."""
-    active_model = model or _get_default_model()
+    """Single-image VQA/grounding in the inference Space (or an injected in-process model)."""
     source = _find_ingested(ingested, dispatch_plan.image_bindings["image"], role="image")
+    question = dispatch_plan.task_parameters["prompt"]
+    model_id = model.model_id if model is not None else EXPECTED_MODEL_IDENTITY["base_model"]
+    device = model.device if model is not None else "inference_space"
     recorder.record(
         "tools.vqa_grounding",
         "vqa_started",
-        params={"asset_id": source.source.id, "model_id": active_model.model_id},
+        params={"asset_id": source.source.id, "model_id": model_id},
     )
     recorder.record(
         "models.internvl",
         "internvl_inference_started",
-        params={"model_id": active_model.model_id, "device": active_model.device},
+        params={"model_id": model_id, "device": device},
     )
     inference_started = datetime.now(UTC)
-    try:
-        tool_result = execute_vqa(
-            image=source.visual,
-            question=dispatch_plan.task_parameters["prompt"],
-            source_asset_id=source.source.id,
-            model=active_model,
-        )
-    except (InternVLModelError, VqaToolError) as error:
-        _fail(
-            recorder,
-            stage="model_inference",
-            message=f"InternVL VQA could not complete: {error}",
-            status_code=503,
-        )
+    if model is None:
+        tool_result = _run_remote_vqa(recorder, source, question)
+    else:
+        try:
+            tool_result = execute_vqa(
+                image=source.visual,
+                question=question,
+                source_asset_id=source.source.id,
+                model=model,
+            )
+        except VqaToolError as error:
+            _fail(
+                recorder,
+                stage="model_inference",
+                message=f"InternVL VQA could not complete: {error}",
+                status_code=503,
+            )
     recorder.record(
         "models.internvl",
         "internvl_inference_completed",
@@ -543,7 +594,8 @@ def _run_change_detection_tool(
     ingested: list[IngestedRaster],
     dispatch_plan: DispatchPlan,
 ) -> list[Evidence]:
-    """Bi-temporal BIT change detection (ROHAN-002), mirroring the VQA dispatch shape."""
+    """Bi-temporal BIT change detection (ROHAN-002): BIT in the inference Space, gating,
+    confidence and summary here."""
     pre_image = _find_ingested(
         ingested, dispatch_plan.image_bindings["pre_image"], role="pre_image"
     )
@@ -556,21 +608,44 @@ def _run_change_detection_tool(
         params={
             "pre_image_id": pre_image.source.id,
             "post_image_id": post_image.source.id,
-            "checkpoint_path": BIT_CHECKPOINT_PATH,
+            "inference": "inference_space",
         },
     )
     inference_started = datetime.now(UTC)
+    started = time.perf_counter()
     try:
-        # detector.py has no typed exception contract of its own (unlike VQA's
-        # InternVLModelError/VqaToolError or fusion's InsufficientValidSupportError)
-        # — a missing checkpoint file raises a bare FileNotFoundError from
-        # torch.load, so this catches broadly rather than pretending a narrower
-        # type exists. That gap belongs to detector.py, not silently papered
-        # over here.
-        evidence_list = detect_change(
-            pre_image.source,
-            post_image.source,
-            BIT_CHECKPOINT_PATH,
+        pre_input = to_bit_input(Image.open(pre_image.source.path))
+        post_input = to_bit_input(Image.open(post_image.source.path))
+        call_started = datetime.now(UTC)
+        result = remote.change_detect(pre_input, post_input)
+    except InferenceError as error:
+        _fail_inference(recorder, error)
+    except Exception as error:
+        # Unreadable inputs have no typed exception contract; keep the clean 503.
+        _fail(
+            recorder,
+            stage="model_inference",
+            message=f"Change detection could not complete: {error}",
+            status_code=503,
+        )
+    call_completed = datetime.now(UTC)
+    _record_remote_call(
+        recorder,
+        module="inference.remote",
+        action="remote_change_detect_call",
+        started_at=call_started,
+        completed_at=call_completed,
+        space_total_seconds=result.total_seconds,
+        model_identity=result.model_identity,
+        passes=[("models.change_detection.bit", "bit_forward_pass", result.inference_seconds)],
+    )
+    try:
+        evidence_list = build_change_evidence(
+            probability_changed=decode_probability_png(result.probability_png),
+            predicted_mask=decode_mask_png(result.mask_png),
+            image_a=pre_image.source,
+            image_b=post_image.source,
+            started=started,
         )
     except Exception as error:
         _fail(
@@ -590,6 +665,114 @@ def _run_change_detection_tool(
         started_at=inference_started,
     )
     return evidence_list
+
+
+def _run_remote_vqa(
+    recorder: TraceRecorder, source: IngestedRaster, question: str
+) -> VqaToolResult:
+    """Send the image at model input size to the Space; parse and map results back here."""
+    started = time.perf_counter()
+    call_started = datetime.now(UTC)
+    try:
+        result = remote.vqa_ground(to_vqa_input(source.visual), question)
+    except InferenceError as error:
+        _fail_inference(recorder, error)
+    _record_remote_call(
+        recorder,
+        module="inference.remote",
+        action="remote_vqa_call",
+        started_at=call_started,
+        completed_at=datetime.now(UTC),
+        space_total_seconds=result.total_seconds,
+        model_identity=result.model_identity,
+        passes=[
+            ("models.internvl", "internvl_answer_pass", result.answer_seconds),
+            ("models.internvl", "internvl_grounding_pass", result.grounding_seconds),
+            ("models.internvl", "internvl_bbox_pass", result.bbox_seconds),
+        ],
+    )
+    identity = result.model_identity
+    passes = VqaPasses(
+        raw_answer=result.raw_answer,
+        raw_grounding_output=result.raw_grounding_output,
+        raw_bbox_output=result.raw_bbox_output,
+        answer_seconds=result.answer_seconds,
+        grounding_seconds=result.grounding_seconds,
+        bbox_seconds=result.bbox_seconds,
+    )
+    # Boxes are re-parsed from InternVL's normalized <box> text against the original visual,
+    # so they map back to full-resolution pixels exactly.
+    return build_vqa_result(
+        passes=passes,
+        image=source.visual,
+        source_asset_id=source.source.id,
+        model_id=f"{identity.get('base_model')} + {identity.get('adapter_name')}",
+        device=str(identity.get("device", "inference_space")),
+        started=started,
+    )
+
+
+def _record_remote_call(
+    recorder: TraceRecorder,
+    *,
+    module: str,
+    action: str,
+    started_at: datetime,
+    completed_at: datetime,
+    space_total_seconds: float,
+    model_identity: dict,
+    passes: list[tuple[str, str, float | None]],
+) -> None:
+    """One step for the whole round trip, then one per model pass.
+
+    Pass durations are measured on the Space. It doesn't report absolute times, so the pass
+    steps are laid back to back ending when the response arrived; their durations are exact,
+    their placement inside the round trip is not.
+    """
+    round_trip_seconds = (completed_at - started_at).total_seconds()
+    recorder.record(
+        module,
+        action,
+        params={
+            "round_trip_s": round_trip_seconds,
+            "space_total_s": space_total_seconds,
+            "network_and_queue_s": round_trip_seconds - space_total_seconds,
+            "model_identity": model_identity,
+        },
+        started_at=started_at,
+        completed_at=completed_at,
+    )
+    spans: list[tuple[str, str, float, datetime, datetime]] = []
+    end = completed_at
+    for pass_module, pass_action, seconds in reversed(passes):
+        if seconds is None:
+            continue
+        start = end - timedelta(seconds=seconds)
+        spans.append((pass_module, pass_action, seconds, start, end))
+        end = start
+    for pass_module, pass_action, seconds, start, end in reversed(spans):
+        recorder.record(
+            pass_module,
+            pass_action,
+            params={
+                "duration_s": seconds,
+                "measured_on": "inference_space",
+                "timestamps": "anchored_to_response_arrival",
+            },
+            started_at=start,
+            completed_at=end,
+        )
+
+
+def _fail_inference(recorder: TraceRecorder, error: InferenceError) -> None:
+    _fail(
+        recorder,
+        stage="model_inference",
+        message=str(error),
+        status_code=_INFERENCE_STATUS[error.reason_code],
+        reason_code=error.reason_code,
+        suggested_action=_INFERENCE_SUGGESTED_ACTION[error.reason_code],
+    )
 
 
 def _run_fusion_tool(

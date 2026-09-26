@@ -74,3 +74,24 @@ def test_settings_parses_comma_separated_frontend_origins(monkeypatch):
         "http://localhost:5173",
         "http://172.31.22.203:5173",
     ]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "postgresql+asyncpg://u:p@h:5432/db",
+        "postgresql://u:p@h:5432/db",
+        "postgres://u:p@h:5432/db",
+        "postgresql+psycopg://u:p@h:5432/db",
+    ],
+)
+def test_sync_database_url_always_targets_psycopg(raw):
+    from app.core.config import sync_database_url
+
+    assert sync_database_url(raw) == "postgresql+psycopg://u:p@h:5432/db"
+
+
+def test_sync_database_url_leaves_sqlite_unchanged():
+    from app.core.config import sync_database_url
+
+    assert sync_database_url("sqlite:///:memory:") == "sqlite:///:memory:"
