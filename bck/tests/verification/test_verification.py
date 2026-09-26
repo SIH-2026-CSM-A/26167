@@ -985,3 +985,45 @@ def test_rule_verify_09_regression_shades_of_blue_and_white():
     assert records == []
     assert updated[0].payload["verified_answer"] == raw_text
     assert ". White" not in updated[0].payload["verified_answer"]
+
+
+def test_rule_verify_09_splits_markdown_lists_at_line_breaks():
+    """Real InternVL output (tests/fixtures/internvl_markdown_answer_819fa21c.json).
+
+    Before line breaks were claim boundaries, the heading "**New Structures:**" was glued to
+    the list item under it, so no single grounded line covered the combined claim and all 8
+    claims were rejected (confidence 0.0, evidence dropped).
+    """
+    import json
+    from pathlib import Path
+
+    fixture = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "fixtures"
+            / "internvl_markdown_answer_819fa21c.json"
+        ).read_text(encoding="utf-8")
+    )
+    evidence_item = _evidence(payload={"verified_answer": fixture["raw_answer"]})
+
+    updated, records = evaluate_narrative_claim_grounding(
+        [evidence_item], fixture["supporting_observations"]
+    )
+
+    answer = updated[0].payload["verified_answer"]
+    assert "A new large building with a white roof has been constructed." in answer
+    assert "*" not in answer
+    assert "Between two acquisition dates" not in answer  # prompt echo stays rejected
+    assert abs(updated[0].confidence - 0.4) < 1e-9  # 4 of 10 claims grounded
+    assert len(records) == 6
+
+
+def test_rule_verify_09_line_break_is_a_boundary_and_numbering_is_dropped():
+    evidence_item = _evidence(
+        payload={"verified_answer": "1. **Roads:** paved\n2. Rivers are wide"}
+    )
+    updated, records = evaluate_narrative_claim_grounding(
+        [evidence_item], ["roads paved", "rivers wide"]
+    )
+    assert updated[0].payload["verified_answer"] == "Roads: paved. Rivers are wide."
+    assert records == []

@@ -8,9 +8,28 @@ from app.router.schemas import (
     InputInventory,
     IntentClassification,
     TaskType,
+    ToolStep,
     VetoDecision,
     VetoReasonCode,
 )
+
+# Step 2 of CHANGE_DESCRIBE asks VQA only what the crop contains. VQA sees one post-image crop,
+# so asking what is "new" invited it to assert changes it cannot see (live run 819fa21c); that
+# the region changed comes from BIT's evidence. No spatial trigger word ("where", "locate", ...),
+# which would add the ~45-60 s bbox pass.
+CHANGE_REGION_PROMPT = "Describe the structures and land cover visible in this image."
+
+# The tool sequence each intent plans, known before any feasibility check. The pipeline records
+# it on vetoed requests too, so a refused composite query still shows what would have run.
+# tests/router/test_change_describe.py keeps this equal to what build_dispatch_plan builds.
+PLANNED_TOOL_SEQUENCE: dict[TaskType, list[str]] = {
+    TaskType.VQA: ["vqa_grounding"],
+    TaskType.GROUNDING: ["vqa_grounding"],
+    TaskType.CHANGE_VQA: ["change_detection"],
+    TaskType.CHANGE_DESCRIBE: ["change_detection", "vqa_grounding"],
+    TaskType.FUSION: ["fusion"],
+    TaskType.ARCHIVE_SEARCH_BONUS: ["archive_search"],
+}
 
 
 def build_dispatch_plan(
@@ -54,7 +73,7 @@ def build_dispatch_plan(
             task_parameters={"prompt": raw_query, "grounding": True},
         )
 
-    if task == TaskType.CHANGE_VQA:
+    if task in (TaskType.CHANGE_VQA, TaskType.CHANGE_DESCRIBE):
         capture_orders = {image.metadata.get("capture_order") for image in images}
         if capture_orders != {0, 1}:
             return VetoDecision(
@@ -70,10 +89,21 @@ def build_dispatch_plan(
             )
         pre_id = next(image.id for image in images if image.metadata.get("capture_order") == 0)
         post_id = next(image.id for image in images if image.metadata.get("capture_order") == 1)
+        followups: tuple[ToolStep, ...] = ()
+        if task == TaskType.CHANGE_DESCRIBE:
+            followups = (
+                ToolStep(
+                    tool_name="vqa_grounding",
+                    image_bindings={"image": post_id},
+                    task_parameters={"prompt": CHANGE_REGION_PROMPT},
+                    input_from_previous="largest_change_component",
+                ),
+            )
         return DispatchPlan(
             tool_name="change_detection",
             image_bindings={"pre_image": pre_id, "post_image": post_id},
             task_parameters={"prompt": raw_query},
+            followups=followups,
         )
 
     if task == TaskType.FUSION:

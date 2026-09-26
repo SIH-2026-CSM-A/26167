@@ -10,9 +10,10 @@ from app.router.schemas import IntentClassification, TaskType
 # Evaluation order:
 # 1. Archive Search (Bonus capability)
 # 2. Cross-Modal Fusion (Optical + SAR joint analysis)
-# 3. Change-VQA (Bi-temporal comparative analysis)
-# 4. Grounding (Referring expression segmentation / localization)
-# 5. VQA (Default single-image visual question answering)
+# 3. Change-describe (a change cue AND a cue asking what the changed area contains)
+# 4. Change-VQA (Bi-temporal comparative analysis)
+# 5. Grounding (Referring expression segmentation / localization)
+# 6. VQA (Default single-image visual question answering)
 
 _ARCHIVE_SEARCH_PATTERN = re.compile(
     r"\b(archive|catalog)\b.*\b(search|find|retriev\w*|query)\b|"
@@ -43,6 +44,29 @@ _CHANGE_VQA_PATTERNS = [
     re.compile(r"\b(difference|differences)\s+between\b", re.IGNORECASE),
 ]
 
+# Cues asking what the changed area *contains* (content, not just extent or location). They
+# only count together with a change cue: "What changed between these dates?" stays
+# CHANGE_VQA, "What kind of buildings are in this image?" stays VQA.
+_CHANGE_CONTENT_PATTERNS = [
+    re.compile(
+        r"\bnew\s+(structures?|buildings?|construction|objects?|features?|developments?|"
+        r"roads?|houses?)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(what|which)\s+(kind|kinds|type|types|sort)\s+of\b", re.IGNORECASE),
+    re.compile(
+        r"\bwhat\s+(was|were|has\s+been|have\s+been|got)\s+"
+        r"(built|added|constructed|demolished|removed|cleared)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bidentify\s+(the\s+)?(new|changed|added)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(in|within|inside)\s+the\s+(changed|new)\s+(area|region|parts?|zone)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bwhat\s+(appeared|is\s+there\s+now|now\s+stands)\b", re.IGNORECASE),
+]
+
 _GROUNDING_PATTERNS = [
     re.compile(r"\b(highlight|pinpoint|segment|outline)\b", re.IGNORECASE),
     re.compile(r"\b(bounding\s*box|bbox|exact\s+location|coordinates\s+of)\b", re.IGNORECASE),
@@ -70,15 +94,16 @@ def classify_intent(query: str) -> IntentClassification:
         if pattern.search(normalized):
             return IntentClassification(task_type=TaskType.FUSION)
 
-    # 3. Change-VQA / Bi-temporal
-    for pattern in _CHANGE_VQA_PATTERNS:
-        if pattern.search(normalized):
-            return IntentClassification(task_type=TaskType.CHANGE_VQA)
+    # 3-4. Change: with a content cue it is change -> describe, otherwise Change-VQA
+    if any(pattern.search(normalized) for pattern in _CHANGE_VQA_PATTERNS):
+        if any(pattern.search(normalized) for pattern in _CHANGE_CONTENT_PATTERNS):
+            return IntentClassification(task_type=TaskType.CHANGE_DESCRIBE)
+        return IntentClassification(task_type=TaskType.CHANGE_VQA)
 
-    # 4. Grounding / Localization
+    # 5. Grounding / Localization
     for pattern in _GROUNDING_PATTERNS:
         if pattern.search(normalized):
             return IntentClassification(task_type=TaskType.GROUNDING)
 
-    # 5. Default: Single-Image VQA
+    # 6. Default: Single-Image VQA
     return IntentClassification(task_type=TaskType.VQA)

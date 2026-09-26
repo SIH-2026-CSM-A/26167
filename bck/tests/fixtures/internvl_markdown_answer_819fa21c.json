@@ -1,0 +1,11 @@
+{
+ "source": "Live Space run, trace 819fa21c-a8e4-485e-96dc-50dde5eaa725 (2026-09-25T23:31Z): InternVL3-2B@89915501 + yash004 adapter on the levir_cd_test_102_2 change crop, before the markdown claim-split fix",
+ "raw_answer": "The image shows an aerial view of a commercial or industrial area with a large parking lot, a building with a white roof, and adjacent parking spaces. Between two acquisition dates, several changes can be observed:\n\n1. **New Structures:**\n   - **Building with White Roof:** A new large building with a white roof has been constructed. This structure likely serves as a warehouse or industrial facility, given its size and location.\n   - **Parking Lot Expansion:** There is an expansion of the parking lot adjacent to the building. More parking spaces have been added, indicating increased usage or capacity.\n\n2. **Existing Structures:**\n   - **",
+ "supporting_observations": [
+  "**New Structures:**",
+  "**Building with White Roof:** A new large building with a white roof has been constructed.",
+  "**Parking Lot Expansion:** There is an expansion of the parking lot adjacent to the building.",
+  "**Existing Structures:**",
+  "**Parking Spaces:** Several parking spaces have been added to the existing parking lot."
+ ]
+}
